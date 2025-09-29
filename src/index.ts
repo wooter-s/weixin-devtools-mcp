@@ -22,6 +22,16 @@ import {
 import automator from "miniprogram-automator";
 import path from "path";
 
+// 导入模块化工具系统
+import {
+  allTools,
+  ToolDefinition,
+  ToolContext,
+  ToolRequest,
+  ToolResponse,
+  ConsoleStorage
+} from './tools/index.js';
+
 /**
  * 元素快照接口
  */
@@ -53,7 +63,73 @@ const state = {
   miniProgram: null as any,  // MiniProgram 实例
   currentPage: null as any,  // 当前页面实例
   elementMap: new Map<string, string>(), // uid -> selector 映射
+  consoleStorage: {
+    consoleMessages: [],
+    exceptionMessages: [],
+    isMonitoring: false,
+    startTime: null
+  } as ConsoleStorage, // Console存储
 };
+
+/**
+ * 模块化工具适配器基础设施
+ */
+
+// MockResponse 适配器类 - 适配模块化工具的响应接口
+class MockResponse implements ToolResponse {
+  private lines: string[] = [];
+  private includeSnapshot = false;
+  private attachedImages: Array<{ data: string; mimeType: string }> = [];
+
+  appendResponseLine(line: string): void {
+    this.lines.push(line);
+  }
+
+  setIncludeSnapshot(include: boolean): void {
+    this.includeSnapshot = include;
+  }
+
+  attachImage(data: string, mimeType: string): void {
+    this.attachedImages.push({ data, mimeType });
+  }
+
+  getLines(): string[] {
+    return this.lines;
+  }
+
+  getAttachedImages(): Array<{ data: string; mimeType: string }> {
+    return this.attachedImages;
+  }
+}
+
+// 状态转换函数 - 将全局状态转换为ToolContext
+function createToolContext(): ToolContext {
+  return {
+    miniProgram: state.miniProgram,
+    currentPage: state.currentPage,
+    elementMap: state.elementMap,
+    consoleStorage: state.consoleStorage
+  };
+}
+
+// 创建工具处理器映射
+const toolHandlers = new Map<string, ToolDefinition>();
+allTools.forEach(tool => {
+  toolHandlers.set(tool.name, tool);
+});
+
+// 工具定义转换函数 - 将模块化工具转换为传统MCP格式
+function convertToolDefinition(tool: ToolDefinition) {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: true
+    }
+  };
+}
 
 /**
  * 创建 MCP 服务器，提供微信开发者工具自动化功能
@@ -261,86 +337,13 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
 /**
  * 处理工具列表请求
- * 提供可用的微信自动化工具
+ * 提供可用的微信自动化工具（包含所有模块化工具）
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "connect_devtools",
-        description: "连接到微信开发者工具",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectPath: {
-              type: "string",
-              description: "小程序项目的绝对路径"
-            },
-            cliPath: {
-              type: "string",
-              description: "微信开发者工具CLI的绝对路径（可选，默认会自动查找）"
-            },
-            port: {
-              type: "number",
-              description: "WebSocket端口号（可选，默认自动分配）"
-            }
-          },
-          required: ["projectPath"]
-        }
-      },
-      {
-        name: "get_page_snapshot",
-        description: "获取当前页面的元素快照，包含所有元素的uid信息",
-        inputSchema: {
-          type: "object",
-          properties: {},
-          additionalProperties: false
-        }
-      },
-      {
-        name: "click",
-        description: "点击指定uid的页面元素",
-        inputSchema: {
-          type: "object",
-          properties: {
-            uid: {
-              type: "string",
-              description: "页面快照中元素的唯一标识符"
-            },
-            dblClick: {
-              type: "boolean",
-              description: "是否为双击，默认false",
-              default: false
-            }
-          },
-          required: ["uid"]
-        }
-      },
-      {
-        name: "get_current_page",
-        description: "获取当前页面信息并设置为活动页面",
-        inputSchema: {
-          type: "object",
-          properties: {},
-          additionalProperties: false
-        }
-      },
-      {
-        name: "screenshot",
-        description: "对当前页面截图，支持返回base64数据或保存到文件",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "图片保存路径（可选），如果不提供则返回base64编码的图片数据"
-            }
-          },
-          additionalProperties: false
-        }
-      }
-    ]
-  };
+  // 动态生成工具列表，包含所有29个工具
+  const tools = allTools.map(tool => convertToolDefinition(tool));
+
+  return { tools };
 });
 
 /**
@@ -350,13 +353,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (request.params.name) {
     case "connect_devtools": {
-      const projectPath = String(request.params.arguments?.projectPath);
+      // 安全地提取参数，避免将undefined转换为字符串"undefined"
+      const projectPathArg = request.params.arguments?.projectPath;
+      if (!projectPathArg || typeof projectPathArg !== 'string') {
+        throw new Error("项目路径是必需的，且必须是有效的字符串路径");
+      }
+      const projectPath = String(projectPathArg);
+
       const cliPath = request.params.arguments?.cliPath ? String(request.params.arguments.cliPath) : undefined;
       const port = request.params.arguments?.port ? Number(request.params.arguments.port) : undefined;
-
-      if (!projectPath) {
-        throw new Error("项目路径是必需的");
-      }
 
       try {
         // 处理@playground/wx格式的路径，转换为绝对文件系统路径
@@ -566,8 +571,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    default:
+    default: {
+      // 使用模块化工具处理器处理新工具
+      const toolHandler = toolHandlers.get(request.params.name);
+      if (toolHandler) {
+        try {
+          const toolContext = createToolContext();
+          const mockResponse = new MockResponse();
+
+          // 创建模拟的请求对象
+          const toolRequest: ToolRequest = {
+            params: request.params.arguments || {}
+          };
+
+          // 调用模块化工具处理器
+          await toolHandler.handler(toolRequest, mockResponse, toolContext);
+
+          // 更新全局状态（从ToolContext同步回来）
+          state.miniProgram = toolContext.miniProgram;
+          state.currentPage = toolContext.currentPage;
+          state.elementMap = toolContext.elementMap;
+          state.consoleStorage = toolContext.consoleStorage;
+
+          // 返回响应
+          const responseLines = mockResponse.getLines();
+          if (responseLines.length === 0) {
+            responseLines.push(`工具 ${request.params.name} 执行成功`);
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: responseLines.join('\n')
+            }]
+          };
+        } catch (error) {
+          throw new Error(`工具 ${request.params.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
       throw new Error(`未知的工具: ${request.params.name}`);
+    }
   }
 });
 

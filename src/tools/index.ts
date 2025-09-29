@@ -6,24 +6,53 @@
 import { ToolDefinition } from './ToolDefinition.js';
 
 // 导入各个模块的工具
-import { connectDevtoolsTool, getCurrentPageTool } from './connection.js';
+import { connectDevtoolsTool, connectDevtoolsEnhancedTool, getCurrentPageTool } from './connection.js';
 import { getPageSnapshotTool } from './snapshot.js';
-import { clickTool } from './input.js';
+import {
+  clickTool,
+  inputTextTool,
+  getValueTool,
+  setFormControlTool,
+  selectPickerTool,
+  toggleSwitchTool,
+  setSliderTool
+} from './input.js';
 import { screenshotTool } from './screenshot.js';
 import { querySelectorTool, waitForTool } from './page.js';
+import {
+  assertExistsTool,
+  assertVisibleTool,
+  assertTextTool,
+  assertAttributeTool,
+  assertStateTool
+} from './assert.js';
+import {
+  navigateToTool,
+  navigateBackTool,
+  switchTabTool,
+  reLaunchTool,
+  getPageInfoTool,
+  redirectToTool
+} from './navigate.js';
 import {
   startConsoleMonitoringTool,
   stopConsoleMonitoringTool,
   getConsoleTool,
   clearConsoleTool
 } from './console.js';
+import {
+  diagnoseConnectionTool,
+  checkEnvironmentTool,
+  debugPageElementsTool
+} from './diagnose.js';
 
 /**
  * 所有可用工具的列表
  */
 export const allTools: ToolDefinition[] = [
   // 连接管理工具
-  connectDevtoolsTool,
+  connectDevtoolsTool,              // 传统连接方式（兼容性）
+  connectDevtoolsEnhancedTool,      // 智能连接方式（推荐）
   getCurrentPageTool,
 
   // 页面快照工具
@@ -33,17 +62,41 @@ export const allTools: ToolDefinition[] = [
   querySelectorTool,
   waitForTool,
 
-  // 交互操作工具
+  // 输入交互工具
   clickTool,
+  inputTextTool,
+  getValueTool,
+  setFormControlTool,
+  selectPickerTool,
+  toggleSwitchTool,
+  setSliderTool,
 
-  // 截图工具
+  // 断言验证工具
+  assertExistsTool,
+  assertVisibleTool,
+  assertTextTool,
+  assertAttributeTool,
+  assertStateTool,
+
+  // 页面导航工具
+  navigateToTool,
+  navigateBackTool,
+  switchTabTool,
+  reLaunchTool,
+  getPageInfoTool,
+  redirectToTool,
+
+  // 调试工具
   screenshotTool,
-
-  // Console监听工具
   startConsoleMonitoringTool,
   stopConsoleMonitoringTool,
   getConsoleTool,
   clearConsoleTool,
+
+  // 诊断工具
+  diagnoseConnectionTool,
+  checkEnvironmentTool,
+  debugPageElementsTool,
 ];
 
 /**

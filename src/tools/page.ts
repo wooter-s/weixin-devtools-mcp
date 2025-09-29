@@ -19,13 +19,18 @@ export const querySelectorTool = defineTool({
   name: '$',
   description: '通过CSS选择器查找页面元素，返回匹配元素的详细信息',
   schema: z.object({
-    selector: z.string().describe('CSS选择器，如：view.container、#myId、.myClass、text=按钮'),
+    selector: z.string().min(1, '选择器不能为空').describe('CSS选择器，如：view.container、#myId、.myClass、text=按钮'),
   }),
   annotations: {
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
     const { selector } = request.params;
+
+    // 验证选择器
+    if (!selector || typeof selector !== 'string' || selector.trim() === '') {
+      throw new Error('选择器不能为空');
+    }
 
     if (!context.currentPage) {
       throw new Error('请先获取当前页面');

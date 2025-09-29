@@ -21,6 +21,7 @@ import {
   SimpleToolResponse,
   ToolDefinition
 } from './tools/index.js';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 /**
  * 全局上下文状态
@@ -150,7 +151,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = allTools.map(tool => ({
     name: tool.name,
     description: tool.description,
-    inputSchema: tool.schema,
+    inputSchema: zodToJsonSchema(tool.schema, {
+      strictUnions: true
+    }),
     annotations: tool.annotations
   }));
 
