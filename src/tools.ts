@@ -180,19 +180,44 @@ async function intelligentConnect(
   options: EnhancedConnectOptions,
   startTime: number
 ): Promise<DetailedConnectResult> {
-  const port = options.autoPort || options.port || 9420;
+  // 策略1: 如果用户指定了端口，使用指定的端口
+  let port = options.autoPort || options.port;
+
+  // 策略2: 如果没有指定端口，尝试自动检测
+  if (!port) {
+    if (options.verbose) {
+      console.log('未指定端口，尝试自动检测...');
+    }
+
+    const detectedPort = await detectIDEPort(options.verbose);
+    if (detectedPort) {
+      port = detectedPort;
+      if (options.verbose) {
+        console.log(`✅ 将使用检测到的端口: ${port}`);
+      }
+    } else {
+      // 未检测到，使用默认端口
+      port = 9420;
+      if (options.verbose) {
+        console.log(`⚠️ 未检测到运行端口，使用默认端口: ${port}`);
+      }
+    }
+  }
+
+  // 更新options中的端口
+  const updatedOptions = { ...options, autoPort: port };
 
   // 检测开发者工具是否已运行
   const isRunning = await checkDevToolsRunning(port);
 
   if (options.verbose) {
-    console.log(`微信开发者工具运行状态: ${isRunning ? '运行中' : '未运行'}`);
+    console.log(`微信开发者工具运行状态 (端口 ${port}): ${isRunning ? '✅ 运行中' : '❌ 未运行'}`);
   }
 
   if (isRunning) {
     // 如果已启动，尝试直接连接
     try {
-      return await connectMode(options, startTime);
+      return await connectMode(updatedOptions, startTime);
     } catch (error) {
       if (options.verbose) {
         console.log('直接连接失败，尝试回退到启动模式');
@@ -200,13 +225,13 @@ async function intelligentConnect(
 
       // 如果允许回退，使用Launch模式
       if (options.fallbackMode) {
-        return await launchMode(options, startTime);
+        return await launchMode(updatedOptions, startTime);
       }
       throw error;
     }
   } else {
     // 未启动，使用两阶段启动
-    return await connectMode(options, startTime);
+    return await connectMode(updatedOptions, startTime);
   }
 }
 
@@ -345,9 +370,9 @@ function buildCliCommand(options: EnhancedConnectOptions): string[] {
 
   const args = ['auto', '--project', resolvedProjectPath];
 
-  // 使用正确的端口参数名
+  // 使用正确的端口参数名（应该是 --auto-port 而不是 --port）
   if (options.autoPort) {
-    args.push('--port', options.autoPort.toString());
+    args.push('--auto-port', options.autoPort.toString());
   }
 
   // 移除不存在的--auto-account参数
@@ -405,31 +430,95 @@ async function executeCliCommand(command: string[]): Promise<ChildProcess> {
 
     let output = '';
     let errorOutput = '';
+    let resolved = false;
 
     if (process.stdout) {
       process.stdout.on('data', (data) => {
-        output += data.toString();
+        const text = data.toString();
+        output += text;
+        console.log('[CLI stdout]:', text.trim());
       });
     }
 
     if (process.stderr) {
       process.stderr.on('data', (data) => {
-        errorOutput += data.toString();
+        const text = data.toString();
+        errorOutput += text;
+        console.log('[CLI stderr]:', text.trim());
+
+        // 检测端口冲突错误
+        if (text.includes('must be restarted on port')) {
+          const match = text.match(/started on .+:(\d+) and must be restarted on port (\d+)/);
+          if (match) {
+            const [, currentPort, requestedPort] = match;
+            if (!resolved) {
+              resolved = true;
+              process.kill();
+              reject(new Error(
+                `端口冲突: IDE已在端口 ${currentPort} 上运行，但请求的端口是 ${requestedPort}。\n` +
+                `解决方案：\n` +
+                `1. 使用当前端口：autoPort: ${currentPort}\n` +
+                `2. 关闭微信开发者工具后重新连接`
+              ));
+            }
+          }
+        }
+
+        // 检测自动化会话冲突错误
+        if ((text.includes('automation') || text.includes('自动化')) &&
+            (text.includes('already') || text.includes('exists') || text.includes('已存在'))) {
+          if (!resolved) {
+            resolved = true;
+            process.kill();
+            reject(new Error(
+              `自动化会话冲突: 微信开发者工具已有活跃的自动化会话。\n` +
+              `可能原因：\n` +
+              `1. 之前使用了 connect_devtools (传统模式) 并已建立连接\n` +
+              `2. 其他程序正在使用自动化功能\n` +
+              `解决方案：\n` +
+              `1. 使用已建立的连接（工具会自动检测并复用）\n` +
+              `2. 关闭微信开发者工具并重新打开\n` +
+              `3. 使用 connect_devtools 继续传统模式`
+            ));
+          }
+        }
+
+        // 检测 CLI 命令失败（通用）
+        if (text.includes('error') || text.includes('failed') || text.includes('失败')) {
+          if (!resolved && text.length > 10) { // 确保不是误报
+            console.log('[CLI 警告] 检测到潜在错误:', text.trim());
+          }
+        }
       });
     }
 
     process.on('error', (error) => {
-      reject(new Error(`CLI命令执行失败: ${error.message}`));
+      if (!resolved) {
+        resolved = true;
+        reject(new Error(`CLI命令执行失败: ${error.message}`));
+      }
+    });
+
+    process.on('exit', (code, signal) => {
+      if (!resolved && code !== 0 && code !== null) {
+        resolved = true;
+        const errorMsg = errorOutput || `CLI进程异常退出 (code=${code}, signal=${signal})`;
+        reject(new Error(errorMsg));
+      }
     });
 
     process.on('spawn', () => {
       // CLI命令已启动，返回进程对象
-      resolve(process);
+      if (!resolved) {
+        resolved = true;
+        resolve(process);
+      }
     });
 
     // 设置超时
     setTimeout(() => {
-      if (!process.killed) {
+      if (!resolved && !process.killed) {
+        resolved = true;
         process.kill();
         reject(new Error('CLI命令启动超时'));
       }
@@ -521,6 +610,76 @@ export async function checkDevToolsRunning(port: number): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * 自动检测当前IDE运行的端口
+ * 返回检测到的端口号，如果未检测到则返回 null
+ */
+export async function detectIDEPort(verbose: boolean = false): Promise<number | null> {
+  // 常用端口列表
+  const commonPorts = [9420, 9440, 9430, 9450, 9460];
+
+  if (verbose) {
+    console.log('🔍 检测微信开发者工具运行端口...');
+  }
+
+  // 策略1: 尝试常用端口
+  for (const port of commonPorts) {
+    if (verbose) {
+      console.log(`  检测端口 ${port}...`);
+    }
+
+    if (await checkDevToolsRunning(port)) {
+      if (verbose) {
+        console.log(`✅ 检测到IDE运行在端口 ${port}`);
+      }
+      return port;
+    }
+  }
+
+  // 策略2: 使用 lsof 命令检查（仅macOS/Linux）
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    try {
+      const { execSync } = await import('child_process');
+      // 查找微信开发者工具占用的端口，只检测9400-9500范围的自动化端口
+      const output = execSync(
+        "lsof -i -P | grep wechat | grep LISTEN | awk '{print $9}' | cut -d: -f2 | grep '^94[0-9][0-9]$'",
+        { encoding: 'utf-8', timeout: 3000 }
+      ).trim();
+
+      if (output) {
+        const ports = output.split('\n').map((p: string) => parseInt(p, 10)).filter((p: number) => !isNaN(p));
+
+        if (verbose && ports.length > 0) {
+          console.log(`  lsof检测到端口: ${ports.join(', ')}`);
+        }
+
+        // 遍历检测到的端口，验证是否为有效的自动化端口
+        for (const port of ports) {
+          if (port >= 9400 && port <= 9500) {
+            if (await checkDevToolsRunning(port)) {
+              if (verbose) {
+                console.log(`✅ 通过lsof检测到IDE运行在端口 ${port}`);
+              }
+              return port;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // lsof 失败，继续
+      if (verbose) {
+        console.log('  lsof检测失败');
+      }
+    }
+  }
+
+  if (verbose) {
+    console.log('❌ 未检测到IDE运行端口');
+  }
+
+  return null;
 }
 
 /**
@@ -811,22 +970,48 @@ export async function clickElement(
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
+    console.log(`[Click] 准备点击元素 - UID: ${uid}, Selector: ${selector}`);
+
     // 获取元素并点击
     const element = await page.$(selector);
     if (!element) {
       throw new Error(`无法找到选择器为 ${selector} 的元素`);
     }
 
+    // 记录点击前的页面路径
+    const beforePath = await page.path;
+    console.log(`[Click] 点击前页面: ${beforePath}`);
+
     // 执行点击操作
     await element.tap();
+    console.log(`[Click] 已执行 tap() 操作`);
 
     // 如果是双击，再点击一次
     if (dblClick) {
       await new Promise(resolve => setTimeout(resolve, 100)); // 短暂延迟
       await element.tap();
+      console.log(`[Click] 已执行第二次 tap() (双击)`);
     }
+
+    // 等待一小段时间，让页面有机会响应
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // 记录点击后的页面路径
+    try {
+      const afterPath = await page.path;
+      console.log(`[Click] 点击后页面: ${afterPath}`);
+      if (beforePath !== afterPath) {
+        console.log(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
+      } else {
+        console.log(`[Click] ⚠️  页面未切换，可能是同页面操作或导航延迟`);
+      }
+    } catch (error) {
+      console.warn(`[Click] 无法获取点击后的页面路径:`, error);
+    }
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Click] 点击失败:`, error);
     throw new Error(`点击元素失败: ${errorMessage}`);
   }
 }
@@ -1812,7 +1997,7 @@ export async function navigateToPage(
     }
 
     // 执行页面跳转
-    await miniProgram.navigateTo({ url: fullUrl });
+    await miniProgram.navigateTo(fullUrl);
 
     // 等待页面加载完成
     if (waitForLoad) {
@@ -1867,7 +2052,7 @@ export async function navigateBack(
     }
 
     // 执行返回操作
-    await miniProgram.navigateBack({ delta });
+    await miniProgram.navigateBack(delta);
 
     // 等待页面加载完成
     if (waitForLoad) {
@@ -1917,7 +2102,7 @@ export async function switchTab(
 
   try {
     // 执行Tab切换
-    await miniProgram.switchTab({ url });
+    await miniProgram.switchTab(url);
 
     // 等待页面加载完成
     if (waitForLoad) {
@@ -2024,7 +2209,7 @@ export async function reLaunch(
     }
 
     // 执行重新启动
-    await miniProgram.reLaunch({ url: fullUrl });
+    await miniProgram.reLaunch(fullUrl);
 
     // 等待页面加载完成
     if (waitForLoad) {

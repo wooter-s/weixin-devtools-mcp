@@ -32,6 +32,9 @@ import {
   ConsoleStorage
 } from './tools/index.js';
 
+// 导入zod-to-json-schema用于schema转换
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
 /**
  * 元素快照接口
  */
@@ -123,11 +126,10 @@ function convertToolDefinition(tool: ToolDefinition) {
   return {
     name: tool.name,
     description: tool.description,
-    inputSchema: {
-      type: "object",
-      properties: {},
-      additionalProperties: true
-    }
+    inputSchema: zodToJsonSchema(tool.schema, {
+      strictUnions: true
+    }),
+    annotations: tool.annotations
   };
 }
 
@@ -137,7 +139,7 @@ function convertToolDefinition(tool: ToolDefinition) {
 const server = new Server(
   {
     name: "weixin-devtools-mcp",
-    version: "0.1.0",
+    version: "0.3.3",
   },
   {
     capabilities: {

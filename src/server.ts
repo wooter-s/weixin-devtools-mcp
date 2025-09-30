@@ -44,7 +44,7 @@ const globalContext: ToolContext = {
 const server = new Server(
   {
     name: "weixin-devtools-mcp",
-    version: "0.2.0",
+    version: "0.3.3",
   },
   {
     capabilities: {

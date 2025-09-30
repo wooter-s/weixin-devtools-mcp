@@ -24,6 +24,27 @@ export const connectDevtoolsTool = defineTool({
   handler: async (request, response, context) => {
     const { projectPath, cliPath, port } = request.params;
 
+    // 检查是否已有活跃连接
+    if (context.miniProgram) {
+      try {
+        // 验证连接是否仍然有效
+        const currentPage = await context.miniProgram.currentPage();
+        const pagePath = await currentPage.path;
+
+        // 连接有效，复用现有连接
+        response.appendResponseLine(`✅ 检测到已有活跃连接，复用现有连接`);
+        response.appendResponseLine(`项目路径: ${projectPath}`);
+        response.appendResponseLine(`当前页面: ${pagePath}`);
+        response.appendResponseLine(`说明: 跳过重新连接，使用已建立的连接`);
+
+        return;
+      } catch (error) {
+        // 连接已失效，清空并继续新建连接
+        context.miniProgram = null;
+        context.currentPage = null;
+      }
+    }
+
     try {
       const options: ConnectOptions = { projectPath };
       if (cliPath) options.cliPath = cliPath;
@@ -99,7 +120,7 @@ export const connectDevtoolsEnhancedTool = defineTool({
     mode: z.enum(['auto', 'launch', 'connect']).optional().default('auto')
       .describe('连接模式: auto(智能), launch(传统), connect(两阶段)'),
     cliPath: z.string().optional().describe('微信开发者工具CLI的绝对路径（可选）'),
-    autoPort: z.number().optional().default(9420).describe('自动化监听端口（--auto-port）'),
+    autoPort: z.number().optional().describe('自动化监听端口（可选，默认自动检测）'),
     autoAccount: z.string().optional().describe('指定用户openid（--auto-account）'),
     timeout: z.number().optional().default(45000).describe('连接超时时间（毫秒）'),
     fallbackMode: z.boolean().optional().default(true).describe('允许模式回退'),
@@ -121,6 +142,34 @@ export const connectDevtoolsEnhancedTool = defineTool({
       healthCheck,
       verbose
     } = request.params;
+
+    // 检查是否已有活跃连接
+    if (context.miniProgram) {
+      try {
+        // 验证连接是否仍然有效
+        const currentPage = await context.miniProgram.currentPage();
+        const pagePath = await currentPage.path;
+
+        // 连接有效，复用现有连接
+        response.appendResponseLine(`✅ 检测到已有活跃连接，复用现有连接`);
+        response.appendResponseLine(`项目路径: ${projectPath}`);
+        response.appendResponseLine(`当前页面: ${pagePath}`);
+        response.appendResponseLine(`说明: 跳过重新连接，使用已建立的连接`);
+
+        if (verbose) {
+          response.appendResponseLine(`提示: 如需强制重新连接，请先关闭微信开发者工具`);
+        }
+
+        return;
+      } catch (error) {
+        // 连接已失效，清空并继续新建连接
+        if (verbose) {
+          response.appendResponseLine(`检测到已有连接但已失效，准备重新连接...`);
+        }
+        context.miniProgram = null;
+        context.currentPage = null;
+      }
+    }
 
     try {
       const options: EnhancedConnectOptions = {

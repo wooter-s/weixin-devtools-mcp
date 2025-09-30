@@ -1,6 +1,6 @@
 {
   "name": "weixin-devtools-mcp",
-  "version": "0.2.0",
+  "version": "0.3.3",
   "description": "A Model Context Protocol server",
   "private": true,
   "type": "module",
@@ -26,7 +26,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.6.0",
     "miniprogram-automator": "^0.12.1",
-    "zod": "^4.1.11",
+    "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {

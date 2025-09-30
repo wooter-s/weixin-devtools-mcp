@@ -440,9 +440,7 @@ describe('navigate.ts 工具测试', () => {
 
       await redirectToTool.handler(request, response, mockContext)
 
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith({
-        url: '/pages/login/login'
-      })
+      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/login/login')
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('页面重定向成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('目标页面: /pages/login/login')
@@ -465,9 +463,7 @@ describe('navigate.ts 工具测试', () => {
 
       await redirectToTool.handler(request, response, mockContext)
 
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith({
-        url: '/pages/detail/detail?id=456&source=redirect'
-      })
+      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/detail/detail?id=456&source=redirect')
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('参数: {"id":"456","source":"redirect"}')
     })
@@ -486,9 +482,7 @@ describe('navigate.ts 工具测试', () => {
 
       await redirectToTool.handler(request, response, mockContext)
 
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith({
-        url: '/pages/search/search?keyword=test&page=2'
-      })
+      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/search/search?keyword=test&page=2')
     })
 
     it('应该支持不等待页面加载', async () => {
@@ -502,9 +496,7 @@ describe('navigate.ts 工具测试', () => {
 
       await redirectToTool.handler(request, response, mockContext)
 
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith({
-        url: '/pages/quick/quick'
-      })
+      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/quick/quick')
 
       // 不等待页面加载时不会调用currentPage检查
       expect(mockMiniProgram.currentPage).toHaveBeenCalledTimes(1) // 只在最后更新页面信息时调用

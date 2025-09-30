@@ -88,20 +88,21 @@ export const querySelectorTool = defineTool({
 export const waitForTool = defineTool({
   name: 'waitFor',
   description: '等待条件满足，支持等待元素出现、消失、文本匹配等',
-  schema: z.union([
-    // 简单的数字等待
-    z.number().describe('等待指定毫秒数'),
-    // 简单的选择器等待
-    z.string().describe('等待元素选择器出现'),
-    // 复杂的等待条件对象
-    z.object({
-      selector: z.string().optional().describe('等待元素选择器'),
-      timeout: z.number().optional().default(5000).describe('超时时间(毫秒)，默认5000ms'),
-      text: z.string().optional().describe('等待元素包含指定文本'),
-      visible: z.boolean().optional().describe('等待元素可见状态，true为可见，false为隐藏'),
-      disappear: z.boolean().optional().default(false).describe('等待元素消失，默认false'),
-    }),
-  ]),
+  schema: z.object({
+    // 支持三种模式:
+    // 1. 时间等待: { delay: 1000 }
+    // 2. 选择器等待: { selector: ".button" }
+    // 3. 复杂条件: { selector: ".button", text: "提交", timeout: 5000 }
+    delay: z.number().optional().describe('等待指定毫秒数（时间等待模式）'),
+    selector: z.string().optional().describe('等待元素选择器（选择器等待模式）'),
+    timeout: z.number().optional().default(5000).describe('超时时间(毫秒)，默认5000ms'),
+    text: z.string().optional().describe('等待元素包含指定文本'),
+    visible: z.boolean().optional().describe('等待元素可见状态，true为可见，false为隐藏'),
+    disappear: z.boolean().optional().default(false).describe('等待元素消失，默认false'),
+  }).refine(
+    (data) => data.delay !== undefined || data.selector !== undefined,
+    { message: '必须提供 delay（时间等待）或 selector（选择器等待）' }
+  ),
   annotations: {
     audience: ['developers'],
   },
@@ -115,19 +116,20 @@ export const waitForTool = defineTool({
     try {
       const startTime = Date.now();
 
-      // 构建等待描述信息
+      // 构建等待描述信息和实际等待参数
       let waitDescription = '';
-      if (typeof options === 'number') {
-        waitDescription = `等待 ${options}ms`;
-      } else if (typeof options === 'string') {
-        waitDescription = `等待元素 "${options}" 出现`;
-      } else {
+      let waitParam: number | string | WaitForOptions;
+
+      if (options.delay !== undefined) {
+        // 时间等待模式
+        waitDescription = `等待 ${options.delay}ms`;
+        waitParam = options.delay;
+      } else if (options.selector) {
+        // 选择器等待模式
         const parts = [];
-        if (options.selector) {
-          parts.push(`选择器 "${options.selector}"`);
-          if (options.disappear) parts.push('消失');
-          else parts.push('出现');
-        }
+        parts.push(`选择器 "${options.selector}"`);
+        if (options.disappear) parts.push('消失');
+        else parts.push('出现');
         if (options.text) parts.push(`包含文本 "${options.text}"`);
         if (options.visible !== undefined) {
           parts.push(options.visible ? '可见' : '隐藏');
@@ -136,11 +138,22 @@ export const waitForTool = defineTool({
         if (options.timeout) {
           waitDescription += ` (超时: ${options.timeout}ms)`;
         }
+
+        // 构建 WaitForOptions 参数
+        waitParam = {
+          selector: options.selector,
+          timeout: options.timeout,
+          ...(options.text && { text: options.text }),
+          ...(options.visible !== undefined && { visible: options.visible }),
+          ...(options.disappear !== undefined && { disappear: options.disappear }),
+        };
+      } else {
+        throw new Error('必须提供 delay 或 selector 参数');
       }
 
       response.appendResponseLine(`开始 ${waitDescription}...`);
 
-      const result = await waitForCondition(context.currentPage, options);
+      const result = await waitForCondition(context.currentPage, waitParam);
 
       const endTime = Date.now();
       const duration = endTime - startTime;

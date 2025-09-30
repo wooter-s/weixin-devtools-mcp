@@ -309,7 +309,7 @@ export const redirectToTool = defineTool({
       }
 
       // 执行重定向
-      await context.miniProgram.redirectTo({ url: fullUrl });
+      await context.miniProgram.redirectTo(fullUrl);
 
       // 等待页面加载完成
       if (waitForLoad) {
