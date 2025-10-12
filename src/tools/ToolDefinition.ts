@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import type { ElementMapInfo } from '../tools.js'
 
 /**
  * 工具分类枚举
@@ -68,12 +69,17 @@ export interface NetworkRequest {
   method?: string;
   headers?: Record<string, string>;
   data?: any;
+  params?: any;  // Mpx框架的查询参数
   statusCode?: number;
   response?: any;
+  responseHeaders?: Record<string, string>;  // 响应头
   error?: string;
   duration?: number;
   timestamp: string;
+  completedAt?: string;  // 完成时间
   success: boolean;
+  pending?: boolean;  // 是否等待响应中
+  source?: string;  // 请求来源（wx.request, getApp().$xfetch等）
 }
 
 /**
@@ -96,7 +102,7 @@ export interface NetworkStorage {
 export interface ToolContext {
   miniProgram: any;
   currentPage: any;
-  elementMap: Map<string, string>;
+  elementMap: Map<string, ElementMapInfo>;
   consoleStorage: ConsoleStorage;
   networkStorage: NetworkStorage;
 }

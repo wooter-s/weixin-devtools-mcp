@@ -1066,6 +1066,15 @@ export interface PageSnapshot {
 }
 
 /**
+ * 元素映射信息接口
+ * 用于精确定位页面元素
+ */
+export interface ElementMapInfo {
+  selector: string;  // 基础选择器，如 "button.cube-btn"
+  index: number;     // 在匹配结果中的索引，从0开始
+}
+
+/**
  * 生成元素的唯一标识符 (uid)
  */
 export async function generateElementUid(element: any, index: number): Promise<string> {
@@ -1073,6 +1082,8 @@ export async function generateElementUid(element: any, index: number): Promise<s
     const tagName = element.tagName;
     const className = await element.attribute('class').catch(() => '');
     const id = await element.attribute('id').catch(() => '');
+
+    console.log(`[generateElementUid] tagName=${tagName}, className="${className}", id="${id}", index=${index}`);
 
     let selector = tagName;
     if (id) {
@@ -1083,8 +1094,10 @@ export async function generateElementUid(element: any, index: number): Promise<s
       selector += `:nth-child(${index + 1})`;
     }
 
+    console.log(`[generateElementUid] Generated UID: ${selector}`);
     return selector;
   } catch (error) {
+    console.log(`[generateElementUid] Error:`, error);
     return `${element.tagName || 'unknown'}:nth-child(${index + 1})`;
   }
 }
@@ -1097,7 +1110,7 @@ export async function generateElementUid(element: any, index: number): Promise<s
  */
 export async function getPageSnapshot(page: any): Promise<{
   snapshot: PageSnapshot;
-  elementMap: Map<string, string>;
+  elementMap: Map<string, ElementMapInfo>;
 }> {
   if (!page) {
     throw new Error("页面对象是必需的");
@@ -1105,7 +1118,7 @@ export async function getPageSnapshot(page: any): Promise<{
 
   try {
     const elements: ElementSnapshot[] = [];
-    const elementMap = new Map<string, string>();
+    const elementMap = new Map<string, ElementMapInfo>();
 
     // 等待页面加载完成
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1152,6 +1165,9 @@ export async function getPageSnapshot(page: any): Promise<{
     }
 
     console.log(`最终获取到 ${childElements.length} 个元素`);
+
+    // 用于跟踪每个基础选择器的元素计数
+    const selectorIndexMap = new Map<string, number>();
 
     for (let i = 0; i < childElements.length; i++) {
       const element = childElements[i];
@@ -1213,7 +1229,28 @@ export async function getPageSnapshot(page: any): Promise<{
         }
 
         elements.push(snapshot);
-        elementMap.set(uid, uid);
+
+        // 生成可查询的基础选择器（不包含伪类）
+        const tagName = element.tagName;
+        const className = await element.attribute('class').catch(() => '');
+        const id = await element.attribute('id').catch(() => '');
+
+        let baseSelector = tagName;
+        if (id) {
+          baseSelector = `${tagName}#${id}`;
+        } else if (className) {
+          baseSelector = `${tagName}.${className.split(' ')[0]}`;
+        }
+
+        // 计算该选择器的元素索引（递增计数）
+        const currentIndex = selectorIndexMap.get(baseSelector) || 0;
+        selectorIndexMap.set(baseSelector, currentIndex + 1);
+
+        // 存储 ElementMapInfo，使用可查询的基础选择器和索引
+        elementMap.set(uid, {
+          selector: baseSelector,  // 使用可查询的基础选择器
+          index: currentIndex       // 使用该选择器的当前计数
+        });
 
       } catch (error) {
         console.warn(`Error processing element ${i}:`, error);
@@ -1250,7 +1287,7 @@ export interface ClickOptions {
  */
 export async function clickElement(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: ClickOptions
 ): Promise<void> {
   const { uid, dblClick = false } = options;
@@ -1264,18 +1301,29 @@ export async function clickElement(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
-    console.log(`[Click] 准备点击元素 - UID: ${uid}, Selector: ${selector}`);
+    console.log(`[Click] 准备点击元素 - UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
 
-    // 获取元素并点击
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      throw new Error(`无法找到选择器为 ${mapInfo.selector} 的元素`);
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      throw new Error(`元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`);
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
-      throw new Error(`无法找到选择器为 ${selector} 的元素`);
+      throw new Error(`无法获取索引为 ${mapInfo.index} 的元素`);
     }
 
     // 记录点击前的页面路径
@@ -1455,7 +1503,7 @@ export interface QueryOptions {
  */
 export async function queryElements(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: QueryOptions
 ): Promise<QueryResult[]> {
   const { selector } = options;
@@ -1473,10 +1521,21 @@ export async function queryElements(
     const elements = await page.$$(selector);
     const results: QueryResult[] = [];
 
+    // 用于跟踪 UID 冲突
+    const uidCounter = new Map<string, number>();
+
     for (let i = 0; i < elements.length; i++) {
       const element = elements[i];
       try {
-        const uid = `${selector}:nth-child(${i + 1})`;
+        // 使用 generateElementUid 生成基础 UID
+        const baseUid = await generateElementUid(element, i);
+
+        // 检测 UID 冲突并添加 [N] 后缀
+        const count = uidCounter.get(baseUid) || 0;
+        uidCounter.set(baseUid, count + 1);
+
+        // 第一个元素不加后缀，后续元素添加 [N] 后缀
+        const uid = count === 0 ? baseUid : `${baseUid}[${count + 1}]`;
 
         const result: QueryResult = {
           uid,
@@ -1534,9 +1593,11 @@ export async function queryElements(
 
         results.push(result);
 
-        // 更新元素映射，使用实际的CSS选择器
-        const actualSelector = `${selector}:nth-child(${i + 1})`;
-        elementMap.set(uid, actualSelector);
+        // 填充 elementMap：使用原始查询选择器和数组索引
+        elementMap.set(uid, {
+          selector: selector,  // 使用原始查询选择器，而不是 baseUid
+          index: i             // 使用在查询结果中的索引位置
+        });
 
       } catch (error) {
         console.warn(`Error processing element ${i}:`, error);
@@ -1718,7 +1779,7 @@ export interface GetValueOptions {
  */
 export async function inputText(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: InputTextOptions
 ): Promise<void> {
   const { uid, text, clear = false, append = false } = options;
@@ -1732,16 +1793,27 @@ export async function inputText(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      throw new Error(`无法找到选择器为 ${mapInfo.selector} 的元素`);
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      throw new Error(`元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`);
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
-      throw new Error(`无法找到选择器为 ${selector} 的元素`);
+      throw new Error(`无法获取索引为 ${mapInfo.index} 的元素`);
     }
 
     // 清空元素（如果需要）
@@ -1774,7 +1846,7 @@ export async function inputText(
  */
 export async function getElementValue(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: GetValueOptions
 ): Promise<string> {
   const { uid, attribute } = options;
@@ -1788,16 +1860,27 @@ export async function getElementValue(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      throw new Error(`无法找到选择器为 ${mapInfo.selector} 的元素`);
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      throw new Error(`元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`);
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
-      throw new Error(`无法找到选择器为 ${selector} 的元素`);
+      throw new Error(`无法获取索引为 ${mapInfo.index} 的元素`);
     }
 
     // 获取值
@@ -1827,7 +1910,7 @@ export async function getElementValue(
  */
 export async function setFormControl(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: FormControlOptions
 ): Promise<void> {
   const { uid, value, trigger = 'change' } = options;
@@ -1841,16 +1924,27 @@ export async function setFormControl(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      throw new Error(`无法找到选择器为 ${mapInfo.selector} 的元素`);
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      throw new Error(`元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`);
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
-      throw new Error(`无法找到选择器为 ${selector} 的元素`);
+      throw new Error(`无法获取索引为 ${mapInfo.index} 的元素`);
     }
 
     // 设置值并触发事件
@@ -1991,7 +2085,7 @@ export async function assertElementExists(
  */
 export async function assertElementVisible(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: StateAssertOptions
 ): Promise<AssertResult> {
   const { uid, visible } = options;
@@ -2009,9 +2103,9 @@ export async function assertElementVisible(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       return {
         passed: false,
         message: `断言失败: 找不到uid为 ${uid} 的元素`,
@@ -2021,12 +2115,35 @@ export async function assertElementVisible(
       };
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      return {
+        passed: false,
+        message: `断言失败: 无法找到选择器为 ${mapInfo.selector} 的元素`,
+        actual: false,
+        expected: visible,
+        timestamp: Date.now()
+      };
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      return {
+        passed: false,
+        message: `断言失败: 元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`,
+        actual: false,
+        expected: visible,
+        timestamp: Date.now()
+      };
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
       return {
         passed: false,
-        message: `断言失败: 无法找到选择器为 ${selector} 的元素`,
+        message: `断言失败: 无法获取索引为 ${mapInfo.index} 的元素`,
         actual: false,
         expected: visible,
         timestamp: Date.now()
@@ -2070,7 +2187,7 @@ export async function assertElementVisible(
  */
 export async function assertElementText(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: ContentAssertOptions
 ): Promise<AssertResult> {
   const { uid, text, textContains, textMatches } = options;
@@ -2088,9 +2205,9 @@ export async function assertElementText(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       return {
         passed: false,
         message: `断言失败: 找不到uid为 ${uid} 的元素`,
@@ -2100,12 +2217,35 @@ export async function assertElementText(
       };
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      return {
+        passed: false,
+        message: `断言失败: 无法找到选择器为 ${mapInfo.selector} 的元素`,
+        actual: null,
+        expected: text || textContains || textMatches,
+        timestamp: Date.now()
+      };
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      return {
+        passed: false,
+        message: `断言失败: 元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`,
+        actual: null,
+        expected: text || textContains || textMatches,
+        timestamp: Date.now()
+      };
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
       return {
         passed: false,
-        message: `断言失败: 无法找到选择器为 ${selector} 的元素`,
+        message: `断言失败: 无法获取索引为 ${mapInfo.index} 的元素`,
         actual: null,
         expected: text || textContains || textMatches,
         timestamp: Date.now()
@@ -2172,7 +2312,7 @@ export async function assertElementText(
  */
 export async function assertElementAttribute(
   page: any,
-  elementMap: Map<string, string>,
+  elementMap: Map<string, ElementMapInfo>,
   options: ContentAssertOptions
 ): Promise<AssertResult> {
   const { uid, attribute } = options;
@@ -2190,9 +2330,9 @@ export async function assertElementAttribute(
   }
 
   try {
-    // 通过uid查找元素
-    const selector = elementMap.get(uid);
-    if (!selector) {
+    // 通过uid查找元素映射信息
+    const mapInfo = elementMap.get(uid);
+    if (!mapInfo) {
       return {
         passed: false,
         message: `断言失败: 找不到uid为 ${uid} 的元素`,
@@ -2202,12 +2342,35 @@ export async function assertElementAttribute(
       };
     }
 
-    // 获取元素
-    const element = await page.$(selector);
+    // 使用选择器获取所有匹配元素
+    const elements = await page.$$(mapInfo.selector);
+    if (!elements || elements.length === 0) {
+      return {
+        passed: false,
+        message: `断言失败: 无法找到选择器为 ${mapInfo.selector} 的元素`,
+        actual: null,
+        expected: attribute.value,
+        timestamp: Date.now()
+      };
+    }
+
+    // 检查索引是否有效
+    if (mapInfo.index >= elements.length) {
+      return {
+        passed: false,
+        message: `断言失败: 元素索引 ${mapInfo.index} 超出范围，共找到 ${elements.length} 个元素`,
+        actual: null,
+        expected: attribute.value,
+        timestamp: Date.now()
+      };
+    }
+
+    // 通过索引获取目标元素
+    const element = elements[mapInfo.index];
     if (!element) {
       return {
         passed: false,
-        message: `断言失败: 无法找到选择器为 ${selector} 的元素`,
+        message: `断言失败: 无法获取索引为 ${mapInfo.index} 的元素`,
         actual: null,
         expected: attribute.value,
         timestamp: Date.now()

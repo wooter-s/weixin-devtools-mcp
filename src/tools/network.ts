@@ -251,8 +251,21 @@ export const startNetworkMonitoringTool = defineTool({
 
         // 检查是否已经注入过拦截器
         // @ts-ignore
-        if (wx.__networkInterceptorsInstalled) {
+        if (wx.__networkInterceptorsInstalled && !shouldClear) {
+          console.log('[MCP-DEBUG] 拦截器已安装，跳过重复安装');
           return; // 已安装，跳过
+        }
+
+        // 如果需要清除，先删除旧的标记
+        if (shouldClear) {
+          console.log('[MCP-DEBUG] 强制重装：清除旧的安装标记');
+          // @ts-ignore
+          delete wx.__networkInterceptorsInstalled;
+          // 同时清空pending队列和config缓存
+          // @ts-ignore
+          wx.__pendingQueue = [];
+          // @ts-ignore
+          wx.__requestConfigMap = {};
         }
 
         // ===== 模式1：检测并使用Mpx框架拦截器 =====
@@ -281,8 +294,50 @@ export const startNetworkMonitoringTool = defineTool({
 
         if (hasMpxFetch) {
           console.log('[MCP] ✅ 检测到Mpx框架，使用getApp().$xfetch拦截器模式');
+          console.log('[MCP] 📝 使用Pending队列方案解决业务拦截器改变响应结构的问题');
 
-          // 请求拦截器 - 记录请求开始
+          // 初始化pending队列和config缓存
+          // @ts-ignore
+          if (!wx.__pendingQueue) {
+            // @ts-ignore
+            wx.__pendingQueue = [];
+          }
+          // @ts-ignore
+          if (!wx.__requestConfigMap) {
+            // @ts-ignore
+            wx.__requestConfigMap = {};
+          }
+
+          // 如果需要重装,清空旧的Mpx拦截器handlers(防止累加)
+          if (shouldClear) {
+            console.log('[MCP-DEBUG] 准备清空handlers, shouldClear=', shouldClear);
+            console.log('[MCP-DEBUG] request拦截器结构:', {
+              hasInterceptors: !!app.$xfetch.interceptors.request,
+              hasHandlers: !!app.$xfetch.interceptors.request.handlers,
+              handlersType: typeof app.$xfetch.interceptors.request.handlers,
+              handlersIsArray: Array.isArray(app.$xfetch.interceptors.request.handlers)
+            });
+
+            // @ts-ignore
+            if (app.$xfetch.interceptors.request && app.$xfetch.interceptors.request.handlers) {
+              // @ts-ignore
+              app.$xfetch.interceptors.request.handlers = [];
+              console.log('[MCP-DEBUG] ✅ 已清空旧的request拦截器handlers');
+            } else {
+              console.log('[MCP-DEBUG] ⚠️  request.handlers不存在或不是数组');
+            }
+
+            // @ts-ignore
+            if (app.$xfetch.interceptors.response && app.$xfetch.interceptors.response.handlers) {
+              // @ts-ignore
+              app.$xfetch.interceptors.response.handlers = [];
+              console.log('[MCP-DEBUG] ✅ 已清空旧的response拦截器handlers');
+            } else {
+              console.log('[MCP-DEBUG] ⚠️  response.handlers不存在或不是数组');
+            }
+          }
+
+          // 请求拦截器 - 记录请求开始并缓存config
           // @ts-ignore
           getApp().$xfetch.interceptors.request.use(function(config: any) {
             const requestId = 'mpx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
@@ -297,9 +352,32 @@ export const startNetworkMonitoringTool = defineTool({
               timestamp: new Date().toISOString()
             });
 
-            // 将元数据附加到config，供响应拦截器使用
-            config.__mcp_requestId = requestId;
-            config.__mcp_startTime = startTime;
+            // 保存完整的config到缓存(因为响应拦截器可能拿不到requestConfig)
+            // @ts-ignore
+            wx.__requestConfigMap[requestId] = {
+              url: config.url,
+              method: config.method || 'GET',
+              header: config.header || config.headers,
+              data: config.data,
+              params: config.params,
+              timeout: config.timeout || 30000
+            };
+
+            // 添加到pending队列(FIFO)
+            // @ts-ignore
+            wx.__pendingQueue.push({
+              id: requestId,
+              url: config.url,
+              method: config.method || 'GET',
+              startTime: startTime
+            });
+
+            // 清理超时的pending请求(避免队列堆积)
+            const timeout = config.timeout || 30000;
+            // @ts-ignore
+            wx.__pendingQueue = wx.__pendingQueue.filter((item: any) =>
+              Date.now() - item.startTime < timeout + 5000  // 额外5秒容错
+            );
 
             // @ts-ignore - wx is available in WeChat miniprogram environment
             wx.__networkLogs.push({
@@ -310,78 +388,183 @@ export const startNetworkMonitoringTool = defineTool({
               headers: config.header || config.headers,
               data: config.data,
               params: config.params,
-              timestamp: new Date().toISOString(),
+              timestamp: new Date(startTime).toISOString(),
               source: 'getApp().$xfetch',
-              phase: 'request'
+              pending: true,  // 标记为待完成状态
+              success: undefined  // 初始化success字段，避免状态判断问题
             });
 
-            // @ts-ignore - wx is available in WeChat miniprogram environment
-            console.log('[MCP-DEBUG] ✅ 请求已记录到 wx.__networkLogs, 当前总数:', wx.__networkLogs.length);
+            // @ts-ignore - wx在小程序环境可用
+            console.log('[MCP-DEBUG] ✅ 请求已记录, pending队列:', wx.__pendingQueue.length, ', 日志数:', wx.__networkLogs.length);
 
             return config; // 必须返回config继续请求链
           });
 
-          // 响应拦截器 - 记录成功响应
+          // 响应拦截器 - 使用Pending队列匹配请求/响应
           // @ts-ignore
           getApp().$xfetch.interceptors.response.use(
-            function onSuccess(response: any) {
-              const requestId = response.requestConfig?.__mcp_requestId;
-              const startTime = response.requestConfig?.__mcp_startTime || Date.now();
+            function onSuccess(data: any) {
+              try {
+                // 注意: data可能只是业务数据(如{goodsList, tripId})，而不是完整的response对象
+                // 因为业务拦截器(commonResInterceptor)改变了响应结构
 
-              console.log('[MCP-DEBUG] 🟢 响应拦截器被触发(成功):', {
-                requestId: requestId,
-                status: response.status,
-                hasData: !!response.data,
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString()
-              });
+                console.log('[MCP-DEBUG] 🟢 响应拦截器被触发(成功)');
+                console.log('[MCP-DEBUG] 🔍 响应数据类型:', typeof data, ', 键:', Object.keys(data || {}));
 
-              // @ts-ignore
-              wx.__networkLogs.push({
-                id: requestId,
-                type: 'response',
-                statusCode: response.status,
-                data: response.data,
-                headers: response.header || response.headers,
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString(),
-                source: 'getApp().$xfetch',
-                phase: 'response',
-                success: true
-              });
+                // 从Pending队列获取最早的请求(FIFO匹配)
+                // @ts-ignore
+                const requestInfo = wx.__pendingQueue.shift();
 
-              // @ts-ignore - wx is available in WeChat miniprogram environment
-              console.log('[MCP-DEBUG] ✅ 响应已记录到 wx.__networkLogs, 当前总数:', wx.__networkLogs.length);
+                if (!requestInfo) {
+                  console.log('[MCP-DEBUG] ⚠️  Pending队列为空，无法匹配请求');
+                  return data;
+                }
 
-              return response; // 必须返回response继续响应链
+                const duration = Date.now() - requestInfo.startTime;
+
+                console.log('[MCP-DEBUG] 📦 从队列取出请求:', {
+                  requestId: requestInfo.id,
+                  url: requestInfo.url,
+                  method: requestInfo.method,
+                  duration: duration + 'ms'
+                });
+
+                // 从缓存获取完整的请求配置
+                // @ts-ignore
+                const savedConfig = wx.__requestConfigMap[requestInfo.id];
+
+                if (!savedConfig) {
+                  console.log('[MCP-DEBUG] ⚠️  未找到缓存的config');
+                }
+
+                // @ts-ignore
+                // 找到对应的日志记录并更新
+                let logIndex = wx.__networkLogs.findIndex((log: any) => log.id === requestInfo.id);
+
+                // 增强：如果按ID找不到，尝试按URL和时间窗口匹配（fallback策略）
+                if (logIndex === -1) {
+                  console.log('[MCP-DEBUG] ⚠️  按ID未找到日志，尝试URL匹配...');
+                  // @ts-ignore
+                  logIndex = wx.__networkLogs.findIndex((log: any) =>
+                    log.url === requestInfo.url &&
+                    log.pending === true &&
+                    Math.abs(new Date(log.timestamp).getTime() - requestInfo.startTime) < 10000 // 10秒窗口
+                  );
+
+                  if (logIndex !== -1) {
+                    console.log('[MCP-DEBUG] ✅ 通过URL匹配找到日志, 索引:', logIndex);
+                  }
+                }
+
+                if (logIndex !== -1) {
+                  // @ts-ignore
+                  const existingLog = wx.__networkLogs[logIndex];
+                  // @ts-ignore
+                  wx.__networkLogs[logIndex] = {
+                    ...existingLog,
+                    statusCode: 200,  // 能到这里说明成功
+                    response: data,   // 只能拿到业务数据
+                    duration: duration,
+                    completedAt: new Date().toISOString(),
+                    pending: false,
+                    success: true
+                  };
+                  console.log('[MCP-DEBUG] ✅ 请求记录已更新 (合并响应), 索引:', logIndex);
+                } else {
+                  console.log('[MCP-DEBUG] ❌ 完全未找到匹配的日志记录, requestId:', requestInfo.id, ', url:', requestInfo.url);
+                }
+
+                // 清理config缓存
+                // @ts-ignore
+                if (savedConfig) {
+                  // @ts-ignore
+                  delete wx.__requestConfigMap[requestInfo.id];
+                }
+
+                // @ts-ignore - wx在小程序环境可用
+                console.log('[MCP-DEBUG] 📊 状态 - 日志:', wx.__networkLogs.length, ', pending:', wx.__pendingQueue.length, ', config缓存:', Object.keys(wx.__requestConfigMap || {}).length);
+
+                return data; // 必须返回data继续拦截器链
+              } catch (error) {
+                console.log('[MCP-DEBUG] ❌ 响应拦截器异常:', error);
+                return data; // 即使出错也要返回data，不能中断业务逻辑
+              }
             },
             function onError(error: any) {
-              const requestId = error.requestConfig?.__mcp_requestId;
-              const startTime = error.requestConfig?.__mcp_startTime || Date.now();
+              try {
+                console.log('[MCP-DEBUG] 🔴 响应拦截器被触发(错误)');
+                console.log('[MCP-DEBUG] 🔍 错误对象:', error);
 
-              console.log('[MCP-DEBUG] 🔴 响应拦截器被触发(错误):', {
-                requestId: requestId,
-                error: error.errMsg || error.message,
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString()
-              });
+                // 从Pending队列获取最早的请求(FIFO匹配)
+                // @ts-ignore
+                const requestInfo = wx.__pendingQueue.shift();
 
-              // @ts-ignore
-              wx.__networkLogs.push({
-                id: requestId,
-                type: 'error',
-                error: error.errMsg || error.message || String(error),
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString(),
-                source: 'getApp().$xfetch',
-                phase: 'error',
-                success: false
-              });
+                if (!requestInfo) {
+                  console.log('[MCP-DEBUG] ⚠️  Pending队列为空，无法匹配错误请求');
+                  return Promise.reject(error);
+                }
 
-              // @ts-ignore - wx is available in WeChat miniprogram environment
-              console.log('[MCP-DEBUG] ✅ 错误已记录到 wx.__networkLogs, 当前总数:', wx.__networkLogs.length);
+                const duration = Date.now() - requestInfo.startTime;
 
-              return Promise.reject(error); // 保持错误传播
+                console.log('[MCP-DEBUG] 📦 从队列取出请求(错误):', {
+                  requestId: requestInfo.id,
+                  url: requestInfo.url,
+                  error: error.errMsg || error.msg || error.message || String(error),
+                  duration: duration + 'ms'
+                });
+
+                // @ts-ignore
+                // 找到对应的日志记录并更新
+                let logIndex = wx.__networkLogs.findIndex((log: any) => log.id === requestInfo.id);
+
+                // 增强：如果按ID找不到，尝试按URL和时间窗口匹配（fallback策略）
+                if (logIndex === -1) {
+                  console.log('[MCP-DEBUG] ⚠️  按ID未找到日志（错误场景），尝试URL匹配...');
+                  // @ts-ignore
+                  logIndex = wx.__networkLogs.findIndex((log: any) =>
+                    log.url === requestInfo.url &&
+                    log.pending === true &&
+                    Math.abs(new Date(log.timestamp).getTime() - requestInfo.startTime) < 10000 // 10秒窗口
+                  );
+
+                  if (logIndex !== -1) {
+                    console.log('[MCP-DEBUG] ✅ 通过URL匹配找到日志（错误场景）, 索引:', logIndex);
+                  }
+                }
+
+                if (logIndex !== -1) {
+                  // @ts-ignore
+                  const existingLog = wx.__networkLogs[logIndex];
+                  // @ts-ignore
+                  wx.__networkLogs[logIndex] = {
+                    ...existingLog,
+                    error: error.errMsg || error.msg || error.message || String(error),
+                    statusCode: error.status || error.statusCode,
+                    duration: duration,
+                    completedAt: new Date().toISOString(),
+                    pending: false,
+                    success: false
+                  };
+                  console.log('[MCP-DEBUG] ✅ 请求记录已更新 (合并错误), 索引:', logIndex);
+                } else {
+                  console.log('[MCP-DEBUG] ❌ 完全未找到匹配的日志记录（错误场景）, requestId:', requestInfo.id, ', url:', requestInfo.url);
+                }
+
+                // 清理config缓存
+                // @ts-ignore
+                if (wx.__requestConfigMap && wx.__requestConfigMap[requestInfo.id]) {
+                  // @ts-ignore
+                  delete wx.__requestConfigMap[requestInfo.id];
+                }
+
+                // @ts-ignore - wx在小程序环境可用
+                console.log('[MCP-DEBUG] 📊 状态 - 日志:', wx.__networkLogs.length, ', pending:', wx.__pendingQueue.length);
+
+                return Promise.reject(error); // 保持错误传播
+              } catch (innerError) {
+                console.log('[MCP-DEBUG] ❌ 错误拦截器异常:', innerError);
+                return Promise.reject(error); // 即使出错也要传播原始错误，不能中断业务逻辑
+              }
             }
           );
 
@@ -766,6 +949,22 @@ export const getNetworkRequestsTool = defineTool({
 
       // 过滤函数
       const filters = [
+        // 过滤无效记录（type='response' 或 url为空/undefined）
+        (req: NetworkRequest) => {
+          // 过滤掉 type='response' 的记录（不应该存在）
+          if (req.type === 'response' as any) {
+            return false;
+          }
+          // 过滤掉 URL 为空或 'undefined' 的记录
+          if (!req.url || req.url === 'undefined') {
+            return false;
+          }
+          // 过滤掉 ID 为空或 'N/A' 的记录
+          if (!req.id || req.id === 'N/A') {
+            return false;
+          }
+          return true;
+        },
         // 类型过滤
         (req: NetworkRequest) => type === 'all' || req.type === type,
         // 时间过滤
@@ -795,15 +994,48 @@ export const getNetworkRequestsTool = defineTool({
 
     filteredRequests.forEach((req, index) => {
       response.appendResponseLine(`--- 请求 ${index + 1} ---`);
-      response.appendResponseLine(`ID: ${req.id}`);
+      response.appendResponseLine(`ID: ${req.id || 'N/A'}`);
       response.appendResponseLine(`类型: ${req.type}`);
+
+      // 过滤掉旧的、无效的记录
+      if (!req.url || req.url === 'undefined') {
+        response.appendResponseLine(`⚠️ 无效记录（可能是旧数据）`);
+        response.appendResponseLine('');
+        return;
+      }
+
       response.appendResponseLine(`URL: ${req.url}`);
 
       if (req.method) {
         response.appendResponseLine(`方法: ${req.method}`);
       }
 
-      response.appendResponseLine(`状态: ${req.success ? '✅ 成功' : '❌ 失败'}`);
+      // 优化的状态判断逻辑
+      const isPending = req.pending === true;
+      const isCompleted = req.pending === false;
+      const isSuccess = req.success === true;
+      const isFailed = req.success === false;
+
+      if (isPending) {
+        response.appendResponseLine(`状态: ⏳ 请求中（未收到响应）`);
+      } else if (isCompleted) {
+        if (isSuccess) {
+          response.appendResponseLine(`状态: ✅ 成功`);
+        } else if (isFailed) {
+          response.appendResponseLine(`状态: ❌ 失败`);
+        } else {
+          response.appendResponseLine(`状态: ⚠️ 未知（success=${req.success}）`);
+        }
+      } else {
+        // 兼容旧格式（wx.request等，没有pending字段）
+        if (isSuccess) {
+          response.appendResponseLine(`状态: ✅ 成功`);
+        } else if (isFailed) {
+          response.appendResponseLine(`状态: ❌ 失败`);
+        } else {
+          response.appendResponseLine(`状态: ⚠️ 未知状态`);
+        }
+      }
 
       if (req.statusCode) {
         response.appendResponseLine(`状态码: ${req.statusCode}`);
@@ -815,6 +1047,11 @@ export const getNetworkRequestsTool = defineTool({
 
       response.appendResponseLine(`时间: ${req.timestamp}`);
 
+      if (req.source) {
+        response.appendResponseLine(`来源: ${req.source}`);
+      }
+
+      // === 请求信息 ===
       if (req.headers && Object.keys(req.headers).length > 0) {
         response.appendResponseLine(`请求头: ${JSON.stringify(req.headers)}`);
       }
@@ -829,6 +1066,11 @@ export const getNetworkRequestsTool = defineTool({
         response.appendResponseLine(`请求数据: ${truncatedData}`);
       }
 
+      if (req.params) {
+        response.appendResponseLine(`请求参数: ${JSON.stringify(req.params)}`);
+      }
+
+      // === 响应信息 ===
       if (req.response) {
         const respStr = typeof req.response === 'string'
           ? req.response
@@ -839,8 +1081,16 @@ export const getNetworkRequestsTool = defineTool({
         response.appendResponseLine(`响应数据: ${truncatedResp}`);
       }
 
+      if (req.responseHeaders && Object.keys(req.responseHeaders).length > 0) {
+        response.appendResponseLine(`响应头: ${JSON.stringify(req.responseHeaders)}`);
+      }
+
       if (req.error) {
         response.appendResponseLine(`错误信息: ${req.error}`);
+      }
+
+      if (req.completedAt) {
+        response.appendResponseLine(`完成时间: ${req.completedAt}`);
       }
 
       response.appendResponseLine('');

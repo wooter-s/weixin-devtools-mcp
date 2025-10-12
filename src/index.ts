@@ -33,6 +33,9 @@ import {
   NetworkStorage
 } from './tools/index.js';
 
+// 导入 ElementMapInfo 类型
+import type { ElementMapInfo } from './tools.js';
+
 // 导入zod-to-json-schema用于schema转换
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
@@ -66,7 +69,7 @@ interface PageSnapshot {
 const state = {
   miniProgram: null as any,  // MiniProgram 实例
   currentPage: null as any,  // 当前页面实例
-  elementMap: new Map<string, string>(), // uid -> selector 映射
+  elementMap: new Map<string, ElementMapInfo>(), // uid -> ElementMapInfo 映射
   consoleStorage: {
     consoleMessages: [],
     exceptionMessages: [],
@@ -254,8 +257,11 @@ async function getElementsSnapshot(container: any, prefix: string = ''): Promise
 
         elements.push(snapshot);
 
-        // 存储uid到selector的映射
-        state.elementMap.set(fullUid, fullUid);
+        // 存储uid到ElementMapInfo的映射
+        state.elementMap.set(fullUid, {
+          selector: fullUid,
+          index: 0
+        });
 
       } catch (error) {
         console.warn(`Error processing element ${i}:`, error);
@@ -467,16 +473,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       try {
         // 通过uid查找元素
-        const selector = state.elementMap.get(uid);
-        if (!selector) {
+        const mapInfo = state.elementMap.get(uid);
+        if (!mapInfo) {
           throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
         }
 
-        // 获取元素并点击
-        const element = await state.currentPage.$(selector);
-        if (!element) {
-          throw new Error(`无法找到选择器为 ${selector} 的元素`);
+        // 获取所有匹配的元素
+        const elements = await state.currentPage.$(mapInfo.selector);
+        if (!elements || mapInfo.index >= elements.length) {
+          throw new Error(`无法找到选择器为 ${mapInfo.selector} 的元素，索引: ${mapInfo.index}`);
         }
+
+        const element = elements[mapInfo.index];
 
         // 执行点击操作
         await element.tap();
@@ -490,7 +498,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{
             type: "text",
-            text: `${dblClick ? '双击' : '点击'}元素成功\nUID: ${uid}\n选择器: ${selector}`
+            text: `${dblClick ? '双击' : '点击'}元素成功\nUID: ${uid}\n选择器: ${mapInfo.selector}[${mapInfo.index}]`
           }]
         };
       } catch (error) {

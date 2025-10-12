@@ -29,7 +29,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 const globalContext: ToolContext = {
   miniProgram: null,
   currentPage: null,
-  elementMap: new Map<string, string>(),
+  elementMap: new Map(),
   consoleStorage: {
     consoleMessages: [],
     exceptionMessages: [],
