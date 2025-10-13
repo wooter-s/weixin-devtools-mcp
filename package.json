@@ -1,7 +1,7 @@
 {
   "name": "weixin-devtools-mcp",
-  "version": "0.3.3",
-  "description": "A Model Context Protocol server",
+  "version": "0.0.1",
+  "description": "WeChat Mini Program automation MCP server with intelligent connection, page interaction, assertion validation and network monitoring",
   "private": true,
   "type": "module",
   "bin": {
