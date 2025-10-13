@@ -2,11 +2,31 @@
   "name": "weixin-devtools-mcp",
   "version": "0.0.1",
   "description": "WeChat Mini Program automation MCP server with intelligent connection, page interaction, assertion validation and network monitoring",
-  "private": true,
   "type": "module",
+  "author": "Wooter Shen",
+  "license": "MIT",
+  "keywords": [
+    "wechat",
+    "miniprogram",
+    "automation",
+    "testing",
+    "mcp",
+    "model-context-protocol",
+    "weixin",
+    "devtools",
+    "e2e",
+    "ui-testing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wooter-s/weixin-devtools-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wooter-s/weixin-devtools-mcp/issues"
+  },
+  "homepage": "https://github.com/wooter-s/weixin-devtools-mcp#readme",
   "bin": {
-    "weixin-devtools-mcp": "./build/index.js",
-    "weixin-devtools-mcp-v2": "./build/server.js"
+    "weixin-devtools-mcp": "build/server.js"
   },
   "files": [
     "build"
