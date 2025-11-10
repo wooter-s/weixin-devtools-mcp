@@ -5,8 +5,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// Mock tools.js 中的连接函数
-vi.mock('../src/tools.js', () => ({
+// Mock tools.ts 中的连接函数
+vi.mock('../../src/tools.js', () => ({
   connectDevtools: vi.fn(),
   connectDevtoolsEnhanced: vi.fn(),
   DevToolsConnectionError: class DevToolsConnectionError extends Error {
@@ -27,14 +27,14 @@ import {
   connectDevtoolsTool,
   connectDevtoolsEnhancedTool,
   getCurrentPageTool
-} from '../src/tools/connection.js'
+} from '../../src/tools/connection.js'
 
 // 导入mock的函数用于验证
 import {
   connectDevtools,
   connectDevtoolsEnhanced,
   DevToolsConnectionError
-} from '../src/tools.js'
+} from '../../src/tools.js'
 
 describe('connection.ts 工具测试', () => {
   // 创建测试用的页面对象
@@ -153,6 +153,29 @@ describe('connection.ts 工具测试', () => {
         projectPath: '/path/to/project',
         cliPath: '/custom/cli/path',
         port: 9420
+      })
+    })
+
+    it('应该传递 autoAudits 参数', async () => {
+      const request = createMockRequest({
+        projectPath: '/path/to/project',
+        autoAudits: true
+      })
+      const response = createMockResponse()
+
+      const connectResult = {
+        miniProgram: mockMiniProgram,
+        currentPage: mockCurrentPage,
+        pagePath: '/pages/home/index'
+      }
+
+      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
+
+      await connectDevtoolsTool.handler(request, response, mockContext)
+
+      expect(connectDevtools).toHaveBeenCalledWith({
+        projectPath: '/path/to/project',
+        autoAudits: true
       })
     })
 
@@ -296,7 +319,8 @@ describe('connection.ts 工具测试', () => {
         timeout: undefined,
         fallbackMode: undefined,
         healthCheck: true,
-        verbose: true
+        verbose: true,
+        autoAudits: undefined
       })
 
       expect(mockContext.miniProgram).toBe(mockMiniProgram)
@@ -349,10 +373,46 @@ describe('connection.ts 工具测试', () => {
         timeout: 30000,
         fallbackMode: false,
         healthCheck: false,
-        verbose: true
+        verbose: true,
+        autoAudits: undefined
       })
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('进程信息: PID=12345, Port=9440')
+    })
+
+    it('应该传递 autoAudits 参数到增强连接', async () => {
+      const request = createMockRequest({
+        projectPath: '/path/to/project',
+        mode: 'launch',
+        autoAudits: true
+      })
+      const response = createMockResponse()
+
+      const connectResult = {
+        miniProgram: mockMiniProgram,
+        currentPage: mockCurrentPage,
+        pagePath: '/pages/home/index',
+        connectionMode: 'launch' as const,
+        startupTime: 1000,
+        healthStatus: 'healthy' as const
+      }
+
+      vi.mocked(connectDevtoolsEnhanced).mockResolvedValue(connectResult)
+
+      await connectDevtoolsEnhancedTool.handler(request, response, mockContext)
+
+      expect(connectDevtoolsEnhanced).toHaveBeenCalledWith({
+        projectPath: '/path/to/project',
+        mode: 'launch',
+        cliPath: undefined,
+        autoPort: undefined,
+        autoAccount: undefined,
+        timeout: undefined,
+        fallbackMode: undefined,
+        healthCheck: undefined,
+        verbose: undefined,
+        autoAudits: true
+      })
     })
 
     it('应该复用已有的活跃连接', async () => {

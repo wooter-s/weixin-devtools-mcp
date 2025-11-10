@@ -9,13 +9,13 @@ import {
   stopConsoleMonitoringTool,
   getConsoleTool,
   clearConsoleTool
-} from '../src/tools/console.js';
+} from '../../src/tools/console.js';
 import {
   ToolContext,
   ConsoleMessage,
   ExceptionMessage,
   ConsoleStorage
-} from '../src/tools/ToolDefinition.js';
+} from '../../src/tools/ToolDefinition.js';
 
 describe('Console Tools Unit Tests', () => {
   // 创建模拟的工具上下文

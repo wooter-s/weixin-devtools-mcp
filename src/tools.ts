@@ -17,6 +17,7 @@ export interface ConnectOptions {
   projectPath: string;
   cliPath?: string;
   port?: number;
+  autoAudits?: boolean;
 }
 
 /**
@@ -81,6 +82,20 @@ export interface ConnectResult {
 }
 
 /**
+ * automator.launch 选项接口
+ */
+interface AutomatorLaunchOptions {
+  projectPath: string;
+  cliPath?: string;
+  port?: number;
+  projectConfig?: {
+    setting?: {
+      autoAudits?: boolean;
+    };
+  };
+}
+
+/**
  * 连接到微信开发者工具
  *
  * @param options 连接选项
@@ -88,7 +103,7 @@ export interface ConnectResult {
  * @throws 连接失败时抛出错误
  */
 export async function connectDevtools(options: ConnectOptions): Promise<ConnectResult> {
-  const { projectPath, cliPath, port } = options;
+  const { projectPath, cliPath, port, autoAudits } = options;
 
   if (!projectPath) {
     throw new Error("项目路径是必需的");
@@ -112,9 +127,18 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
     }
 
     // 构建 automator.launch 的选项
-    const launchOptions: any = { projectPath: resolvedProjectPath };
+    const launchOptions: AutomatorLaunchOptions = { projectPath: resolvedProjectPath };
     if (cliPath) launchOptions.cliPath = cliPath;
     if (port) launchOptions.port = port;
+    if (typeof autoAudits === 'boolean') {
+      launchOptions.projectConfig = {
+        ...(launchOptions.projectConfig || {}),
+        setting: {
+          ...(launchOptions.projectConfig?.setting || {}),
+          autoAudits
+        }
+      };
+    }
 
     // 启动并连接微信开发者工具
     const miniProgram = await automator.launch(launchOptions);
@@ -570,7 +594,8 @@ async function launchMode(
   const connectOptions: ConnectOptions = {
     projectPath: options.projectPath,
     cliPath: options.cliPath,
-    port: options.autoPort || options.port
+    port: options.autoPort || options.port,
+    autoAudits: options.autoAudits
   };
 
   const result = await connectDevtools(connectOptions);
@@ -1125,17 +1150,22 @@ export async function getPageSnapshot(page: any): Promise<{
 
     // 尝试多种选择器策略获取元素
     let childElements: any[] = [];
+    let usedStrategy = 'unknown';
 
-    // 策略1: 尝试获取所有元素
+    // 策略1: 优先使用通配符（最快，一次API调用）
     try {
       childElements = await page.$$('*');
-      console.log(`策略1 (*) 获取到 ${childElements.length} 个元素`);
+      if (childElements.length > 0) {
+        usedStrategy = 'wildcard(*)';
+        console.log(`✅ 策略1成功: 通配符查询获取到 ${childElements.length} 个元素`);
+      }
     } catch (error) {
-      console.log('策略1 (*) 失败:', error);
+      console.warn('⚠️  策略1失败 (*)', error);
     }
 
-    // 策略2: 如果策略1失败，尝试小程序常用组件
+    // 策略2: 降级到常用组件选择器（仅当策略1失败时）
     if (childElements.length === 0) {
+      console.log('🔄 策略1无结果，降级到策略2（常用组件选择器）');
       const commonSelectors = [
         'view', 'text', 'button', 'image', 'input', 'textarea', 'picker', 'switch',
         'slider', 'scroll-view', 'swiper', 'icon', 'rich-text', 'progress',
@@ -1146,95 +1176,119 @@ export async function getPageSnapshot(page: any): Promise<{
         try {
           const elements = await page.$$(selector);
           childElements.push(...elements);
-          console.log(`策略2 (${selector}) 获取到 ${elements.length} 个元素`);
+          if (elements.length > 0) {
+            console.log(`  - ${selector}: ${elements.length} 个元素`);
+          }
         } catch (error) {
-          console.log(`策略2 (${selector}) 失败:`, error);
+          // 忽略单个选择器失败
         }
+      }
+
+      if (childElements.length > 0) {
+        usedStrategy = 'common-selectors';
+        console.log(`✅ 策略2成功: 获取到 ${childElements.length} 个元素`);
       }
     }
 
-    // 策略3: 如果还是没有元素，尝试根据层级查找
+    // 策略3: 最后尝试层级选择器
     if (childElements.length === 0) {
+      console.log('🔄 策略2无结果，降级到策略3（层级选择器）');
       try {
         const rootElements = await page.$$('page > *');
         childElements = rootElements;
-        console.log(`策略3 (page > *) 获取到 ${childElements.length} 个元素`);
+        if (childElements.length > 0) {
+          usedStrategy = 'hierarchical(page>*)';
+          console.log(`✅ 策略3成功: 获取到 ${childElements.length} 个元素`);
+        }
       } catch (error) {
-        console.log('策略3 (page > *) 失败:', error);
+        console.warn('⚠️  策略3失败 (page > *)', error);
       }
     }
 
-    console.log(`最终获取到 ${childElements.length} 个元素`);
+    if (childElements.length === 0) {
+      console.warn('❌ 所有策略均未获取到元素');
+      return {
+        snapshot: { path: await page.path, elements: [] },
+        elementMap: new Map()
+      };
+    }
+
+    console.log(`📊 最终获取到 ${childElements.length} 个元素（策略：${usedStrategy}）`);
 
     // 用于跟踪每个基础选择器的元素计数
     const selectorIndexMap = new Map<string, number>();
 
+    // 优化：批量并行处理元素属性
+    const startTime = Date.now();
+
     for (let i = 0; i < childElements.length; i++) {
       const element = childElements[i];
       try {
-        const uid = await generateElementUid(element, i);
+        // 🚀 优化点1: 使用 Promise.allSettled 并行获取所有元素属性
+        // 减少API调用往返次数：从 6次串行 → 1次并行
+        const [
+          tagNameResult,
+          textResult,
+          classResult,
+          idResult,
+          sizeResult,
+          offsetResult
+        ] = await Promise.allSettled([
+          Promise.resolve(element.tagName || 'unknown'),
+          element.text().catch(() => ''),
+          element.attribute('class').catch(() => ''),
+          element.attribute('id').catch(() => ''),
+          element.size().catch(() => null),
+          element.offset().catch(() => null)
+        ]);
 
-        const snapshot: ElementSnapshot = {
-          uid,
-          tagName: element.tagName || 'unknown',
-        };
+        // 提取结果
+        const tagName = tagNameResult.status === 'fulfilled' ? tagNameResult.value : 'unknown';
+        const text = textResult.status === 'fulfilled' ? textResult.value : '';
+        const className = classResult.status === 'fulfilled' ? classResult.value : '';
+        const id = idResult.status === 'fulfilled' ? idResult.value : '';
+        const size = sizeResult.status === 'fulfilled' ? sizeResult.value : null;
+        const offset = offsetResult.status === 'fulfilled' ? offsetResult.value : null;
 
-        // 获取元素文本
-        try {
-          const text = await element.text();
-          if (text && text.trim()) {
-            snapshot.text = text.trim();
-          }
-        } catch (error) {
-          // 忽略无法获取文本的元素
+        // 生成UID（使用已获取的 tagName, className, id，避免重复查询）
+        let selector = tagName;
+        if (id) {
+          selector += `#${id}`;
+        } else if (className) {
+          selector += `.${className.split(' ')[0]}`;
+        } else {
+          selector += `:nth-child(${i + 1})`;
         }
 
-        // 获取元素位置信息
-        try {
-          const [size, offset] = await Promise.all([
-            element.size(),
-            element.offset()
-          ]);
+        const uid = selector;
 
+        // 构建快照
+        const snapshot: ElementSnapshot = {
+          uid,
+          tagName,
+        };
+
+        // 添加文本内容
+        if (text && text.trim()) {
+          snapshot.text = text.trim();
+        }
+
+        // 添加位置信息
+        if (size && offset) {
           snapshot.position = {
             left: offset.left,
             top: offset.top,
             width: size.width,
             height: size.height
           };
-        } catch (error) {
-          // 忽略无法获取位置的元素
         }
 
-        // 获取常用属性
-        try {
-          const attributes: Record<string, string> = {};
-          const commonAttrs = ['class', 'id', 'data-*'];
-          for (const attr of commonAttrs) {
-            try {
-              const value = await element.attribute(attr);
-              if (value) {
-                attributes[attr] = value;
-              }
-            } catch (error) {
-              // 忽略不存在的属性
-            }
-          }
-
-          if (Object.keys(attributes).length > 0) {
-            snapshot.attributes = attributes;
-          }
-        } catch (error) {
-          // 忽略属性获取错误
-        }
+        // 添加属性信息（可选，目前不收集）
+        // 如果需要属性，可以在上面的 Promise.allSettled 中添加更多属性查询
 
         elements.push(snapshot);
 
-        // 生成可查询的基础选择器（不包含伪类）
-        const tagName = element.tagName;
-        const className = await element.attribute('class').catch(() => '');
-        const id = await element.attribute('id').catch(() => '');
-
+        // 生成可查询的基础选择器
         let baseSelector = tagName;
         if (id) {
           baseSelector = `${tagName}#${id}`;
@@ -1246,16 +1300,19 @@ export async function getPageSnapshot(page: any): Promise<{
         const currentIndex = selectorIndexMap.get(baseSelector) || 0;
         selectorIndexMap.set(baseSelector, currentIndex + 1);
 
-        // 存储 ElementMapInfo，使用可查询的基础选择器和索引
+        // 存储 ElementMapInfo
         elementMap.set(uid, {
-          selector: baseSelector,  // 使用可查询的基础选择器
-          index: currentIndex       // 使用该选择器的当前计数
+          selector: baseSelector,
+          index: currentIndex
         });
 
       } catch (error) {
-        console.warn(`Error processing element ${i}:`, error);
+        console.warn(`⚠️  处理元素 ${i} 时出错:`, error);
       }
     }
+
+    const processingTime = Date.now() - startTime;
+    console.log(`⏱️  元素处理耗时: ${processingTime}ms (平均 ${(processingTime / childElements.length).toFixed(2)}ms/元素)`);
 
     const pagePath = await page.path;
     const snapshot: PageSnapshot = {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { queryElements, waitForCondition } from '../src/tools.js';
+import { queryElements, waitForCondition } from '../../src/tools.js';
 
 describe('页面查询工具测试', () => {
   describe('queryElements 函数测试', () => {
@@ -103,7 +103,9 @@ describe('页面查询工具测试', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].uid).toBeDefined();
-      expect(mockElementMap.get(results[0].uid)).toBe('view.test:nth-child(1)');
+      // UID 生成优先使用 ID 属性，mock 元素有 id='test-id'
+      expect(results[0].uid).toBe('view#test-id');
+      expect(mockElementMap.has(results[0].uid)).toBe(true);
     });
 
     it('应该处理多个元素查询结果', async () => {
@@ -122,9 +124,9 @@ describe('页面查询工具测试', () => {
       expect(results).toHaveLength(2);
       expect(mockElementMap.size).toBe(2);
 
-      // 验证每个元素都有唯一的UID
-      expect(results[0].uid).toBe('view:nth-child(1)');
-      expect(results[1].uid).toBe('view:nth-child(2)');
+      // 验证每个元素都有唯一的UID（优先使用ID属性）
+      expect(results[0].uid).toBe('view#test-id');
+      expect(results[1].uid).toBe('view#test-id-2');
     });
 
     it('应该忽略元素属性获取错误', async () => {

@@ -36,11 +36,13 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "test": "vitest --run --exclude='**/*.integration.test.ts'",
-    "test:watch": "vitest --exclude='**/*.integration.test.ts'",
-    "test:coverage": "vitest --coverage --exclude='**/*.integration.test.ts'",
-    "test:integration": "RUN_INTEGRATION_TESTS=true vitest --run tests/*.integration.test.ts",
-    "test:integration:watch": "RUN_INTEGRATION_TESTS=true vitest tests/*.integration.test.ts",
+    "test": "vitest --run tests/protocol/ tests/tools/ tests/utils/",
+    "test:watch": "vitest tests/protocol/ tests/tools/ tests/utils/",
+    "test:coverage": "vitest --coverage tests/protocol/ tests/tools/ tests/utils/",
+    "test:protocol": "vitest --run tests/protocol/",
+    "test:tools": "vitest --run tests/tools/",
+    "test:integration": "RUN_INTEGRATION_TESTS=true vitest --run tests/integration/",
+    "test:integration:watch": "RUN_INTEGRATION_TESTS=true vitest tests/integration/",
     "test:all": "npm test && npm run test:integration"
   },
   "dependencies": {

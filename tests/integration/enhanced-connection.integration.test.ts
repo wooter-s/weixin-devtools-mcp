@@ -13,14 +13,14 @@ import {
   DevToolsConnectionError,
   type EnhancedConnectOptions,
   type DetailedConnectResult
-} from '../src/tools.js'
+} from '../../src/tools.js'
 import {
   allocatePorts,
   checkIntegrationTestEnvironment,
   cleanupConflictingWeChatInstances,
   safeCleanup,
   withTimeout
-} from './test-utils.js'
+} from '../utils/test-utils.js'
 
 // 环境检查：只有显式开启才运行集成测试
 const shouldRunIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true'

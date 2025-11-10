@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.js 中的导航函数
-vi.mock('../src/tools.js', () => ({
+vi.mock('../../src/tools.js', () => ({
   navigateToPage: vi.fn(),
   navigateBack: vi.fn(),
   switchTab: vi.fn(),
@@ -22,7 +22,7 @@ import {
   reLaunchTool,
   getPageInfoTool,
   redirectToTool
-} from '../src/tools/navigate.js'
+} from '../../src/tools/navigate.js'
 
 // 导入mock的函数用于验证
 import {
@@ -31,7 +31,7 @@ import {
   switchTab,
   getCurrentPageInfo,
   reLaunch
-} from '../src/tools.js'
+} from '../../src/tools.js'
 
 describe('navigate.ts 工具测试', () => {
   // 创建测试用的页面对象

@@ -197,12 +197,13 @@ export const connectDevtoolsTool = defineTool({
     projectPath: z.string().describe('小程序项目的绝对路径'),
     cliPath: z.string().optional().describe('微信开发者工具CLI的绝对路径（可选，默认会自动查找）'),
     port: z.number().optional().describe('WebSocket端口号（可选，默认自动分配）'),
+    autoAudits: z.boolean().optional().describe('启动时是否开启自动运行体验评分'),
   }),
   annotations: {
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { projectPath, cliPath, port } = request.params;
+    const { projectPath, cliPath, port, autoAudits } = request.params;
 
     // 检查是否已有活跃连接
     if (context.miniProgram) {
@@ -229,6 +230,9 @@ export const connectDevtoolsTool = defineTool({
       const options: ConnectOptions = { projectPath };
       if (cliPath) options.cliPath = cliPath;
       if (port) options.port = port;
+      if (typeof autoAudits === 'boolean') {
+        options.autoAudits = autoAudits;
+      }
 
       const result = await connectDevtools(options);
 
@@ -451,6 +455,7 @@ export const connectDevtoolsEnhancedTool = defineTool({
     fallbackMode: z.boolean().optional().default(true).describe('允许模式回退'),
     healthCheck: z.boolean().optional().default(true).describe('执行健康检查'),
     verbose: z.boolean().optional().default(false).describe('详细日志输出'),
+    autoAudits: z.boolean().optional().describe('启动时是否开启自动运行体验评分'),
   }),
   annotations: {
     audience: ['developers'],
@@ -465,7 +470,8 @@ export const connectDevtoolsEnhancedTool = defineTool({
       timeout,
       fallbackMode,
       healthCheck,
-      verbose
+      verbose,
+      autoAudits
     } = request.params;
 
     // 检查是否已有活跃连接
@@ -506,7 +512,8 @@ export const connectDevtoolsEnhancedTool = defineTool({
         timeout,
         fallbackMode,
         healthCheck,
-        verbose
+        verbose,
+        autoAudits
       };
 
       const result = await connectDevtoolsEnhanced(options);

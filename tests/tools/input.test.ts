@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.js 中的输入函数
-vi.mock('../src/tools.js', () => ({
+vi.mock('../../src/tools.js', () => ({
   clickElement: vi.fn(),
   inputText: vi.fn(),
   getElementValue: vi.fn(),
@@ -22,7 +22,7 @@ import {
   selectPickerTool,
   toggleSwitchTool,
   setSliderTool
-} from '../src/tools/input.js'
+} from '../../src/tools/input.js'
 
 // 导入mock的函数用于验证
 import {
@@ -30,7 +30,7 @@ import {
   inputText,
   getElementValue,
   setFormControl
-} from '../src/tools.js'
+} from '../../src/tools.js'
 
 describe('input.ts 新功能测试', () => {
   // 创建测试用的上下文对象

@@ -105,7 +105,11 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const url = new URL(request.params.uri);
 
-  if (url.pathname === "/connection/status") {
+  // 对于 weixin://connection/status, url.host="connection", url.pathname="/status"
+  // 对于 weixin://page/snapshot, url.host="page", url.pathname="/snapshot"
+  const resourcePath = `${url.host}${url.pathname}`;
+
+  if (resourcePath === "connection/status") {
     const status = {
       connected: !!globalContext.miniProgram,
       hasCurrentPage: !!globalContext.currentPage,
@@ -122,7 +126,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     };
   }
 
-  if (url.pathname === "/page/snapshot") {
+  if (resourcePath === "page/snapshot") {
     if (!globalContext.currentPage) {
       throw new Error("当前没有活动页面");
     }

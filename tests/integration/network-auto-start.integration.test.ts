@@ -4,14 +4,14 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectDevtools } from '../src/tools.js';
+import { connectDevtools } from '../../src/tools.js';
 import {
   findAvailablePort,
   checkIntegrationTestEnvironment,
   cleanupConflictingWeChatInstances,
   safeCleanup,
   withTimeout
-} from './test-utils.js';
+} from '../utils/test-utils.js';
 
 // 只在环境变量RUN_INTEGRATION_TESTS为true时运行
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === 'true';

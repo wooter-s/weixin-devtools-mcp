@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.js 中的断言函数
-vi.mock('../src/tools.js', () => ({
+vi.mock('../../src/tools.js', () => ({
   assertElementExists: vi.fn(),
   assertElementVisible: vi.fn(),
   assertElementText: vi.fn(),
@@ -20,7 +20,7 @@ import {
   assertTextTool,
   assertAttributeTool,
   assertStateTool
-} from '../src/tools/assert.js'
+} from '../../src/tools/assert.js'
 
 // 导入mock的函数用于验证
 import {
@@ -28,7 +28,7 @@ import {
   assertElementVisible,
   assertElementText,
   assertElementAttribute
-} from '../src/tools.js'
+} from '../../src/tools.js'
 
 describe('assert.ts 工具测试', () => {
   // 创建测试用的上下文对象
