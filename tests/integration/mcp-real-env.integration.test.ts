@@ -91,13 +91,15 @@ describeIntegration('MCP Real Environment Integration Tests', () => {
     it('应该能获取页面快照', async () => {
       await withMiniProgram(async (response, context) => {
         await getPageSnapshotTool.handler(
-          { params: {} },
+          { params: { format: 'compact' } },  // 显式指定格式
           response,
           context
         );
 
         expect(context.elementMap.size).toBeGreaterThan(0);
-        expect(response.getResponseText()).toContain('页面快照');
+        const responseText = response.getResponseText();
+        expect(responseText).toContain('📊 页面快照获取成功');  // compact格式的输出
+        expect(responseText).toMatch(/uid=[\w.#]+/);  // 验证compact格式特征
       });
     });
   });
@@ -106,7 +108,7 @@ describeIntegration('MCP Real Environment Integration Tests', () => {
     it('应该能查找页面元素', async () => {
       await withMiniProgram(async (response, context) => {
         // 先获取快照
-        await getPageSnapshotTool.handler({ params: {} }, response, context);
+        await getPageSnapshotTool.handler({ params: { format: 'compact' } }, response, context);
 
         // 尝试查找元素
         const selector = 'view'; // 小程序页面通常有 view 元素
@@ -125,7 +127,7 @@ describeIntegration('MCP Real Environment Integration Tests', () => {
     it('应该能通过 UID 点击元素', async () => {
       await withMiniProgram(async (response, context) => {
         // 1. 获取快照生成 UID
-        await getPageSnapshotTool.handler({ params: {} }, response, context);
+        await getPageSnapshotTool.handler({ params: { format: 'compact' } }, response, context);
 
         // 2. 获取第一个可点击的元素 UID
         const uids = Array.from(context.elementMap.keys());
@@ -192,7 +194,7 @@ describeIntegration('MCP Real Environment Integration Tests', () => {
     it('应该能断言元素可见性', async () => {
       await withMiniProgram(async (response, context) => {
         // 先获取快照
-        await getPageSnapshotTool.handler({ params: {} }, response, context);
+        await getPageSnapshotTool.handler({ params: { format: 'compact' } }, response, context);
 
         const uids = Array.from(context.elementMap.keys());
         if (uids.length > 0) {
@@ -322,11 +324,117 @@ describeIntegration('MCP Real Environment Integration Tests', () => {
     });
   });
 
+  describe('Snapshot Format Options', () => {
+    it('应该支持 compact 格式（默认）', async () => {
+      await withMiniProgram(async (response, context) => {
+        await getPageSnapshotTool.handler(
+          { params: { format: 'compact' } },
+          response,
+          context
+        );
+
+        const responseText = response.getResponseText();
+        expect(responseText).toContain('📊 页面快照获取成功');
+        expect(responseText).toContain('输出格式: compact');
+        expect(responseText).toMatch(/uid=[\w.#]+/); // compact格式特征
+        expect(responseText).toMatch(/pos=\[/); // 默认包含位置信息
+        expect(responseText).toMatch(/Token估算:/); // 显示token估算
+      });
+    });
+
+    it('应该支持 minimal 格式', async () => {
+      await withMiniProgram(async (response, context) => {
+        await getPageSnapshotTool.handler(
+          { params: { format: 'minimal' } },
+          response,
+          context
+        );
+
+        const responseText = response.getResponseText();
+        expect(responseText).toContain('输出格式: minimal');
+        expect(responseText).not.toMatch(/pos=\[/); // minimal不包含位置
+        expect(responseText).toMatch(/Token估算:/);
+      });
+    });
+
+    it('应该支持 json 格式', async () => {
+      await withMiniProgram(async (response, context) => {
+        await getPageSnapshotTool.handler(
+          { params: { format: 'json' } },
+          response,
+          context
+        );
+
+        const responseText = response.getResponseText();
+        expect(responseText).toContain('输出格式: json');
+        expect(responseText).toMatch(/\{[\s\S]*"path"[\s\S]*"elements"[\s\S]*\}/);
+      });
+    });
+
+    it('应该支持 includePosition 选项', async () => {
+      await withMiniProgram(async (response, context) => {
+        await getPageSnapshotTool.handler(
+          { params: { format: 'compact', includePosition: false } },
+          response,
+          context
+        );
+
+        const responseText = response.getResponseText();
+        expect(responseText).not.toMatch(/pos=\[/);
+        expect(responseText).not.toMatch(/size=\[/);
+      });
+    });
+
+    it('应该支持 maxElements 选项', async () => {
+      await withMiniProgram(async (response, context) => {
+        await getPageSnapshotTool.handler(
+          { params: { format: 'compact', maxElements: 5 } },
+          response,
+          context
+        );
+
+        const responseText = response.getResponseText();
+        expect(responseText).toContain('元素数量: 5');
+        expect(context.elementMap.size).toBeLessThanOrEqual(5);
+      });
+    });
+
+    it('应该验证 token 估算信息', async () => {
+      await withMiniProgram(async (response, context) => {
+        const compactResponse = new SimpleToolResponse();
+        await getPageSnapshotTool.handler(
+          { params: { format: 'compact' } },
+          compactResponse,
+          context
+        );
+
+        const minimalResponse = new SimpleToolResponse();
+        await getPageSnapshotTool.handler(
+          { params: { format: 'minimal' } },
+          minimalResponse,
+          context
+        );
+
+        const jsonResponse = new SimpleToolResponse();
+        await getPageSnapshotTool.handler(
+          { params: { format: 'json' } },
+          jsonResponse,
+          context
+        );
+
+        // 所有格式都应该显示 token 估算
+        expect(compactResponse.getResponseText()).toMatch(/Token估算: ~\d+ tokens/);
+        expect(minimalResponse.getResponseText()).toMatch(/Token估算: ~\d+ tokens/);
+        expect(jsonResponse.getResponseText()).toMatch(/Token估算: ~\d+ tokens/);
+      });
+    });
+  });
+
   describe('Complete Workflow', () => {
     it('应该能完成完整的自动化流程', async () => {
       await withMiniProgram(async (response, context) => {
         // 1. 获取页面快照
-        await getPageSnapshotTool.handler({ params: {} }, response, context);
+        await getPageSnapshotTool.handler({ params: { format: 'compact' } }, response, context);
         expect(context.elementMap.size).toBeGreaterThan(0);
 
         // 2. 查找元素

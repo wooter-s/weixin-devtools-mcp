@@ -53,13 +53,30 @@ minimal格式：
       // 获取页面快照
       const { snapshot, elementMap } = await getPageSnapshot(context.currentPage);
 
-      // 更新上下文中的元素映射
-      elementMap.forEach((value, key) => {
-        context.elementMap.set(key, value);
-      });
+      // 应用 maxElements 限制（用于显示和token估算）
+      const limitedElements = maxElements
+        ? snapshot.elements.slice(0, maxElements)
+        : snapshot.elements;
+      const limitedSnapshot = { ...snapshot, elements: limitedElements };
 
-      // 格式化快照
-      const formattedSnapshot = formatSnapshot(snapshot, {
+      // 更新上下文中的元素映射（应用 maxElements 限制）
+      if (maxElements) {
+        // 只保留前 maxElements 个元素的映射
+        const limitedUids = new Set(limitedElements.map(el => el.uid));
+        elementMap.forEach((value, key) => {
+          if (limitedUids.has(key)) {
+            context.elementMap.set(key, value);
+          }
+        });
+      } else {
+        // 没有限制时，添加所有元素映射
+        elementMap.forEach((value, key) => {
+          context.elementMap.set(key, value);
+        });
+      }
+
+      // 格式化快照（使用限制后的快照）
+      const formattedSnapshot = formatSnapshot(limitedSnapshot, {
         format: format as SnapshotFormat,
         includePosition,
         includeAttributes,
@@ -74,10 +91,10 @@ minimal格式：
 
       // Token估算信息（仅在非文件输出模式下显示）
       if (!filePath) {
-        const estimates = estimateTokens(snapshot);
+        const estimates = estimateTokens(limitedSnapshot);
         response.appendResponseLine(`📊 页面快照获取成功`);
         response.appendResponseLine(`   页面路径: ${snapshot.path}`);
-        response.appendResponseLine(`   元素数量: ${snapshot.elements.length}`);
+        response.appendResponseLine(`   元素数量: ${limitedElements.length}`);
         response.appendResponseLine(`   输出格式: ${format}`);
         response.appendResponseLine(`   Token估算: ~${estimates[format as SnapshotFormat]} tokens`);
         response.appendResponseLine('');
@@ -86,7 +103,7 @@ minimal格式：
         response.appendResponseLine(formattedSnapshot);
       } else {
         response.appendResponseLine(`   页面路径: ${snapshot.path}`);
-        response.appendResponseLine(`   元素数量: ${snapshot.elements.length}`);
+        response.appendResponseLine(`   元素数量: ${limitedElements.length}`);
         response.appendResponseLine(`   输出格式: ${format}`);
       }
 

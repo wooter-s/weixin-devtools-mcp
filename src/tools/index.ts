@@ -52,6 +52,7 @@ import {
   checkEnvironmentTool,
   debugPageElementsTool
 } from './diagnose.js';
+import { evaluateScript } from './script.js';
 
 /**
  * 所有可用工具的列表
@@ -95,6 +96,7 @@ export const allTools: ToolDefinition[] = [
 
   // 调试工具
   screenshotTool,
+  evaluateScript,
   startConsoleMonitoringTool,
   stopConsoleMonitoringTool,
   getConsoleTool,
