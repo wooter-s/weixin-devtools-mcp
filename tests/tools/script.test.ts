@@ -4,8 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import type { ToolContext} from '../../src/tools/ToolDefinition.js';
+import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import { evaluateScript } from '../../src/tools/script.js';
-import { ToolContext, SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 
 describe('Script Tool Unit Tests', () => {
   // 创建模拟的工具上下文

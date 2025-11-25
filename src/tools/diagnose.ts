@@ -3,10 +3,12 @@
  * 帮助用户调试连接和配置问题
  */
 
-import { z } from 'zod';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
 import { existsSync } from 'fs';
 import { resolve, isAbsolute } from 'path';
+
+import { z } from 'zod';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
 
 /**
  * 诊断连接问题工具
@@ -371,5 +373,440 @@ export const checkEnvironmentTool = defineTool({
 
     response.appendResponseLine('');
     response.appendResponseLine('✅ 环境检查完成');
+  },
+});
+
+/**
+ * 连接流程调试工具
+ * 用于实时追踪和调试连接过程的每个步骤
+ */
+export const debugConnectionFlowTool = defineTool({
+  name: 'debug_connection_flow',
+  description: '实时追踪和调试连接流程的详细步骤，记录每个阶段的状态和耗时',
+  schema: z.object({
+    projectPath: z.string().describe('小程序项目的绝对路径'),
+    mode: z.enum(['auto', 'launch', 'connect']).optional().default('auto')
+      .describe('连接模式: auto(智能), launch(传统), connect(两阶段)'),
+    dryRun: z.boolean().optional().default(false).describe('仅模拟连接流程,不实际连接'),
+    captureSnapshot: z.boolean().optional().default(true).describe('捕获每个步骤的状态快照'),
+    verbose: z.boolean().optional().default(true).describe('显示详细的调试信息'),
+  }),
+  annotations: {
+    audience: ['developers'],
+  },
+  handler: async (request, response, context) => {
+    const { projectPath, mode, dryRun, captureSnapshot, verbose } = request.params;
+
+    // 调试追踪器
+    const debugTracker = {
+      startTime: Date.now(),
+      steps: [] as Array<{
+        step: string;
+        status: 'pending' | 'running' | 'success' | 'warning' | 'error';
+        startTime: number;
+        endTime?: number;
+        duration?: number;
+        details?: any;
+        error?: string;
+      }>,
+      snapshots: [] as Array<{
+        timestamp: number;
+        state: any;
+      }>,
+    };
+
+    const trackStep = (step: string, status: 'pending' | 'running' | 'success' | 'warning' | 'error', details?: any, error?: string) => {
+      const now = Date.now();
+      const existingStep = debugTracker.steps.find(s => s.step === step);
+
+      if (existingStep) {
+        existingStep.status = status;
+        if (status !== 'running' && status !== 'pending') {
+          existingStep.endTime = now;
+          existingStep.duration = now - existingStep.startTime;
+        }
+        if (details) existingStep.details = details;
+        if (error) existingStep.error = error;
+      } else {
+        debugTracker.steps.push({
+          step,
+          status,
+          startTime: now,
+          endTime: status !== 'running' && status !== 'pending' ? now : undefined,
+          duration: status !== 'running' && status !== 'pending' ? 0 : undefined,
+          details,
+          error,
+        });
+      }
+    };
+
+    const captureStateSnapshot = (label: string) => {
+      if (!captureSnapshot) return;
+
+      debugTracker.snapshots.push({
+        timestamp: Date.now(),
+        state: {
+          label,
+          hasConnection: !!context.miniProgram,
+          hasCurrentPage: !!context.currentPage,
+          elementMapSize: context.elementMap.size,
+          consoleMonitoring: context.consoleStorage.isMonitoring,
+          networkMonitoring: context.networkStorage.isMonitoring,
+          navigationsCount: context.consoleStorage.navigations.length,
+          messagesCount: context.consoleStorage.messageIdMap.size,
+          requestsCount: context.networkStorage.requests.length,
+        },
+      });
+    };
+
+    response.appendResponseLine('🔍 连接流程调试器启动');
+    response.appendResponseLine('═'.repeat(60));
+    response.appendResponseLine('');
+
+    try {
+      // 步骤1: 参数验证
+      trackStep('参数验证', 'running');
+      response.appendResponseLine('📋 步骤1: 参数验证');
+
+      if (!projectPath || typeof projectPath !== 'string') {
+        trackStep('参数验证', 'error', null, 'projectPath 无效');
+        response.appendResponseLine('❌ projectPath 参数无效');
+        throw new Error('无效的 projectPath 参数');
+      }
+
+      let resolvedPath = projectPath;
+      if (projectPath.startsWith('@playground/')) {
+        const relativePath = projectPath.replace('@playground/', 'playground/');
+        resolvedPath = resolve(process.cwd(), relativePath);
+        response.appendResponseLine(`   🔄 解析 @playground/ 路径`);
+        response.appendResponseLine(`      原始: ${projectPath}`);
+        response.appendResponseLine(`      解析: ${resolvedPath}`);
+      } else if (!isAbsolute(projectPath)) {
+        resolvedPath = resolve(process.cwd(), projectPath);
+        response.appendResponseLine(`   🔄 转换相对路径为绝对路径`);
+        response.appendResponseLine(`      原始: ${projectPath}`);
+        response.appendResponseLine(`      解析: ${resolvedPath}`);
+      }
+
+      trackStep('参数验证', 'success', { resolvedPath, mode });
+      response.appendResponseLine(`   ✅ 参数验证通过`);
+      response.appendResponseLine(`      项目路径: ${resolvedPath}`);
+      response.appendResponseLine(`      连接模式: ${mode}`);
+      response.appendResponseLine('');
+      captureStateSnapshot('参数验证完成');
+
+      // 步骤2: 项目结构验证
+      trackStep('项目结构验证', 'running');
+      response.appendResponseLine('📦 步骤2: 项目结构验证');
+
+      if (!existsSync(resolvedPath)) {
+        trackStep('项目结构验证', 'error', null, '项目路径不存在');
+        response.appendResponseLine(`   ❌ 项目路径不存在: ${resolvedPath}`);
+        throw new Error('项目路径不存在');
+      }
+
+      const appJsonPath = resolve(resolvedPath, 'app.json');
+      const projectConfigPath = resolve(resolvedPath, 'project.config.json');
+      const hasAppJson = existsSync(appJsonPath);
+      const hasProjectConfig = existsSync(projectConfigPath);
+
+      if (!hasAppJson) {
+        trackStep('项目结构验证', 'error', { hasAppJson, hasProjectConfig }, '缺少 app.json');
+        response.appendResponseLine(`   ❌ 缺少必需文件: app.json`);
+        throw new Error('缺少 app.json 文件');
+      }
+
+      trackStep('项目结构验证', 'success', { hasAppJson, hasProjectConfig });
+      response.appendResponseLine(`   ✅ app.json: 存在`);
+      response.appendResponseLine(`   ${hasProjectConfig ? '✅' : '⚠️'} project.config.json: ${hasProjectConfig ? '存在' : '缺失(可选)'}`);
+      response.appendResponseLine('');
+      captureStateSnapshot('项目结构验证完成');
+
+      // 步骤3: 检查已有连接
+      trackStep('连接状态检查', 'running');
+      response.appendResponseLine('🔗 步骤3: 检查已有连接');
+
+      if (context.miniProgram) {
+        try {
+          const currentPage = await context.miniProgram.currentPage();
+          const pagePath = await currentPage.path;
+
+          trackStep('连接状态检查', 'warning', { reuseConnection: true, pagePath });
+          response.appendResponseLine(`   ⚠️ 检测到活跃连接`);
+          response.appendResponseLine(`      当前页面: ${pagePath}`);
+          response.appendResponseLine(`      操作: 复用现有连接（跳过新建连接）`);
+
+          if (!dryRun) {
+            response.appendResponseLine('');
+            response.appendResponseLine('💡 提示: 如需强制重新连接,请先断开现有连接');
+            response.appendResponseLine('');
+            return; // 复用连接,不继续后续步骤
+          }
+        } catch (error) {
+          trackStep('连接状态检查', 'warning', { connectionInvalid: true });
+          response.appendResponseLine(`   ⚠️ 已有连接但已失效`);
+          response.appendResponseLine(`      操作: 清除并准备新建连接`);
+          context.miniProgram = null;
+          context.currentPage = null;
+        }
+      } else {
+        trackStep('连接状态检查', 'success', { noExistingConnection: true });
+        response.appendResponseLine(`   ✅ 无已有连接,准备新建连接`);
+      }
+
+      response.appendResponseLine('');
+      captureStateSnapshot('连接状态检查完成');
+
+      if (dryRun) {
+        response.appendResponseLine('🔄 DryRun 模式: 跳过实际连接步骤');
+        response.appendResponseLine('');
+      } else {
+        // 步骤4: 准备连接参数
+        trackStep('准备连接参数', 'running');
+        response.appendResponseLine('⚙️ 步骤4: 准备连接参数');
+
+        const connectOptions = {
+          projectPath: resolvedPath,
+          mode,
+          timeout: 45000,
+          fallbackMode: true,
+          healthCheck: true,
+          verbose,
+        };
+
+        trackStep('准备连接参数', 'success', connectOptions);
+        response.appendResponseLine(`   ✅ 连接参数准备完成`);
+        if (verbose) {
+          response.appendResponseLine(`      超时设置: ${connectOptions.timeout}ms`);
+          response.appendResponseLine(`      模式回退: ${connectOptions.fallbackMode ? '启用' : '禁用'}`);
+          response.appendResponseLine(`      健康检查: ${connectOptions.healthCheck ? '启用' : '禁用'}`);
+        }
+        response.appendResponseLine('');
+        captureStateSnapshot('连接参数准备完成');
+
+        // 步骤5: 执行连接（使用实际的连接工具）
+        trackStep('执行连接', 'running');
+        response.appendResponseLine('🚀 步骤5: 执行连接');
+        response.appendResponseLine(`   ⏳ 正在连接到微信开发者工具...`);
+        response.appendResponseLine(`      模式: ${mode}`);
+
+        const connectionStartTime = Date.now();
+
+        try {
+          // 这里调用实际的连接逻辑
+          const { connectDevtoolsEnhanced } = await import('../tools.js');
+          const result = await connectDevtoolsEnhanced({
+            projectPath: resolvedPath,
+            mode,
+            timeout: 45000,
+            fallbackMode: true,
+            healthCheck: true,
+            verbose,
+          });
+
+          const connectionDuration = Date.now() - connectionStartTime;
+
+          trackStep('执行连接', 'success', {
+            duration: connectionDuration,
+            connectionMode: result.connectionMode,
+            pagePath: result.pagePath,
+            healthStatus: result.healthStatus,
+          });
+
+          // 更新上下文
+          context.miniProgram = result.miniProgram;
+          context.currentPage = result.currentPage;
+          context.elementMap.clear();
+
+          response.appendResponseLine(`   ✅ 连接成功 (耗时: ${connectionDuration}ms)`);
+          response.appendResponseLine(`      当前页面: ${result.pagePath}`);
+          response.appendResponseLine(`      连接模式: ${result.connectionMode}`);
+          response.appendResponseLine(`      健康状态: ${result.healthStatus}`);
+          if (result.processInfo) {
+            response.appendResponseLine(`      进程信息: PID=${result.processInfo.pid}, Port=${result.processInfo.port}`);
+          }
+          response.appendResponseLine('');
+          captureStateSnapshot('连接执行完成');
+
+        } catch (error) {
+          const connectionDuration = Date.now() - connectionStartTime;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          trackStep('执行连接', 'error', { duration: connectionDuration }, errorMessage);
+          response.appendResponseLine(`   ❌ 连接失败 (耗时: ${connectionDuration}ms)`);
+          response.appendResponseLine(`      错误: ${errorMessage}`);
+          response.appendResponseLine('');
+          throw error;
+        }
+
+        // 步骤6: 初始化监听器
+        trackStep('初始化监听器', 'running');
+        response.appendResponseLine('📡 步骤6: 初始化监听器');
+
+        // Console监听
+        try {
+          context.miniProgram.removeAllListeners('console');
+          context.miniProgram.removeAllListeners('exception');
+          context.consoleStorage.isMonitoring = true;
+          context.consoleStorage.startTime = new Date().toISOString();
+
+          response.appendResponseLine(`   ✅ Console监听器已启动`);
+        } catch (error) {
+          trackStep('初始化监听器', 'warning', null, 'Console监听器启动失败');
+          response.appendResponseLine(`   ⚠️ Console监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        // 网络监听
+        try {
+          if (!context.networkStorage.isMonitoring) {
+            context.networkStorage.isMonitoring = true;
+            context.networkStorage.startTime = new Date().toISOString();
+            response.appendResponseLine(`   ✅ 网络监听器已启动`);
+          } else {
+            response.appendResponseLine(`   ℹ️ 网络监听器已在运行中`);
+          }
+        } catch (error) {
+          trackStep('初始化监听器', 'warning', null, '网络监听器启动失败');
+          response.appendResponseLine(`   ⚠️ 网络监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        trackStep('初始化监听器', 'success');
+        response.appendResponseLine('');
+        captureStateSnapshot('监听器初始化完成');
+      }
+
+      // 生成调试报告
+      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine('📊 调试报告');
+      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine('');
+
+      // 步骤摘要
+      response.appendResponseLine('📝 步骤摘要:');
+      response.appendResponseLine('');
+
+      let successCount = 0;
+      let warningCount = 0;
+      let errorCount = 0;
+
+      for (const step of debugTracker.steps) {
+        const icon = step.status === 'success' ? '✅' :
+                     step.status === 'warning' ? '⚠️' :
+                     step.status === 'error' ? '❌' :
+                     step.status === 'running' ? '⏳' : '⏸️';
+
+        if (step.status === 'success') successCount++;
+        if (step.status === 'warning') warningCount++;
+        if (step.status === 'error') errorCount++;
+
+        const durationInfo = step.duration !== undefined ? ` (${step.duration}ms)` : '';
+        response.appendResponseLine(`${icon} ${step.step}${durationInfo}`);
+
+        if (verbose && step.details) {
+          const detailsStr = JSON.stringify(step.details, null, 2)
+            .split('\n')
+            .map(line => `   ${line}`)
+            .join('\n');
+          response.appendResponseLine(detailsStr);
+        }
+
+        if (step.error) {
+          response.appendResponseLine(`   错误: ${step.error}`);
+        }
+      }
+
+      response.appendResponseLine('');
+      response.appendResponseLine(`总耗时: ${Date.now() - debugTracker.startTime}ms`);
+      response.appendResponseLine(`成功: ${successCount} | 警告: ${warningCount} | 错误: ${errorCount}`);
+      response.appendResponseLine('');
+
+      // 状态快照
+      if (captureSnapshot && debugTracker.snapshots.length > 0) {
+        response.appendResponseLine('📸 状态快照:');
+        response.appendResponseLine('');
+
+        for (let i = 0; i < debugTracker.snapshots.length; i++) {
+          const snapshot = debugTracker.snapshots[i];
+          const relativeTime = snapshot.timestamp - debugTracker.startTime;
+
+          response.appendResponseLine(`快照 ${i + 1}: ${snapshot.state.label} (+${relativeTime}ms)`);
+          response.appendResponseLine(`   连接状态: ${snapshot.state.hasConnection ? '已连接' : '未连接'}`);
+          response.appendResponseLine(`   当前页面: ${snapshot.state.hasCurrentPage ? '已设置' : '未设置'}`);
+          response.appendResponseLine(`   元素映射: ${snapshot.state.elementMapSize} 个`);
+          response.appendResponseLine(`   Console监听: ${snapshot.state.consoleMonitoring ? '已启动' : '未启动'}`);
+          response.appendResponseLine(`   网络监听: ${snapshot.state.networkMonitoring ? '已启动' : '未启动'}`);
+          response.appendResponseLine(`   导航会话: ${snapshot.state.navigationsCount} 个`);
+          response.appendResponseLine(`   Console消息: ${snapshot.state.messagesCount} 条`);
+          response.appendResponseLine(`   网络请求: ${snapshot.state.requestsCount} 个`);
+          response.appendResponseLine('');
+        }
+      }
+
+      // 诊断建议
+      response.appendResponseLine('💡 诊断建议:');
+      response.appendResponseLine('');
+
+      if (errorCount > 0) {
+        response.appendResponseLine('⚠️ 发现错误,建议检查:');
+        for (const step of debugTracker.steps) {
+          if (step.status === 'error') {
+            response.appendResponseLine(`   • ${step.step}: ${step.error || '未知错误'}`);
+          }
+        }
+        response.appendResponseLine('');
+      }
+
+      if (warningCount > 0) {
+        response.appendResponseLine('ℹ️ 发现警告,可能的优化点:');
+        for (const step of debugTracker.steps) {
+          if (step.status === 'warning') {
+            response.appendResponseLine(`   • ${step.step}`);
+          }
+        }
+        response.appendResponseLine('');
+      }
+
+      if (errorCount === 0 && warningCount === 0) {
+        response.appendResponseLine('✅ 所有步骤正常,连接流程健康!');
+        response.appendResponseLine('');
+      }
+
+      response.appendResponseLine('🔧 使用 MCP Inspector 进行后续调试:');
+      response.appendResponseLine('   npm run inspector');
+      response.appendResponseLine('');
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine('❌ 调试过程失败');
+      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine('');
+      response.appendResponseLine(`错误信息: ${errorMessage}`);
+
+      if (verbose && errorStack) {
+        response.appendResponseLine('');
+        response.appendResponseLine('错误堆栈:');
+        response.appendResponseLine(errorStack);
+      }
+
+      response.appendResponseLine('');
+      response.appendResponseLine('📊 调试追踪 (失败前):');
+
+      for (const step of debugTracker.steps) {
+        const icon = step.status === 'success' ? '✅' :
+                     step.status === 'warning' ? '⚠️' :
+                     step.status === 'error' ? '❌' :
+                     step.status === 'running' ? '⏳' : '⏸️';
+
+        response.appendResponseLine(`${icon} ${step.step}`);
+        if (step.error) {
+          response.appendResponseLine(`   错误: ${step.error}`);
+        }
+      }
+
+      throw error;
+    }
   },
 });

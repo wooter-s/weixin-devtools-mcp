@@ -4,12 +4,15 @@
  * 提供通用的测试辅助函数和Mock对象工厂
  */
 
-import { vi } from 'vitest';
-import automator from 'miniprogram-automator';
 import path from 'path';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ToolContext, SimpleToolResponse } from '../src/tools/ToolDefinition.js';
+import automator from 'miniprogram-automator';
+import { vi } from 'vitest';
+
+import type { ToolContext} from '../src/tools/ToolDefinition.js';
+import { SimpleToolResponse } from '../src/tools/ToolDefinition.js';
 
 // ============================================================================
 // MCP Protocol Testing Helpers

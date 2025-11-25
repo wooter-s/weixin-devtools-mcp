@@ -4,8 +4,10 @@
  */
 
 import { z } from 'zod';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 import { takeScreenshot, type ScreenshotOptions } from '../tools.js';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
 
 /**
  * 页面截图

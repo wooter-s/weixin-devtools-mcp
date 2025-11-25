@@ -142,7 +142,7 @@ src/tools/
     ├── console.ts       # Console监听（6工具：含两阶段查询）
     ├── network.ts       # 网络监控（5工具）
     ├── screenshot.ts    # 截图工具（1工具）
-    └── diagnose.ts      # 诊断工具（5工具）
+    └── diagnose.ts      # 诊断工具（4工具）
 ```
 
 **工具定义模式**：
@@ -316,7 +316,7 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 | 页面导航 | 6 | navigate_to, navigate_back, switch_tab, relaunch |
 | Console监控 | 6 | start/stop_console_monitoring, list_console_messages, get_console_message |
 | 网络监控 | 5 | 自动启动，get_network_requests（过滤查询） |
-| 诊断工具 | 5 | diagnose_connection, check_environment, diagnose_interceptor |
+| 诊断工具 | 4 | diagnose_connection, check_environment, debug_page_elements, debug_connection_flow |
 
 ### 典型工作流
 
@@ -353,6 +353,45 @@ const detail = get_console_message({ msgid: 1 })
 // 6. 网络监控和截图
 screenshot({ path: "/tmp/result.png" })
 get_network_requests({ urlPattern: "/api/", successOnly: true })
+
+// 7. 连接调试（当遇到连接问题时）
+debug_connection_flow({
+  projectPath: "/path/to/project",
+  mode: "auto",
+  dryRun: false,          // 设为 true 仅模拟，不实际连接
+  captureSnapshot: true,  // 捕获每个步骤的状态
+  verbose: true           // 显示详细调试信息
+})
+// 输出: 6个步骤的详细追踪、耗时统计、状态快照、诊断建议
+```
+
+### 连接问题调试工作流
+
+当遇到连接失败时，使用以下调试流程：
+
+```typescript
+// 步骤 1: 使用 debug_connection_flow 深度调试
+debug_connection_flow({
+  projectPath: "/path/to/project",
+  mode: "auto",
+  verbose: true,
+  captureSnapshot: true
+})
+// 查看输出中的每个步骤状态和诊断建议
+
+// 步骤 2: 如果步骤 1 显示配置问题，运行环境诊断
+diagnose_connection({
+  projectPath: "/path/to/project",
+  verbose: true
+})
+// 检查 CLI、端口、项目配置等
+
+// 步骤 3: 检查系统环境
+check_environment()
+// 验证 Node.js 版本、微信开发者工具安装等
+
+// 快速测试脚本
+// node test-debug-connection-flow.js
 ```
 
 ## Documentation

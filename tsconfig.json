@@ -1,15 +1,49 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    // 编译目标现代化
+    "target": "ES2023",
     "module": "Node16",
+    "lib": ["ES2023"],
     "moduleResolution": "Node16",
+
+    // 输出配置
     "outDir": "./build",
     "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // 严格类型检查（全部启用）
     "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+
+    // 额外严格检查（渐进式启用）
+    "noUnusedLocals": false,  // TODO: 逐步修复后启用
+    "noUnusedParameters": false,  // TODO: 逐步修复后启用
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,  // TODO: 逐步修复后启用
+    "noImplicitOverride": false,  // TODO: 逐步修复后启用
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+
+    // 模块解析
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+
+    // 性能优化
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "build", "tests"]
 }

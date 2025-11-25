@@ -4,6 +4,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import type {
+  ToolContext,
+  ConsoleMessage,
+  ExceptionMessage,
+  ConsoleStorage} from '../../src/tools/ToolDefinition.js';
+import {
+  SimpleToolResponse
+} from '../../src/tools/ToolDefinition.js';
 import {
   startConsoleMonitoringTool,
   stopConsoleMonitoringTool,
@@ -12,13 +21,6 @@ import {
   getConsoleTool,
   clearConsoleTool
 } from '../../src/tools/console.js';
-import {
-  ToolContext,
-  ConsoleMessage,
-  ExceptionMessage,
-  ConsoleStorage,
-  SimpleToolResponse
-} from '../../src/tools/ToolDefinition.js';
 import { createIdGenerator } from '../../src/utils/idGenerator.js';
 
 describe('Console Tools Unit Tests', () => {

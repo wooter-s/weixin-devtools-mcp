@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 import {
   assertElementExists,
   assertElementVisible,
@@ -15,6 +15,8 @@ import {
   type ContentAssertOptions,
   type AssertResult
 } from '../tools.js';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
 
 /**
  * 断言元素存在

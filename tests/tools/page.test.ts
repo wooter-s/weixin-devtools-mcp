@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { queryElements, waitForCondition } from '../../src/tools.js';
 
 describe('页面查询工具测试', () => {

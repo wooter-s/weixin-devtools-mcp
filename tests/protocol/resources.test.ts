@@ -7,11 +7,12 @@
  * - weixin://page/snapshot - 页面快照
  */
 
-import { describe, it, expect } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { describe, it, expect } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -9,6 +9,8 @@
  * - 其他自动化操作
  */
 
+import path from "path";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -20,11 +22,11 @@ import {
 
 // 导入微信小程序自动化 SDK
 import automator from "miniprogram-automator";
-import path from "path";
 
 // 导入模块化工具系统
-import {
-  allTools,
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
+import type {
   ToolDefinition,
   ToolContext,
   ToolRequest,
@@ -32,12 +34,14 @@ import {
   ConsoleStorage,
   NetworkStorage
 } from './tools/index.js';
+import {
+  allTools
+} from './tools/index.js';
 
 // 导入 ElementMapInfo 类型
 import type { ElementMapInfo } from './tools.js';
 
 // 导入zod-to-json-schema用于schema转换
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 /**
  * 元素快照接口

@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+
 import { connectDevtools, takeScreenshot } from '../../src/tools.js';
 import {
   findAvailablePort,

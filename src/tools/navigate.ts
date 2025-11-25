@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 import {
   navigateToPage,
   navigateBack,
@@ -16,6 +16,8 @@ import {
   type SwitchTabOptions,
   type PageInfo
 } from '../tools.js';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
 
 /**
  * 跳转到指定页面

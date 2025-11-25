@@ -13,15 +13,18 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import {
-  allTools,
+import type {
   ToolContext,
   ToolRequest,
-  SimpleToolResponse,
   ToolDefinition
 } from './tools/index.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import {
+  allTools,
+  SimpleToolResponse
+} from './tools/index.js';
+
 
 /**
  * 通过 UID 获取元素的实现

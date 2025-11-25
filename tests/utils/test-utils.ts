@@ -3,10 +3,10 @@
  * 提供端口管理、环境验证等功能
  */
 
-import { createServer } from 'net'
+import { execSync } from 'child_process'
 import { existsSync } from 'fs'
 import { access, constants } from 'fs/promises'
-import { execSync } from 'child_process'
+import { createServer } from 'net'
 
 /**
  * 检查端口是否被微信开发者工具占用

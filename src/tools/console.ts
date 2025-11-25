@@ -11,13 +11,7 @@
  */
 
 import { z } from 'zod';
-import {
-  defineTool,
-  ToolCategories,
-  type ConsoleMessage,
-  type ExceptionMessage,
-  type ConsoleMessageType,
-} from './ToolDefinition.js';
+
 import {
   FILTERABLE_MESSAGE_TYPES,
   formatConsoleEventShort,
@@ -27,6 +21,14 @@ import {
   type ExceptionMessageData,
 } from '../formatters/consoleFormatter.js';
 import { createIdGenerator } from '../utils/idGenerator.js';
+
+import {
+  defineTool,
+  ToolCategories,
+  type ConsoleMessage,
+  type ExceptionMessage,
+  type ConsoleMessageType,
+} from './ToolDefinition.js';
 
 /**
  * 初始化 ConsoleStorage（新结构）

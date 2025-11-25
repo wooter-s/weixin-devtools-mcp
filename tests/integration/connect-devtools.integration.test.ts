@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest'
+
 import { connectDevtools, takeScreenshot, type ConnectOptions } from '../../src/tools.js'
 import {
   allocatePorts,

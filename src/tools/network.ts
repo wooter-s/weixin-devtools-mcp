@@ -4,7 +4,9 @@
  */
 
 import { z } from 'zod';
-import { defineTool, NetworkRequest, NetworkRequestType } from './ToolDefinition.js';
+
+import type { NetworkRequest} from './ToolDefinition.js';
+import { defineTool, NetworkRequestType } from './ToolDefinition.js';
 
 /**
  * 创建请求拦截器函数

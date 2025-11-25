@@ -4,8 +4,12 @@
  */
 
 import { z } from 'zod';
-import { defineTool, ToolCategories, ConsoleMessage, ExceptionMessage } from './ToolDefinition.js';
+
 import { connectDevtools, connectDevtoolsEnhanced, type ConnectOptions, type EnhancedConnectOptions, DevToolsConnectionError } from '../tools.js';
+
+import type { ConsoleMessage, ExceptionMessage } from './ToolDefinition.js';
+import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 
 /**
  * 创建请求拦截器函数

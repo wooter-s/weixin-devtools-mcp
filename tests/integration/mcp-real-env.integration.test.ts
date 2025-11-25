@@ -8,18 +8,21 @@
  * 参考：chrome-devtools-mcp 的 withBrowser 模式
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import automator from 'miniprogram-automator';
 import path from 'path';
-import { SimpleToolResponse, ToolContext } from '../../src/tools/ToolDefinition.js';
-import { connectDevtoolsEnhancedTool } from '../../src/tools/connection.js';
-import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
-import { querySelectorTool, waitForTool } from '../../src/tools/page.js';
-import { clickTool, inputTextTool } from '../../src/tools/input.js';
+
+import automator from 'miniprogram-automator';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
+import type { ToolContext } from '../../src/tools/ToolDefinition.js';
+import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import { assertExistsTool, assertTextTool, assertVisibleTool } from '../../src/tools/assert.js';
-import { screenshotTool } from '../../src/tools/screenshot.js';
+import { connectDevtoolsEnhancedTool } from '../../src/tools/connection.js';
 import { getConsoleTool, startConsoleMonitoringTool } from '../../src/tools/console.js';
+import { clickTool, inputTextTool } from '../../src/tools/input.js';
 import { getNetworkRequestsTool } from '../../src/tools/network.js';
+import { querySelectorTool, waitForTool } from '../../src/tools/page.js';
+import { screenshotTool } from '../../src/tools/screenshot.js';
+import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
 
 // 环境变量控制
 const RUN_INTEGRATION_TESTS = process.env.RUN_INTEGRATION_TESTS === 'true';

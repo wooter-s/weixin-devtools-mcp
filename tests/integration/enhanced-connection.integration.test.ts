@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest'
+
 import {
   connectDevtoolsEnhanced,
   checkDevToolsRunning,

@@ -3,7 +3,8 @@
  * 参考 chrome-devtools-mcp 的设计模式
  */
 
-import { z } from 'zod'
+import type { z } from 'zod'
+
 import type { ElementMapInfo } from '../tools.js'
 
 /**

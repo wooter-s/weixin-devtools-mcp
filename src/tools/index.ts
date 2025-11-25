@@ -3,22 +3,9 @@
  * 统一导出所有工具定义
  */
 
-import { ToolDefinition } from './ToolDefinition.js';
+import type { ToolDefinition } from './ToolDefinition.js';
 
 // 导入各个模块的工具
-import { connectDevtoolsTool, connectDevtoolsEnhancedTool, getCurrentPageTool } from './connection.js';
-import { getPageSnapshotTool } from './snapshot.js';
-import {
-  clickTool,
-  inputTextTool,
-  getValueTool,
-  setFormControlTool,
-  selectPickerTool,
-  toggleSwitchTool,
-  setSliderTool
-} from './input.js';
-import { screenshotTool } from './screenshot.js';
-import { querySelectorTool, waitForTool } from './page.js';
 import {
   assertExistsTool,
   assertVisibleTool,
@@ -26,14 +13,7 @@ import {
   assertAttributeTool,
   assertStateTool
 } from './assert.js';
-import {
-  navigateToTool,
-  navigateBackTool,
-  switchTabTool,
-  reLaunchTool,
-  getPageInfoTool,
-  redirectToTool
-} from './navigate.js';
+import { connectDevtoolsTool, connectDevtoolsEnhancedTool, getCurrentPageTool } from './connection.js';
 import {
   startConsoleMonitoringTool,
   stopConsoleMonitoringTool,
@@ -43,18 +23,39 @@ import {
   clearConsoleTool
 } from './console.js';
 import {
+  diagnoseConnectionTool,
+  checkEnvironmentTool,
+  debugPageElementsTool,
+  debugConnectionFlowTool
+} from './diagnose.js';
+import {
+  clickTool,
+  inputTextTool,
+  getValueTool,
+  setFormControlTool,
+  selectPickerTool,
+  toggleSwitchTool,
+  setSliderTool
+} from './input.js';
+import {
+  navigateToTool,
+  navigateBackTool,
+  switchTabTool,
+  reLaunchTool,
+  getPageInfoTool,
+  redirectToTool
+} from './navigate.js';
+import {
   startNetworkMonitoringTool,
   stopNetworkMonitoringTool,
   getNetworkRequestsTool,
   clearNetworkRequestsTool,
   diagnoseInterceptorTool
 } from './network.js';
-import {
-  diagnoseConnectionTool,
-  checkEnvironmentTool,
-  debugPageElementsTool
-} from './diagnose.js';
+import { querySelectorTool, waitForTool } from './page.js';
+import { screenshotTool } from './screenshot.js';
 import { evaluateScript } from './script.js';
+import { getPageSnapshotTool } from './snapshot.js';
 
 /**
  * 所有可用工具的列表
@@ -117,6 +118,7 @@ export const allTools: ToolDefinition[] = [
   diagnoseConnectionTool,
   checkEnvironmentTool,
   debugPageElementsTool,
+  debugConnectionFlowTool,
 ];
 
 /**

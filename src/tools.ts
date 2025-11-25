@@ -3,11 +3,13 @@
  * 提供可测试的纯函数实现
  */
 
-import automator from "miniprogram-automator";
-import path from "path";
+import type { ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
-import { spawn, ChildProcess } from "child_process";
+import path from "path";
 import { promisify } from "util";
+
+import automator from "miniprogram-automator";
 const sleep = promisify(setTimeout);
 
 /**

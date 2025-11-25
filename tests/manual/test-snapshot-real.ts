@@ -7,9 +7,11 @@
  * 3. 运行：npx ts-node tests/manual/test-snapshot-real.ts
  */
 
-import automator from 'miniprogram-automator';
-import path from 'path';
 import fs from 'fs/promises';
+import path from 'path';
+
+import automator from 'miniprogram-automator';
+
 import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import type { ToolContext } from '../../src/tools/ToolDefinition.js';
 import { getPageSnapshotTool } from '../../src/tools/snapshot.js';

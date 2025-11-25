@@ -4,8 +4,8 @@
  * 测试真实的页面导航功能，验证 API 修复是否正确工作
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import automator from 'miniprogram-automator';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 // 仅在设置了 RUN_INTEGRATION_TESTS 环境变量时运行集成测试
 const shouldRunIntegration = process.env.RUN_INTEGRATION_TESTS === 'true';

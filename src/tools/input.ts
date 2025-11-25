@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 import {
   clickElement,
   inputText,
@@ -15,6 +15,8 @@ import {
   type GetValueOptions,
   type FormControlOptions
 } from '../tools.js';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
 
 /**
  * 点击页面元素

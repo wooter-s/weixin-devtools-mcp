@@ -8,11 +8,12 @@
  * 参考：chrome-devtools-mcp/tests/index.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { describe, it, expect } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,11 +65,11 @@ describe('MCP Protocol Tests', () => {
   });
 
   describe('Tools Registration', () => {
-    it('应该注册所有 40 个工具', async () => {
+    it('应该注册所有 41 个工具', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
 
-        expect(tools).toHaveLength(40);
+        expect(tools).toHaveLength(41);
 
         // 验证工具名称格式（支持 snake_case、camelCase 和特殊字符如 $）
         tools.forEach(tool => {

@@ -4,9 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
+
 import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import type { ToolContext } from '../../src/tools/ToolDefinition.js';
+import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
 
 // Mock 快照获取函数
 vi.mock('../../src/tools.js', async () => {

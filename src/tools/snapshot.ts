@@ -3,11 +3,15 @@
  * 负责获取页面元素快照和UID映射
  */
 
-import { z } from 'zod';
 import { writeFile } from 'fs/promises';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
-import { getPageSnapshot, type PageSnapshot } from '../tools.js';
+
+import { z } from 'zod';
+
 import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
+import { getPageSnapshot, type PageSnapshot } from '../tools.js';
+
+import { defineTool, ToolCategories } from './ToolDefinition.js';
+
 
 /**
  * 获取页面快照
