@@ -10,7 +10,6 @@ vi.mock('../../src/tools.js', () => ({
   navigateToPage: vi.fn(),
   navigateBack: vi.fn(),
   switchTab: vi.fn(),
-  getCurrentPageInfo: vi.fn(),
   reLaunch: vi.fn()
 }))
 
@@ -19,9 +18,7 @@ import {
   navigateToTool,
   navigateBackTool,
   switchTabTool,
-  reLaunchTool,
-  getPageInfoTool,
-  redirectToTool
+  reLaunchTool
 } from '../../src/tools/navigate.js'
 
 // 导入mock的函数用于验证
@@ -29,7 +26,6 @@ import {
   navigateToPage,
   navigateBack,
   switchTab,
-  getCurrentPageInfo,
   reLaunch
 } from '../../src/tools.js'
 
@@ -368,155 +364,6 @@ describe('navigate.ts 工具测试', () => {
     })
   })
 
-  describe('getPageInfoTool - 获取当前页面信息', () => {
-    it('应该成功获取页面信息', async () => {
-      const request = createMockRequest({})
-      const response = createMockResponse()
-
-      const pageInfo = {
-        path: '/pages/home/index',
-        title: '首页',
-        query: { tab: 'home', id: '123' }
-      }
-
-      vi.mocked(getCurrentPageInfo).mockResolvedValue(pageInfo)
-
-      await getPageInfoTool.handler(request, response, mockContext)
-
-      expect(getCurrentPageInfo).toHaveBeenCalledWith(mockMiniProgram)
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面信息获取成功')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('路径: /pages/home/index')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('标题: 首页')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('查询参数: {"tab":"home","id":"123"}')
-      expect(response.appendResponseLine).toHaveBeenCalledWith(JSON.stringify(pageInfo, null, 2))
-    })
-
-    it('应该处理没有标题和查询参数的页面', async () => {
-      const request = createMockRequest({})
-      const response = createMockResponse()
-
-      const pageInfo = {
-        path: '/pages/simple/simple'
-      }
-
-      vi.mocked(getCurrentPageInfo).mockResolvedValue(pageInfo)
-
-      await getPageInfoTool.handler(request, response, mockContext)
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('路径: /pages/simple/simple')
-      // 不应该包含标题和查询参数的行
-      expect(response.appendResponseLine).not.toHaveBeenCalledWith(expect.stringContaining('标题:'))
-      expect(response.appendResponseLine).not.toHaveBeenCalledWith(expect.stringContaining('查询参数:'))
-    })
-
-    it('应该处理获取页面信息失败', async () => {
-      const request = createMockRequest({})
-      const response = createMockResponse()
-
-      vi.mocked(getCurrentPageInfo).mockRejectedValue(new Error('获取信息失败'))
-
-      await expect(getPageInfoTool.handler(request, response, mockContext))
-        .rejects.toThrow('获取信息失败')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('获取页面信息失败: 获取信息失败')
-    })
-  })
-
-  describe('redirectToTool - 重定向到指定页面', () => {
-    it('应该成功重定向到指定页面', async () => {
-      const request = createMockRequest({
-        url: '/pages/login/login',
-        waitForLoad: true,
-        timeout: 10000
-      })
-      const response = createMockResponse()
-
-      mockMiniProgram.redirectTo.mockResolvedValue(undefined)
-
-      // Mock页面路径检查
-      const newPage = { path: '/pages/login/login' }
-      mockMiniProgram.currentPage.mockResolvedValue(newPage)
-
-      await redirectToTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/login/login')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面重定向成功')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('目标页面: /pages/login/login')
-      expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
-    })
-
-    it('应该成功重定向到带参数的页面', async () => {
-      const request = createMockRequest({
-        url: '/pages/detail/detail',
-        params: { id: '456', source: 'redirect' },
-        waitForLoad: true,
-        timeout: 8000
-      })
-      const response = createMockResponse()
-
-      mockMiniProgram.redirectTo.mockResolvedValue(undefined)
-
-      const newPage = { path: '/pages/detail/detail' }
-      mockMiniProgram.currentPage.mockResolvedValue(newPage)
-
-      await redirectToTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/detail/detail?id=456&source=redirect')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('参数: {"id":"456","source":"redirect"}')
-    })
-
-    it('应该正确处理URL中已有查询参数的情况', async () => {
-      const request = createMockRequest({
-        url: '/pages/search/search?keyword=test',
-        params: { page: '2' }
-      })
-      const response = createMockResponse()
-
-      mockMiniProgram.redirectTo.mockResolvedValue(undefined)
-
-      const newPage = { path: '/pages/search/search' }
-      mockMiniProgram.currentPage.mockResolvedValue(newPage)
-
-      await redirectToTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/search/search?keyword=test&page=2')
-    })
-
-    it('应该支持不等待页面加载', async () => {
-      const request = createMockRequest({
-        url: '/pages/quick/quick',
-        waitForLoad: false
-      })
-      const response = createMockResponse()
-
-      mockMiniProgram.redirectTo.mockResolvedValue(undefined)
-
-      await redirectToTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/quick/quick')
-
-      // 不等待页面加载时不会调用currentPage检查
-      expect(mockMiniProgram.currentPage).toHaveBeenCalledTimes(1) // 只在最后更新页面信息时调用
-    })
-
-    it('应该处理重定向失败', async () => {
-      const request = createMockRequest({
-        url: '/pages/invalid/invalid'
-      })
-      const response = createMockResponse()
-
-      mockMiniProgram.redirectTo.mockRejectedValue(new Error('重定向失败'))
-
-      await expect(redirectToTool.handler(request, response, mockContext))
-        .rejects.toThrow('重定向失败')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面重定向失败: 重定向失败')
-    })
-  })
-
   describe('错误处理测试', () => {
     it('应该在所有导航工具中验证miniProgram存在', async () => {
       const contextWithoutMiniProgram = { ...mockContext, miniProgram: null }
@@ -526,9 +373,7 @@ describe('navigate.ts 工具测试', () => {
         { tool: navigateToTool, params: { url: '/pages/test/test' } },
         { tool: navigateBackTool, params: { delta: 1 } },
         { tool: switchTabTool, params: { url: '/pages/tab/tab' } },
-        { tool: reLaunchTool, params: { url: '/pages/app/app' } },
-        { tool: getPageInfoTool, params: {} },
-        { tool: redirectToTool, params: { url: '/pages/redirect/redirect' } }
+        { tool: reLaunchTool, params: { url: '/pages/app/app' } }
       ]
 
       for (const { tool, params } of tools) {

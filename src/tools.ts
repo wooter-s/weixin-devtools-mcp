@@ -62,14 +62,42 @@ export interface DetailedConnectResult extends ConnectResult {
 /**
  * 开发者工具连接错误类
  */
-export class DevToolsConnectionError extends Error {
+import {
+  DevToolsError,
+  ErrorCode,
+  ErrorCategory,
+  type ErrorContext
+} from './types/errors.js';
+
+/**
+ * @deprecated 使用 DevToolsError 替代
+ * 保留此类以保持向后兼容性
+ */
+export class DevToolsConnectionError extends DevToolsError {
   constructor(
     message: string,
     public phase: 'startup' | 'connection' | 'health_check',
     public originalError?: Error,
-    public details?: Record<string, any>
+    public details?: Record<string, unknown>
   ) {
-    super(message);
+    // 根据阶段选择错误代码
+    const code = phase === 'startup'
+      ? ErrorCode.CONNECTION_FAILED
+      : phase === 'connection'
+        ? ErrorCode.CONNECTION_FAILED
+        : ErrorCode.CONNECTION_TIMEOUT;
+
+    const context: ErrorContext = {
+      operation: phase,
+      details,
+      cause: originalError,
+    };
+
+    super(message, code, {
+      category: ErrorCategory.CONNECTION,
+      context,
+    });
+
     this.name = 'DevToolsConnectionError';
   }
 }
@@ -423,8 +451,6 @@ export async function connectDevtoolsEnhanced(
 ): Promise<DetailedConnectResult> {
   const {
     mode = 'auto',
-    fallbackMode = true,
-    healthCheck = true,
     verbose = false
   } = options;
 
@@ -857,7 +883,6 @@ async function executeCliCommand(command: string[]): Promise<ChildProcess> {
 export async function waitForWebSocketReady(port: number, timeout: number, verbose: boolean = false): Promise<void> {
   const startTime = Date.now();
   let attempt = 0;
-  const maxAttempts = Math.ceil(timeout / 1000); // 每秒检查一次
 
   if (verbose) {
     console.log(`等待WebSocket服务启动，端口: ${port}，超时: ${timeout}ms`);

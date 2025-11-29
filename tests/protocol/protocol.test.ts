@@ -65,11 +65,11 @@ describe('MCP Protocol Tests', () => {
   });
 
   describe('Tools Registration', () => {
-    it('应该注册所有 41 个工具', async () => {
+    it('应该注册所有 25 个工具', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
 
-        expect(tools).toHaveLength(41);
+        expect(tools).toHaveLength(25);
 
         // 验证工具名称格式（支持 snake_case、camelCase 和特殊字符如 $）
         tools.forEach(tool => {
@@ -83,8 +83,7 @@ describe('MCP Protocol Tests', () => {
         const { tools } = await client.listTools();
         const toolNames = tools.map(t => t.name);
 
-        // 验证连接管理工具
-        expect(toolNames).toContain('connect_devtools');
+        // 验证连接管理工具（connect_devtools 已删除）
         expect(toolNames).toContain('connect_devtools_enhanced');
         expect(toolNames).toContain('get_current_page');
 
@@ -96,10 +95,12 @@ describe('MCP Protocol Tests', () => {
         // 验证交互操作工具
         expect(toolNames).toContain('click');
         expect(toolNames).toContain('input_text');
+        expect(toolNames).toContain('set_form_control');
 
-        // 验证断言工具
-        expect(toolNames).toContain('assert_exists');
+        // 验证断言工具（assert_exists、assert_visible 已合并到 assert_state）
+        expect(toolNames).toContain('assert_state');
         expect(toolNames).toContain('assert_text');
+        expect(toolNames).toContain('assert_attribute');
 
         // 验证导航工具
         expect(toolNames).toContain('navigate_to');

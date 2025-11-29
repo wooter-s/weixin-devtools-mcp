@@ -7,7 +7,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.js 中的断言函数
 vi.mock('../../src/tools.js', () => ({
-  assertElementExists: vi.fn(),
   assertElementVisible: vi.fn(),
   assertElementText: vi.fn(),
   assertElementAttribute: vi.fn()
@@ -15,8 +14,6 @@ vi.mock('../../src/tools.js', () => ({
 
 // 导入被测试的工具
 import {
-  assertExistsTool,
-  assertVisibleTool,
   assertTextTool,
   assertAttributeTool,
   assertStateTool
@@ -24,7 +21,6 @@ import {
 
 // 导入mock的函数用于验证
 import {
-  assertElementExists,
   assertElementVisible,
   assertElementText,
   assertElementAttribute
@@ -78,171 +74,6 @@ describe('assert.ts 工具测试', () => {
 
   afterEach(() => {
     vi.resetAllMocks()
-  })
-
-  describe('assertExistsTool - 断言元素存在', () => {
-    it('应该成功断言元素存在（使用selector）', async () => {
-      const request = createMockRequest({
-        selector: 'button[data-test="submit"]',
-        shouldExist: true,
-        timeout: 5000
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockResolvedValue(successResult)
-
-      await assertExistsTool.handler(request, response, mockContext)
-
-      expect(assertElementExists).toHaveBeenCalledWith(mockContext.currentPage, {
-        selector: 'button[data-test="submit"]',
-        uid: undefined,
-        shouldExist: true,
-        timeout: 5000
-      })
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言结果: 通过')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('消息: 断言通过')
-    })
-
-    it('应该成功断言元素存在（使用uid）', async () => {
-      const request = createMockRequest({
-        uid: 'button-1',
-        shouldExist: true
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockResolvedValue(successResult)
-
-      await assertExistsTool.handler(request, response, mockContext)
-
-      expect(assertElementExists).toHaveBeenCalledWith(mockContext.currentPage, {
-        selector: undefined,
-        uid: 'button-1',
-        shouldExist: true,
-        timeout: undefined
-      })
-    })
-
-    it('应该处理断言失败的情况', async () => {
-      const request = createMockRequest({
-        selector: 'button[data-test="missing"]',
-        shouldExist: true
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockResolvedValue(failureResult)
-
-      await expect(assertExistsTool.handler(request, response, mockContext))
-        .rejects.toThrow('断言失败: 断言失败')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言结果: 失败')
-    })
-
-    it('应该要求selector或uid参数', async () => {
-      const request = createMockRequest({
-        shouldExist: true
-      })
-      const response = createMockResponse()
-
-      await expect(assertExistsTool.handler(request, response, mockContext))
-        .rejects.toThrow('必须提供selector或uid参数')
-    })
-
-    it('应该要求currentPage存在', async () => {
-      const request = createMockRequest({
-        selector: 'button',
-        shouldExist: true
-      })
-      const response = createMockResponse()
-      const contextWithoutPage = { ...mockContext, currentPage: null }
-
-      await expect(assertExistsTool.handler(request, response, contextWithoutPage))
-        .rejects.toThrow('请先获取当前页面')
-    })
-
-    it('应该处理底层函数抛出的异常', async () => {
-      const request = createMockRequest({
-        selector: 'button',
-        shouldExist: true
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockRejectedValue(new Error('网络连接失败'))
-
-      await expect(assertExistsTool.handler(request, response, mockContext))
-        .rejects.toThrow('网络连接失败')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言执行失败: 网络连接失败')
-    })
-  })
-
-  describe('assertVisibleTool - 断言元素可见性', () => {
-    it('应该成功断言元素可见', async () => {
-      const request = createMockRequest({
-        uid: 'button-1',
-        visible: true
-      })
-      const response = createMockResponse()
-
-      const visibleResult = {
-        ...successResult,
-        expected: true,
-        actual: true
-      }
-
-      vi.mocked(assertElementVisible).mockResolvedValue(visibleResult)
-
-      await assertVisibleTool.handler(request, response, mockContext)
-
-      expect(assertElementVisible).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'button-1', visible: true }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('期望: 可见')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('实际: 可见')
-    })
-
-    it('应该成功断言元素不可见', async () => {
-      const request = createMockRequest({
-        uid: 'button-1',
-        visible: false
-      })
-      const response = createMockResponse()
-
-      const invisibleResult = {
-        ...successResult,
-        expected: false,
-        actual: false
-      }
-
-      vi.mocked(assertElementVisible).mockResolvedValue(invisibleResult)
-
-      await assertVisibleTool.handler(request, response, mockContext)
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('期望: 不可见')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('实际: 不可见')
-    })
-
-    it('应该处理可见性断言失败', async () => {
-      const request = createMockRequest({
-        uid: 'button-1',
-        visible: true
-      })
-      const response = createMockResponse()
-
-      const failedVisibilityResult = {
-        ...failureResult,
-        expected: true,
-        actual: false
-      }
-
-      vi.mocked(assertElementVisible).mockResolvedValue(failedVisibilityResult)
-
-      await expect(assertVisibleTool.handler(request, response, mockContext))
-        .rejects.toThrow('断言失败: 断言失败')
-    })
   })
 
   describe('assertTextTool - 断言元素文本内容', () => {
@@ -435,14 +266,14 @@ describe('assert.ts 工具测试', () => {
   describe('错误处理测试', () => {
     it('应该处理非Error类型的异常', async () => {
       const request = createMockRequest({
-        selector: 'button',
-        shouldExist: true
+        uid: 'button-1',
+        text: '测试'
       })
       const response = createMockResponse()
 
-      vi.mocked(assertElementExists).mockRejectedValue('字符串错误')
+      vi.mocked(assertElementText).mockRejectedValue('字符串错误')
 
-      await expect(assertExistsTool.handler(request, response, mockContext))
+      await expect(assertTextTool.handler(request, response, mockContext))
         .rejects.toThrow('字符串错误')
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('断言执行失败: 字符串错误')
@@ -453,7 +284,6 @@ describe('assert.ts 工具测试', () => {
       const response = createMockResponse()
 
       const tools = [
-        { tool: assertVisibleTool, params: { uid: 'test', visible: true } },
         { tool: assertTextTool, params: { uid: 'test', text: 'test' } },
         { tool: assertAttributeTool, params: { uid: 'test', attributeKey: 'test', attributeValue: 'test' } },
         { tool: assertStateTool, params: { uid: 'test', visible: true } }
@@ -467,45 +297,4 @@ describe('assert.ts 工具测试', () => {
     })
   })
 
-  describe('参数验证测试', () => {
-    it('应该正确处理默认timeout值', async () => {
-      const request = createMockRequest({
-        selector: 'button',
-        shouldExist: true
-        // timeout未指定，应该使用默认值5000
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockResolvedValue(successResult)
-
-      await assertExistsTool.handler(request, response, mockContext)
-
-      expect(assertElementExists).toHaveBeenCalledWith(mockContext.currentPage, {
-        selector: 'button',
-        uid: undefined,
-        shouldExist: true,
-        timeout: undefined
-      })
-    })
-
-    it('应该正确处理自定义timeout值', async () => {
-      const request = createMockRequest({
-        selector: 'button',
-        shouldExist: true,
-        timeout: 10000
-      })
-      const response = createMockResponse()
-
-      vi.mocked(assertElementExists).mockResolvedValue(successResult)
-
-      await assertExistsTool.handler(request, response, mockContext)
-
-      expect(assertElementExists).toHaveBeenCalledWith(mockContext.currentPage, {
-        selector: 'button',
-        uid: undefined,
-        shouldExist: true,
-        timeout: 10000
-      })
-    })
-  })
 })

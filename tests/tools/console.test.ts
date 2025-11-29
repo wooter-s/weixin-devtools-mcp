@@ -14,12 +14,8 @@ import {
   SimpleToolResponse
 } from '../../src/tools/ToolDefinition.js';
 import {
-  startConsoleMonitoringTool,
-  stopConsoleMonitoringTool,
   listConsoleMessagesTool,
-  getConsoleMessageTool,
-  getConsoleTool,
-  clearConsoleTool
+  getConsoleMessageTool
 } from '../../src/tools/console.js';
 import { createIdGenerator } from '../../src/utils/idGenerator.js';
 
@@ -45,38 +41,22 @@ describe('Console Tools Unit Tests', () => {
     getElementByUid: vi.fn(),
   });
 
-  it('应该正确定义所有console工具（包括新工具）', () => {
+  it('应该正确定义所有console工具', () => {
     // 验证工具定义的基本属性
-    expect(startConsoleMonitoringTool.name).toBe('start_console_monitoring');
-    expect(stopConsoleMonitoringTool.name).toBe('stop_console_monitoring');
     expect(listConsoleMessagesTool.name).toBe('list_console_messages');
     expect(getConsoleMessageTool.name).toBe('get_console_message');
-    expect(getConsoleTool.name).toBe('get_console');
-    expect(clearConsoleTool.name).toBe('clear_console');
 
     // 验证工具有描述
-    expect(startConsoleMonitoringTool.description).toBeTruthy();
-    expect(stopConsoleMonitoringTool.description).toBeTruthy();
     expect(listConsoleMessagesTool.description).toBeTruthy();
     expect(getConsoleMessageTool.description).toBeTruthy();
-    expect(getConsoleTool.description).toBeTruthy();
-    expect(clearConsoleTool.description).toBeTruthy();
 
     // 验证工具有schema
-    expect(startConsoleMonitoringTool.schema).toBeTruthy();
-    expect(stopConsoleMonitoringTool.schema).toBeTruthy();
     expect(listConsoleMessagesTool.schema).toBeTruthy();
     expect(getConsoleMessageTool.schema).toBeTruthy();
-    expect(getConsoleTool.schema).toBeTruthy();
-    expect(clearConsoleTool.schema).toBeTruthy();
 
     // 验证工具有handler
-    expect(typeof startConsoleMonitoringTool.handler).toBe('function');
-    expect(typeof stopConsoleMonitoringTool.handler).toBe('function');
     expect(typeof listConsoleMessagesTool.handler).toBe('function');
     expect(typeof getConsoleMessageTool.handler).toBe('function');
-    expect(typeof getConsoleTool.handler).toBe('function');
-    expect(typeof clearConsoleTool.handler).toBe('function');
   });
 
   it('应该正确定义Console相关的类型', () => {
@@ -126,13 +106,7 @@ describe('Console Tools Unit Tests', () => {
     expect(consoleStorage.startTime).toBeTruthy();
   });
 
-  it('应该正确处理schema验证（包括新工具）', () => {
-    // 测试 startConsoleMonitoringTool 的 schema
-    const startSchema = startConsoleMonitoringTool.schema;
-    const validStartParams = { clearExisting: true };
-    const startResult = startSchema.safeParse(validStartParams);
-    expect(startResult.success).toBe(true);
-
+  it('应该正确处理schema验证', () => {
     // 测试 listConsoleMessagesTool 的 schema
     const listSchema = listConsoleMessagesTool.schema;
     const validListParams = {
@@ -149,22 +123,6 @@ describe('Console Tools Unit Tests', () => {
     const validGetMessageParams = { msgid: 1 };
     const getMessageResult = getMessageSchema.safeParse(validGetMessageParams);
     expect(getMessageResult.success).toBe(true);
-
-    // 测试 getConsoleTool 的 schema
-    const getSchema = getConsoleTool.schema;
-    const validGetParams = {
-      type: 'all' as const,
-      limit: 50,
-      since: '2023-01-01T00:00:00.000Z'
-    };
-    const getResult = getSchema.safeParse(validGetParams);
-    expect(getResult.success).toBe(true);
-
-    // 测试 clearConsoleTool 的 schema
-    const clearSchema = clearConsoleTool.schema;
-    const validClearParams = { type: 'console' as const };
-    const clearResult = clearSchema.safeParse(validClearParams);
-    expect(clearResult.success).toBe(true);
   });
 
   it('应该能正确创建模拟的工具上下文（使用新存储结构）', () => {

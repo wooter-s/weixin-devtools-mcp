@@ -5,460 +5,12 @@
 
 import { z } from 'zod';
 
-import { connectDevtools, connectDevtoolsEnhanced, type ConnectOptions, type EnhancedConnectOptions, DevToolsConnectionError } from '../tools.js';
+import { connectDevtoolsEnhanced, type EnhancedConnectOptions, DevToolsConnectionError } from '../tools.js';
 
 import type { ConsoleMessage, ExceptionMessage } from './ToolDefinition.js';
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
-
-/**
- * 创建请求拦截器函数
- * 从 network.ts 复制，用于自动启动网络监听
- */
-function createRequestInterceptor() {
-  return function(this: any, options: any) {
-    // @ts-ignore - wx is available in WeChat miniprogram environment
-    const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-
-    if (!wxObj) {
-      return this.origin(options);
-    }
-
-    if (!wxObj.__networkLogs) {
-      wxObj.__networkLogs = [];
-    }
-
-    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const startTime = Date.now();
-
-    const originalSuccess = options.success;
-    options.success = function(res: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'request',
-        url: options.url,
-        method: options.method || 'GET',
-        headers: options.header,
-        data: options.data,
-        statusCode: res.statusCode,
-        response: res.data,
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: true
-      });
-      if (originalSuccess) originalSuccess(res);
-    };
-
-    const originalFail = options.fail;
-    options.fail = function(err: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'request',
-        url: options.url,
-        method: options.method || 'GET',
-        headers: options.header,
-        data: options.data,
-        error: err.errMsg || String(err),
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: false
-      });
-      if (originalFail) originalFail(err);
-    };
-
-    return this.origin(options);
-  };
-}
-
-/**
- * 创建 uploadFile 拦截器函数
- */
-function createUploadFileInterceptor() {
-  return function(this: any, options: any) {
-    // @ts-ignore - wx is available in WeChat miniprogram environment
-    const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-
-    if (!wxObj) {
-      return this.origin(options);
-    }
-
-    if (!wxObj.__networkLogs) {
-      wxObj.__networkLogs = [];
-    }
-
-    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const startTime = Date.now();
-
-    const originalSuccess = options.success;
-    options.success = function(res: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'uploadFile',
-        url: options.url,
-        headers: options.header,
-        data: {
-          filePath: options.filePath,
-          name: options.name,
-          formData: options.formData
-        },
-        statusCode: res.statusCode,
-        response: res.data,
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: true
-      });
-      if (originalSuccess) originalSuccess(res);
-    };
-
-    const originalFail = options.fail;
-    options.fail = function(err: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'uploadFile',
-        url: options.url,
-        headers: options.header,
-        data: {
-          filePath: options.filePath,
-          name: options.name,
-          formData: options.formData
-        },
-        error: err.errMsg || String(err),
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: false
-      });
-      if (originalFail) originalFail(err);
-    };
-
-    return this.origin(options);
-  };
-}
-
-/**
- * 创建 downloadFile 拦截器函数
- */
-function createDownloadFileInterceptor() {
-  return function(this: any, options: any) {
-    // @ts-ignore - wx is available in WeChat miniprogram environment
-    const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-
-    if (!wxObj) {
-      return this.origin(options);
-    }
-
-    if (!wxObj.__networkLogs) {
-      wxObj.__networkLogs = [];
-    }
-
-    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const startTime = Date.now();
-
-    const originalSuccess = options.success;
-    options.success = function(res: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'downloadFile',
-        url: options.url,
-        headers: options.header,
-        statusCode: res.statusCode,
-        response: {
-          tempFilePath: res.tempFilePath,
-          filePath: res.filePath
-        },
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: true
-      });
-      if (originalSuccess) originalSuccess(res);
-    };
-
-    const originalFail = options.fail;
-    options.fail = function(err: any) {
-      wxObj.__networkLogs.push({
-        id: requestId,
-        type: 'downloadFile',
-        url: options.url,
-        headers: options.header,
-        error: err.errMsg || String(err),
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        success: false
-      });
-      if (originalFail) originalFail(err);
-    };
-
-    return this.origin(options);
-  };
-}
-
-/**
- * 连接到微信开发者工具（传统版）
- */
-export const connectDevtoolsTool = defineTool({
-  name: 'connect_devtools',
-  description: '连接到微信开发者工具（传统模式，兼容性）',
-  schema: z.object({
-    projectPath: z.string().describe('小程序项目的绝对路径'),
-    cliPath: z.string().optional().describe('微信开发者工具CLI的绝对路径（可选，默认会自动查找）'),
-    port: z.number().optional().describe('WebSocket端口号（可选，默认自动分配）'),
-    autoAudits: z.boolean().optional().describe('启动时是否开启自动运行体验评分'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { projectPath, cliPath, port, autoAudits } = request.params;
-
-    // 检查是否已有活跃连接
-    if (context.miniProgram) {
-      try {
-        // 验证连接是否仍然有效
-        const currentPage = await context.miniProgram.currentPage();
-        const pagePath = await currentPage.path;
-
-        // 连接有效，复用现有连接
-        response.appendResponseLine(`✅ 检测到已有活跃连接，复用现有连接`);
-        response.appendResponseLine(`项目路径: ${projectPath}`);
-        response.appendResponseLine(`当前页面: ${pagePath}`);
-        response.appendResponseLine(`说明: 跳过重新连接，使用已建立的连接`);
-
-        return;
-      } catch (error) {
-        // 连接已失效，清空并继续新建连接
-        context.miniProgram = null;
-        context.currentPage = null;
-      }
-    }
-
-    try {
-      const options: ConnectOptions = { projectPath };
-      if (cliPath) options.cliPath = cliPath;
-      if (port) options.port = port;
-      if (typeof autoAudits === 'boolean') {
-        options.autoAudits = autoAudits;
-      }
-
-      const result = await connectDevtools(options);
-
-      // 更新上下文
-      context.miniProgram = result.miniProgram;
-      context.currentPage = result.currentPage;
-      context.elementMap.clear();
-
-      // 自动启动console监听
-      try {
-        // 清除之前的监听器（如果有的话）
-        context.miniProgram.removeAllListeners('console');
-        context.miniProgram.removeAllListeners('exception');
-
-        // 启动console监听
-        context.consoleStorage.isMonitoring = true;
-        context.consoleStorage.startTime = new Date().toISOString();
-
-        context.miniProgram.on('console', (msg: any) => {
-          const consoleMessage: ConsoleMessage = {
-            type: msg.type || 'log',
-            args: msg.args || [],
-            timestamp: new Date().toISOString(),
-            source: 'miniprogram'
-          };
-          // 使用新的 navigations 结构
-          const currentSession = context.consoleStorage.navigations[0];
-          if (currentSession) {
-            // 分配 msgid（如果有 idGenerator）
-            if (context.consoleStorage.idGenerator) {
-              consoleMessage.msgid = context.consoleStorage.idGenerator();
-              context.consoleStorage.messageIdMap.set(consoleMessage.msgid, consoleMessage);
-            }
-            currentSession.messages.push(consoleMessage);
-          }
-          console.log(`[Console ${msg.type}]:`, msg.args);
-        });
-
-        context.miniProgram.on('exception', (err: any) => {
-          const exceptionMessage: ExceptionMessage = {
-            message: err.message || String(err),
-            stack: err.stack,
-            timestamp: new Date().toISOString(),
-            source: 'miniprogram'
-          };
-          // 使用新的 navigations 结构
-          const currentSession = context.consoleStorage.navigations[0];
-          if (currentSession) {
-            // 分配 msgid（如果有 idGenerator）
-            if (context.consoleStorage.idGenerator) {
-              exceptionMessage.msgid = context.consoleStorage.idGenerator();
-              context.consoleStorage.messageIdMap.set(exceptionMessage.msgid, exceptionMessage);
-            }
-            currentSession.exceptions.push(exceptionMessage);
-          }
-          console.log(`[Exception]:`, err.message, err.stack);
-        });
-
-        response.appendResponseLine(`Console监听已自动启动`);
-      } catch (consoleError) {
-        response.appendResponseLine(`警告: Console监听启动失败 - ${consoleError instanceof Error ? consoleError.message : String(consoleError)}`);
-      }
-
-      // 自动启动网络监听（使用evaluate()方式绕过框架限制）
-      try {
-        if (!context.networkStorage.isMonitoring) {
-          // 使用与network.ts相同的evaluate()注入方式，增加Mpx框架支持
-          await context.miniProgram.evaluate(function() {
-            // @ts-ignore
-            if (typeof wx === 'undefined' || wx.__networkInterceptorsInstalled) {
-              return;
-            }
-
-            // @ts-ignore
-            wx.__networkLogs = wx.__networkLogs || [];
-
-            // Mpx 拦截器已在 tools.ts 的 connectDevtools() 中统一注入
-            // 此处仅保留 wx.request 回退拦截器（用于非 Mpx 框架或直接调用 wx API 的场景）
-
-            // 保存原始方法（通过getter获取）
-            // @ts-ignore
-            const _originalRequest = wx.request;
-            // @ts-ignore
-            const _originalUploadFile = wx.uploadFile;
-            // @ts-ignore
-            const _originalDownloadFile = wx.downloadFile;
-
-            // 拦截wx.request - 先删除getter
-            // @ts-ignore
-            delete wx.request;
-            // @ts-ignore
-            Object.defineProperty(wx, 'request', {
-              configurable: true,
-              value: function(options: any) {
-                const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-                const start = Date.now();
-                const origSuccess = options.success;
-                const origFail = options.fail;
-
-                options.success = function(res: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'request', url: options.url, method: options.method || 'GET',
-                    headers: options.header, data: options.data, statusCode: res.statusCode,
-                    response: res.data, duration: Date.now() - start,
-                    timestamp: new Date().toISOString(), success: true
-                  });
-                  if (origSuccess) origSuccess.call(this, res);
-                };
-
-                options.fail = function(err: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'request', url: options.url, method: options.method || 'GET',
-                    headers: options.header, data: options.data, error: err.errMsg || String(err),
-                    duration: Date.now() - start, timestamp: new Date().toISOString(), success: false
-                  });
-                  if (origFail) origFail.call(this, err);
-                };
-
-                return _originalRequest.call(this, options);
-              }
-            });
-
-            // 拦截wx.uploadFile - 先删除getter
-            // @ts-ignore
-            delete wx.uploadFile;
-            // @ts-ignore
-            Object.defineProperty(wx, 'uploadFile', {
-              configurable: true,
-              value: function(options: any) {
-                const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-                const start = Date.now();
-                const origSuccess = options.success;
-                const origFail = options.fail;
-
-                options.success = function(res: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'uploadFile', url: options.url, headers: options.header,
-                    data: { filePath: options.filePath, name: options.name, formData: options.formData },
-                    statusCode: res.statusCode, response: res.data, duration: Date.now() - start,
-                    timestamp: new Date().toISOString(), success: true
-                  });
-                  if (origSuccess) origSuccess.call(this, res);
-                };
-
-                options.fail = function(err: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'uploadFile', url: options.url, headers: options.header,
-                    data: { filePath: options.filePath, name: options.name, formData: options.formData },
-                    error: err.errMsg || String(err), duration: Date.now() - start,
-                    timestamp: new Date().toISOString(), success: false
-                  });
-                  if (origFail) origFail.call(this, err);
-                };
-
-                return _originalUploadFile.call(this, options);
-              }
-            });
-
-            // 拦截wx.downloadFile - 先删除getter
-            // @ts-ignore
-            delete wx.downloadFile;
-            // @ts-ignore
-            Object.defineProperty(wx, 'downloadFile', {
-              configurable: true,
-              value: function(options: any) {
-                const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-                const start = Date.now();
-                const origSuccess = options.success;
-                const origFail = options.fail;
-
-                options.success = function(res: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'downloadFile', url: options.url, headers: options.header,
-                    statusCode: res.statusCode, response: { tempFilePath: res.tempFilePath, filePath: res.filePath },
-                    duration: Date.now() - start, timestamp: new Date().toISOString(), success: true
-                  });
-                  if (origSuccess) origSuccess.call(this, res);
-                };
-
-                options.fail = function(err: any) {
-                  // @ts-ignore
-                  wx.__networkLogs.push({
-                    id, type: 'downloadFile', url: options.url, headers: options.header,
-                    error: err.errMsg || String(err), duration: Date.now() - start,
-                    timestamp: new Date().toISOString(), success: false
-                  });
-                  if (origFail) origFail.call(this, err);
-                };
-
-                return _originalDownloadFile.call(this, options);
-              }
-            });
-
-            // @ts-ignore
-            wx.__networkInterceptorsInstalled = true;
-          });
-
-          context.networkStorage.isMonitoring = true;
-          context.networkStorage.startTime = new Date().toISOString();
-        }
-
-        response.appendResponseLine(`网络监听已自动启动（增强型拦截）`);
-      } catch (networkError) {
-        response.appendResponseLine(`警告: 网络监听启动失败 - ${networkError instanceof Error ? networkError.message : String(networkError)}`);
-      }
-
-      response.appendResponseLine(`成功连接到微信开发者工具 (传统模式)`);
-      response.appendResponseLine(`项目路径: ${projectPath}`);
-      response.appendResponseLine(`当前页面: ${result.pagePath}`);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`连接失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
+// 注意: connect_devtools（传统模式）已移除，请使用 connect_devtools_enhanced（智能连接）
 
 /**
  * 智能连接到微信开发者工具（增强版）
@@ -539,26 +91,28 @@ export const connectDevtoolsEnhancedTool = defineTool({
       };
 
       const result = await connectDevtoolsEnhanced(options);
+      const miniProgramEnhanced = result.miniProgram;
 
       // 更新上下文
-      context.miniProgram = result.miniProgram;
+      context.miniProgram = miniProgramEnhanced;
       context.currentPage = result.currentPage;
       context.elementMap.clear();
 
       // 自动启动console监听
       try {
         // 清除之前的监听器（如果有的话）
-        context.miniProgram.removeAllListeners('console');
-        context.miniProgram.removeAllListeners('exception');
+        miniProgramEnhanced.removeAllListeners('console');
+        miniProgramEnhanced.removeAllListeners('exception');
 
         // 启动console监听
         context.consoleStorage.isMonitoring = true;
         context.consoleStorage.startTime = new Date().toISOString();
 
-        context.miniProgram.on('console', (msg: any) => {
+        miniProgramEnhanced.on('console', (msg: { type?: string; args?: unknown[] }) => {
+          const typedMsg = msg;
           const consoleMessage: ConsoleMessage = {
-            type: msg.type || 'log',
-            args: msg.args || [],
+            type: (typedMsg.type as ConsoleMessage['type']) || 'log',
+            args: typedMsg.args || [],
             timestamp: new Date().toISOString(),
             source: 'miniprogram'
           };
@@ -572,13 +126,14 @@ export const connectDevtoolsEnhancedTool = defineTool({
             }
             currentSession.messages.push(consoleMessage);
           }
-          console.log(`[Console ${msg.type}]:`, msg.args);
+          console.log(`[Console ${typedMsg.type}]:`, typedMsg.args);
         });
 
-        context.miniProgram.on('exception', (err: any) => {
+        miniProgramEnhanced.on('exception', (err: { message?: string; stack?: string }) => {
+          const typedErr = err;
           const exceptionMessage: ExceptionMessage = {
-            message: err.message || String(err),
-            stack: err.stack,
+            message: typedErr.message || String(err),
+            stack: typedErr.stack,
             timestamp: new Date().toISOString(),
             source: 'miniprogram'
           };
@@ -592,7 +147,7 @@ export const connectDevtoolsEnhancedTool = defineTool({
             }
             currentSession.exceptions.push(exceptionMessage);
           }
-          console.log(`[Exception]:`, err.message, err.stack);
+          console.log(`[Exception]:`, typedErr.message, typedErr.stack);
         });
 
         response.appendResponseLine(`Console监听已自动启动`);
@@ -604,7 +159,7 @@ export const connectDevtoolsEnhancedTool = defineTool({
       try {
         if (!context.networkStorage.isMonitoring) {
           // 使用evaluate()注入拦截器（与第一个工具相同的逻辑）
-          await context.miniProgram.evaluate(function() {
+          await miniProgramEnhanced.evaluate(function() {
             // @ts-ignore
             if (typeof wx === 'undefined' || wx.__networkInterceptorsInstalled) return;
             // @ts-ignore
@@ -760,7 +315,7 @@ export const getCurrentPageTool = defineTool({
   annotations: {
     audience: ['developers'],
   },
-  handler: async (request, response, context) => {
+  handler: async (_request, response, context) => {
     if (!context.miniProgram) {
       throw new Error('请先连接到微信开发者工具');
     }

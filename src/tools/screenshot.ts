@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { takeScreenshot, type ScreenshotOptions } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 /**
  * 页面截图

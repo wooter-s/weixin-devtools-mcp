@@ -4,6 +4,7 @@
  */
 
 import type { z } from 'zod'
+import type { MiniProgram, Page, Element } from 'miniprogram-automator'
 
 import type { ElementMapInfo } from '../tools.js'
 
@@ -54,7 +55,7 @@ export interface ConsoleMessage {
   msgid?: number;  // Stable ID，用于两阶段查询
   type: ConsoleMessageType;
   message?: string;  // 格式化的消息文本
-  args: any[];
+  args: unknown[];  // console.log 参数可以是任意类型
   timestamp: string;
   source?: string;
 }
@@ -114,10 +115,10 @@ export interface NetworkRequest {
   url: string;
   method?: string;
   headers?: Record<string, string>;
-  data?: any;
-  params?: any;  // Mpx框架的查询参数
+  data?: unknown;  // 请求体数据，可以是任意类型
+  params?: Record<string, unknown>;  // Mpx框架的查询参数
   statusCode?: number;
-  response?: any;
+  response?: unknown;  // 响应数据，可以是任意类型
   responseHeaders?: Record<string, string>;  // 响应头
   error?: string;
   duration?: number;
@@ -129,6 +130,12 @@ export interface NetworkRequest {
 }
 
 /**
+ * wx 网络方法类型
+ * 用于存储原始方法以便恢复
+ */
+export type WxNetworkMethod = ((options: Record<string, unknown>) => unknown) | undefined;
+
+/**
  * 网络请求数据存储
  */
 export interface NetworkStorage {
@@ -136,9 +143,9 @@ export interface NetworkStorage {
   isMonitoring: boolean;
   startTime: string | null;
   originalMethods: {
-    request?: any;
-    uploadFile?: any;
-    downloadFile?: any;
+    request?: WxNetworkMethod;
+    uploadFile?: WxNetworkMethod;
+    downloadFile?: WxNetworkMethod;
   };
 }
 
@@ -150,13 +157,13 @@ export interface ToolContext {
    * 小程序实例 (miniprogram-automator的MiniProgram类型)
    * 通过 automator.connect() 或 automator.launch() 获得
    */
-  miniProgram: any;
+  miniProgram: MiniProgram | null;
 
   /**
    * 当前页面实例 (miniprogram-automator的Page类型)
    * 通过 miniProgram.currentPage() 获得
    */
-  currentPage: any;
+  currentPage: Page | null;
 
   elementMap: Map<string, ElementMapInfo>;
   consoleStorage: ConsoleStorage;
@@ -169,13 +176,13 @@ export interface ToolContext {
    * @returns 元素对象
    * @throws 如果页面未连接、UID 不存在、元素未找到等
    */
-  getElementByUid(uid: string): Promise<any>;
+  getElementByUid(uid: string): Promise<Element>;
 }
 
 /**
  * 工具请求接口
  */
-export interface ToolRequest<T = any> {
+export interface ToolRequest<T = unknown> {
   params: T;
 }
 
@@ -205,7 +212,7 @@ export interface ToolDefinition {
   description: string;
   schema: z.ZodTypeAny;
   annotations?: ToolAnnotations;
-  handler: ToolHandler<any>;
+  handler: ToolHandler<unknown>;
 }
 
 /**

@@ -7,20 +7,14 @@ import type { ToolDefinition } from './ToolDefinition.js';
 
 // 导入各个模块的工具
 import {
-  assertExistsTool,
-  assertVisibleTool,
   assertTextTool,
   assertAttributeTool,
   assertStateTool
 } from './assert.js';
-import { connectDevtoolsTool, connectDevtoolsEnhancedTool, getCurrentPageTool } from './connection.js';
+import { connectDevtoolsEnhancedTool, getCurrentPageTool } from './connection.js';
 import {
-  startConsoleMonitoringTool,
-  stopConsoleMonitoringTool,
   listConsoleMessagesTool,
-  getConsoleMessageTool,
-  getConsoleTool,
-  clearConsoleTool
+  getConsoleMessageTool
 } from './console.js';
 import {
   diagnoseConnectionTool,
@@ -32,26 +26,15 @@ import {
   clickTool,
   inputTextTool,
   getValueTool,
-  setFormControlTool,
-  selectPickerTool,
-  toggleSwitchTool,
-  setSliderTool
+  setFormControlTool
 } from './input.js';
 import {
   navigateToTool,
   navigateBackTool,
   switchTabTool,
-  reLaunchTool,
-  getPageInfoTool,
-  redirectToTool
+  reLaunchTool
 } from './navigate.js';
-import {
-  startNetworkMonitoringTool,
-  stopNetworkMonitoringTool,
-  getNetworkRequestsTool,
-  clearNetworkRequestsTool,
-  diagnoseInterceptorTool
-} from './network.js';
+import { getNetworkRequestsTool } from './network.js';
 import { querySelectorTool, waitForTool } from './page.js';
 import { screenshotTool } from './screenshot.js';
 import { evaluateScript } from './script.js';
@@ -59,62 +42,55 @@ import { getPageSnapshotTool } from './snapshot.js';
 
 /**
  * 所有可用工具的列表
+ *
+ * 工具精简说明（v0.4.0）：
+ * - connect_devtools 已移除，使用 connect_devtools_enhanced（智能连接）
+ * - assert_exists/assert_visible 已合并到 assert_state
+ * - select_picker/toggle_switch/set_slider 已合并到 set_form_control
+ * - get_page_info/redirect_to 已合并到 navigate_to（支持 redirect 参数）
+ * - Console/Network 监听在连接时自动启动，无需手动 start/stop
  */
 export const allTools: ToolDefinition[] = [
-  // 连接管理工具
-  connectDevtoolsTool,              // 传统连接方式（兼容性）
-  connectDevtoolsEnhancedTool,      // 智能连接方式（推荐）
+  // 连接管理工具（2个）
+  connectDevtoolsEnhancedTool,      // 智能连接方式（推荐，自动启动Console/Network监听）
   getCurrentPageTool,
 
-  // 页面快照工具
+  // 页面快照工具（1个）
   getPageSnapshotTool,
 
-  // 页面查询和等待工具
+  // 页面查询和等待工具（2个）
   querySelectorTool,
   waitForTool,
 
-  // 输入交互工具
+  // 输入交互工具（4个）
   clickTool,
   inputTextTool,
   getValueTool,
-  setFormControlTool,
-  selectPickerTool,
-  toggleSwitchTool,
-  setSliderTool,
+  setFormControlTool,               // 统一的表单控件操作（picker/switch/slider）
 
-  // 断言验证工具
-  assertExistsTool,
-  assertVisibleTool,
+  // 断言验证工具（3个）
   assertTextTool,
   assertAttributeTool,
-  assertStateTool,
+  assertStateTool,                  // 统一的状态断言（exists/visible/enabled/checked/focused）
 
-  // 页面导航工具
-  navigateToTool,
+  // 页面导航工具（4个）
+  navigateToTool,                   // 支持 redirect 参数实现重定向
   navigateBackTool,
   switchTabTool,
   reLaunchTool,
-  getPageInfoTool,
-  redirectToTool,
 
-  // 调试工具
+  // 调试工具（2个）
   screenshotTool,
   evaluateScript,
-  startConsoleMonitoringTool,
-  stopConsoleMonitoringTool,
-  listConsoleMessagesTool,
-  getConsoleMessageTool,
-  getConsoleTool,
-  clearConsoleTool,
 
-  // 网络监控工具
-  startNetworkMonitoringTool,
-  stopNetworkMonitoringTool,
-  getNetworkRequestsTool,
-  clearNetworkRequestsTool,
-  diagnoseInterceptorTool,
+  // Console监控工具（2个，两阶段查询模式）
+  listConsoleMessagesTool,          // 列表查询（简短格式）
+  getConsoleMessageTool,            // 详情查询（完整信息）
 
-  // 诊断工具
+  // 网络监控工具（1个）
+  getNetworkRequestsTool,           // 获取网络请求记录
+
+  // 诊断工具（4个）
   diagnoseConnectionTool,
   checkEnvironmentTool,
   debugPageElementsTool,

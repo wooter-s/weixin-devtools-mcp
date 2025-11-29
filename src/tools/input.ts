@@ -6,17 +6,13 @@
 import { z } from 'zod';
 
 import {
-  clickElement,
-  inputText,
   getElementValue,
   setFormControl,
-  type ClickOptions,
-  type InputTextOptions,
   type GetValueOptions,
   type FormControlOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 /**
  * 点击页面元素
@@ -37,8 +33,14 @@ export const clickTool = defineTool({
     // 使用统一的元素获取方法
     const element = await context.getElementByUid(uid);
 
+    // 获取当前页面引用（getElementByUid 已验证页面存在）
+    const currentPage = context.currentPage;
+    if (!currentPage) {
+      throw new Error('页面未连接，无法执行点击操作');
+    }
+
     // 记录点击前的页面路径
-    const beforePath = await context.currentPage.path;
+    const beforePath = currentPage.path;
     console.log(`[Click] 点击前页面: ${beforePath}`);
 
     // 执行点击操作
@@ -57,7 +59,8 @@ export const clickTool = defineTool({
 
     // 记录点击后的页面路径
     try {
-      const afterPath = await context.currentPage.path;
+      const updatedPage = context.currentPage;
+      const afterPath = updatedPage?.path;
       console.log(`[Click] 点击后页面: ${afterPath}`);
       if (beforePath !== afterPath) {
         console.log(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
@@ -206,119 +209,5 @@ export const setFormControlTool = defineTool({
   },
 });
 
-/**
- * 选择器选择选项（picker专用）
- */
-export const selectPickerTool = defineTool({
-  name: 'select_picker',
-  description: '选择picker控件的选项',
-  schema: z.object({
-    uid: z.string().describe('picker元素的唯一标识符'),
-    value: z.union([z.number(), z.string(), z.array(z.any())]).describe('选项值，可以是索引、文本或多选数组'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { uid, value } = request.params;
-
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
-
-    try {
-      const options: FormControlOptions = { uid, value, trigger: 'change' };
-      await setFormControl(context.currentPage, context.elementMap, options);
-
-      response.appendResponseLine(`选择picker选项成功`);
-      response.appendResponseLine(`UID: ${uid}`);
-      response.appendResponseLine(`选项: ${JSON.stringify(value)}`);
-
-      // 选择后页面可能发生变化
-      response.setIncludeSnapshot(true);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`选择picker选项失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
-
-/**
- * 切换开关状态（switch专用）
- */
-export const toggleSwitchTool = defineTool({
-  name: 'toggle_switch',
-  description: '切换switch开关的状态',
-  schema: z.object({
-    uid: z.string().describe('switch元素的唯一标识符'),
-    checked: z.boolean().describe('开关状态，true为开启，false为关闭'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { uid, checked } = request.params;
-
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
-
-    try {
-      const options: FormControlOptions = { uid, value: checked, trigger: 'change' };
-      await setFormControl(context.currentPage, context.elementMap, options);
-
-      response.appendResponseLine(`切换开关状态成功`);
-      response.appendResponseLine(`UID: ${uid}`);
-      response.appendResponseLine(`状态: ${checked ? '开启' : '关闭'}`);
-
-      // 切换后页面可能发生变化
-      response.setIncludeSnapshot(true);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`切换开关状态失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
-
-/**
- * 设置滑块值（slider专用）
- */
-export const setSliderTool = defineTool({
-  name: 'set_slider',
-  description: '设置slider滑块的值',
-  schema: z.object({
-    uid: z.string().describe('slider元素的唯一标识符'),
-    value: z.number().describe('滑块值'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { uid, value } = request.params;
-
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
-
-    try {
-      const options: FormControlOptions = { uid, value, trigger: 'change' };
-      await setFormControl(context.currentPage, context.elementMap, options);
-
-      response.appendResponseLine(`设置滑块值成功`);
-      response.appendResponseLine(`UID: ${uid}`);
-      response.appendResponseLine(`值: ${value}`);
-
-      // 设置后页面可能发生变化
-      response.setIncludeSnapshot(true);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`设置滑块值失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
+// 注意: select_picker, toggle_switch, set_slider 已合并到 set_form_control
+// 使用 set_form_control 即可操作 picker, switch, slider 等所有表单控件

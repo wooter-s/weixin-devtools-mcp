@@ -13,15 +13,12 @@ vi.mock('../../src/tools.js', () => ({
   setFormControl: vi.fn()
 }))
 
-// 导入被测试的工具（包括新增功能）
+// 导入被测试的工具
 import {
   clickTool,
   inputTextTool,
   getValueTool,
-  setFormControlTool,
-  selectPickerTool,
-  toggleSwitchTool,
-  setSliderTool
+  setFormControlTool
 } from '../../src/tools/input.js'
 
 // 导入mock的函数用于验证
@@ -272,216 +269,6 @@ describe('input.ts 新功能测试', () => {
     })
   })
 
-  describe('selectPickerTool - 选择picker选项（新功能）', () => {
-    it('应该成功选择picker选项（数字索引）', async () => {
-      const request = createMockRequest({
-        uid: 'picker-1',
-        value: 2
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await selectPickerTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'picker-1', value: 2, trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('选择picker选项成功')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('UID: picker-1')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('选项: 2')
-      expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
-    })
-
-    it('应该成功选择picker选项（字符串文本）', async () => {
-      const request = createMockRequest({
-        uid: 'picker-1',
-        value: '选项二'
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await selectPickerTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'picker-1', value: '选项二', trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('选项: "选项二"')
-    })
-
-    it('应该成功选择picker选项（多选数组）', async () => {
-      const multiSelectValue = [1, 3, 5]
-      const request = createMockRequest({
-        uid: 'picker-1',
-        value: multiSelectValue
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await selectPickerTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'picker-1', value: multiSelectValue, trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith(`选项: ${JSON.stringify(multiSelectValue)}`)
-    })
-
-    it('应该处理picker选择失败', async () => {
-      const request = createMockRequest({
-        uid: 'picker-1',
-        value: 999
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockRejectedValue(new Error('选项索引超出范围'))
-
-      await expect(selectPickerTool.handler(request, response, mockContext))
-        .rejects.toThrow('选项索引超出范围')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('选择picker选项失败: 选项索引超出范围')
-    })
-  })
-
-  describe('toggleSwitchTool - 切换开关状态（新功能）', () => {
-    it('应该成功开启开关', async () => {
-      const request = createMockRequest({
-        uid: 'switch-1',
-        checked: true
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await toggleSwitchTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'switch-1', value: true, trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('切换开关状态成功')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('UID: switch-1')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('状态: 开启')
-      expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
-    })
-
-    it('应该成功关闭开关', async () => {
-      const request = createMockRequest({
-        uid: 'switch-1',
-        checked: false
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await toggleSwitchTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'switch-1', value: false, trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('状态: 关闭')
-    })
-
-    it('应该处理开关切换失败', async () => {
-      const request = createMockRequest({
-        uid: 'switch-1',
-        checked: true
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockRejectedValue(new Error('开关被禁用'))
-
-      await expect(toggleSwitchTool.handler(request, response, mockContext))
-        .rejects.toThrow('开关被禁用')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('切换开关状态失败: 开关被禁用')
-    })
-  })
-
-  describe('setSliderTool - 设置滑块值（新功能）', () => {
-    it('应该成功设置滑块值', async () => {
-      const request = createMockRequest({
-        uid: 'slider-1',
-        value: 75
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-      await setSliderTool.handler(request, response, mockContext)
-
-      expect(setFormControl).toHaveBeenCalledWith(
-        mockContext.currentPage,
-        mockContext.elementMap,
-        { uid: 'slider-1', value: 75, trigger: 'change' }
-      )
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('设置滑块值成功')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('UID: slider-1')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('值: 75')
-      expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
-    })
-
-    it('应该支持边界值', async () => {
-      const testCases = [
-        { value: 0, description: '最小值' },
-        { value: 100, description: '最大值' },
-        { value: 50.5, description: '小数值' }
-      ]
-
-      for (const { value, description } of testCases) {
-        vi.clearAllMocks()
-        const request = createMockRequest({
-          uid: 'slider-1',
-          value: value
-        })
-        const response = createMockResponse()
-
-        vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-        await setSliderTool.handler(request, response, mockContext)
-
-        expect(setFormControl).toHaveBeenCalledWith(
-          mockContext.currentPage,
-          mockContext.elementMap,
-          { uid: 'slider-1', value: value, trigger: 'change' }
-        )
-
-        expect(response.appendResponseLine).toHaveBeenCalledWith(`值: ${value}`)
-      }
-    })
-
-    it('应该处理滑块设置失败', async () => {
-      const request = createMockRequest({
-        uid: 'slider-1',
-        value: 150
-      })
-      const response = createMockResponse()
-
-      vi.mocked(setFormControl).mockRejectedValue(new Error('值超出范围'))
-
-      await expect(setSliderTool.handler(request, response, mockContext))
-        .rejects.toThrow('值超出范围')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('设置滑块值失败: 值超出范围')
-    })
-  })
-
   describe('已有功能测试（确保兼容性）', () => {
     it('clickTool应该继续正常工作', async () => {
       const request = createMockRequest({
@@ -518,19 +305,16 @@ describe('input.ts 新功能测试', () => {
   })
 
   describe('错误处理测试', () => {
-    it('应该在所有新工具中验证currentPage存在', async () => {
+    it('应该在所有工具中验证currentPage存在', async () => {
       const contextWithoutPage = { ...mockContext, currentPage: null }
       const response = createMockResponse()
 
-      const newTools = [
+      const tools = [
         { tool: getValueTool, params: { uid: 'input-1' } },
-        { tool: setFormControlTool, params: { uid: 'picker-1', value: 1 } },
-        { tool: selectPickerTool, params: { uid: 'picker-1', value: 1 } },
-        { tool: toggleSwitchTool, params: { uid: 'switch-1', checked: true } },
-        { tool: setSliderTool, params: { uid: 'slider-1', value: 50 } }
+        { tool: setFormControlTool, params: { uid: 'picker-1', value: 1 } }
       ]
 
-      for (const { tool, params } of newTools) {
+      for (const { tool, params } of tools) {
         const request = createMockRequest(params)
         await expect(tool.handler(request, response, contextWithoutPage))
           .rejects.toThrow('请先获取当前页面')
@@ -553,27 +337,18 @@ describe('input.ts 新功能测试', () => {
 
     it('应该处理setIncludeSnapshot调用', async () => {
       const response = createMockResponse()
-      const toolsWithSnapshot = [
-        { tool: setFormControlTool, params: { uid: 'picker-1', value: 1 } },
-        { tool: selectPickerTool, params: { uid: 'picker-1', value: 1 } },
-        { tool: toggleSwitchTool, params: { uid: 'switch-1', checked: true } },
-        { tool: setSliderTool, params: { uid: 'slider-1', value: 50 } }
-      ]
 
-      for (const { tool, params } of toolsWithSnapshot) {
-        vi.clearAllMocks()
-        vi.mocked(setFormControl).mockResolvedValue(undefined)
+      vi.mocked(setFormControl).mockResolvedValue(undefined)
 
-        const request = createMockRequest(params)
-        await tool.handler(request, response, mockContext)
+      const request = createMockRequest({ uid: 'picker-1', value: 1 })
+      await setFormControlTool.handler(request, response, mockContext)
 
-        expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
-      }
+      expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
     })
   })
 
   describe('参数类型验证', () => {
-    it('应该正确处理数字、字符串和数组类型的picker值', async () => {
+    it('应该正确处理数字、字符串和数组类型的表单控件值', async () => {
       const testCases = [
         { value: 0, type: 'number' },
         { value: 'option1', type: 'string' },
@@ -590,58 +365,12 @@ describe('input.ts 新功能测试', () => {
 
         vi.mocked(setFormControl).mockResolvedValue(undefined)
 
-        await selectPickerTool.handler(request, response, mockContext)
+        await setFormControlTool.handler(request, response, mockContext)
 
         expect(setFormControl).toHaveBeenCalledWith(
           mockContext.currentPage,
           mockContext.elementMap,
-          { uid: 'picker-1', value: value, trigger: 'change' }
-        )
-      }
-    })
-
-    it('应该正确处理布尔类型的switch值', async () => {
-      const testCases = [true, false]
-
-      for (const checked of testCases) {
-        vi.clearAllMocks()
-        const request = createMockRequest({
-          uid: 'switch-1',
-          checked: checked
-        })
-        const response = createMockResponse()
-
-        vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-        await toggleSwitchTool.handler(request, response, mockContext)
-
-        expect(setFormControl).toHaveBeenCalledWith(
-          mockContext.currentPage,
-          mockContext.elementMap,
-          { uid: 'switch-1', value: checked, trigger: 'change' }
-        )
-      }
-    })
-
-    it('应该正确处理数字类型的slider值', async () => {
-      const testCases = [0, 25, 50, 75, 100, 33.33]
-
-      for (const value of testCases) {
-        vi.clearAllMocks()
-        const request = createMockRequest({
-          uid: 'slider-1',
-          value: value
-        })
-        const response = createMockResponse()
-
-        vi.mocked(setFormControl).mockResolvedValue(undefined)
-
-        await setSliderTool.handler(request, response, mockContext)
-
-        expect(setFormControl).toHaveBeenCalledWith(
-          mockContext.currentPage,
-          mockContext.elementMap,
-          { uid: 'slider-1', value: value, trigger: 'change' }
+          { uid: 'picker-1', value: value, trigger: undefined }
         )
       }
     })

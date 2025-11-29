@@ -9,18 +9,16 @@ import {
   navigateToPage,
   navigateBack,
   switchTab,
-  getCurrentPageInfo,
   reLaunch,
   type NavigateOptions,
   type NavigateBackOptions,
-  type SwitchTabOptions,
-  type PageInfo
+  type SwitchTabOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 /**
- * 跳转到指定页面
+ * 跳转到指定页面（支持普通跳转和重定向模式）
  */
 export const navigateToTool = defineTool({
   name: 'navigate_to',
@@ -28,6 +26,7 @@ export const navigateToTool = defineTool({
   schema: z.object({
     url: z.string().describe('目标页面路径'),
     params: z.record(z.string(), z.any()).optional().describe('页面参数（查询参数）'),
+    redirect: z.boolean().optional().default(false).describe('是否使用重定向模式（关闭当前页面），默认false'),
     waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
     timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
   }),
@@ -35,33 +34,71 @@ export const navigateToTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { url, params, waitForLoad, timeout } = request.params;
+    const { url, params, redirect, waitForLoad, timeout } = request.params;
 
     if (!context.miniProgram) {
       throw new Error('请先连接到微信开发者工具');
     }
 
     try {
-      const options: NavigateOptions = {
-        url,
-        params,
-        waitForLoad,
-        timeout
-      };
+      if (redirect) {
+        // 重定向模式：关闭当前页面并跳转
+        let fullUrl = url;
+        if (params && Object.keys(params).length > 0) {
+          const queryString = Object.entries(params)
+            .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+            .join('&');
+          fullUrl += (url.includes('?') ? '&' : '?') + queryString;
+        }
 
-      await navigateToPage(context.miniProgram, options);
+        await context.miniProgram.redirectTo(fullUrl);
 
-      response.appendResponseLine(`页面跳转成功`);
+        // 等待页面加载完成
+        if (waitForLoad) {
+          const startTime = Date.now();
+          while (Date.now() - startTime < timeout) {
+            try {
+              const currentPage = await context.miniProgram.currentPage();
+              if (currentPage) {
+                const currentPath = await currentPage.path;
+                if (currentPath.includes(url.split('?')[0])) {
+                  break;
+                }
+              }
+            } catch {
+              // 继续等待
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+
+        response.appendResponseLine(`页面重定向成功`);
+      } else {
+        // 普通跳转模式
+        const options: NavigateOptions = {
+          url,
+          params,
+          waitForLoad,
+          timeout
+        };
+
+        await navigateToPage(context.miniProgram, options);
+        response.appendResponseLine(`页面跳转成功`);
+      }
+
       response.appendResponseLine(`目标页面: ${url}`);
       if (params && Object.keys(params).length > 0) {
         response.appendResponseLine(`参数: ${JSON.stringify(params)}`);
+      }
+      if (redirect) {
+        response.appendResponseLine(`模式: 重定向（已关闭原页面）`);
       }
 
       // 页面跳转后，更新当前页面信息
       try {
         context.currentPage = await context.miniProgram.currentPage();
         response.appendResponseLine(`当前页面已更新`);
-      } catch (error) {
+      } catch {
         response.appendResponseLine(`警告: 无法更新当前页面信息`);
       }
 
@@ -70,7 +107,8 @@ export const navigateToTool = defineTool({
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`页面跳转失败: ${errorMessage}`);
+      const action = redirect ? '重定向' : '跳转';
+      response.appendResponseLine(`页面${action}失败: ${errorMessage}`);
       throw error;
     }
   },
@@ -237,123 +275,5 @@ export const reLaunchTool = defineTool({
   },
 });
 
-/**
- * 获取当前页面信息
- */
-export const getPageInfoTool = defineTool({
-  name: 'get_page_info',
-  description: '获取当前页面的详细信息',
-  schema: z.object({}),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
-
-    try {
-      const pageInfo: PageInfo = await getCurrentPageInfo(context.miniProgram);
-
-      response.appendResponseLine(`页面信息获取成功`);
-      response.appendResponseLine(`路径: ${pageInfo.path}`);
-
-      if (pageInfo.title) {
-        response.appendResponseLine(`标题: ${pageInfo.title}`);
-      }
-
-      if (pageInfo.query && Object.keys(pageInfo.query).length > 0) {
-        response.appendResponseLine(`查询参数: ${JSON.stringify(pageInfo.query)}`);
-      }
-
-      response.appendResponseLine('');
-      response.appendResponseLine('完整信息:');
-      response.appendResponseLine(JSON.stringify(pageInfo, null, 2));
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`获取页面信息失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
-
-/**
- * 重定向到指定页面（替换当前页面）
- */
-export const redirectToTool = defineTool({
-  name: 'redirect_to',
-  description: '重定向到指定页面（关闭当前页面并跳转）',
-  schema: z.object({
-    url: z.string().describe('目标页面路径'),
-    params: z.record(z.string(), z.any()).optional().describe('页面参数（查询参数）'),
-    waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
-    timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { url, params, waitForLoad, timeout } = request.params;
-
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
-
-    try {
-      // 构建完整的URL
-      let fullUrl = url;
-      if (params && Object.keys(params).length > 0) {
-        const queryString = Object.entries(params)
-          .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
-          .join('&');
-        fullUrl += (url.includes('?') ? '&' : '?') + queryString;
-      }
-
-      // 执行重定向
-      await context.miniProgram.redirectTo(fullUrl);
-
-      // 等待页面加载完成
-      if (waitForLoad) {
-        const startTime = Date.now();
-        while (Date.now() - startTime < timeout) {
-          try {
-            const currentPage = await context.miniProgram.currentPage();
-            if (currentPage) {
-              const currentPath = await currentPage.path;
-              // 检查是否已经重定向到目标页面
-              if (currentPath.includes(url.split('?')[0])) {
-                break;
-              }
-            }
-          } catch (error) {
-            // 继续等待
-          }
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      response.appendResponseLine(`页面重定向成功`);
-      response.appendResponseLine(`目标页面: ${url}`);
-      if (params && Object.keys(params).length > 0) {
-        response.appendResponseLine(`参数: ${JSON.stringify(params)}`);
-      }
-
-      // 重定向后，更新当前页面信息
-      try {
-        context.currentPage = await context.miniProgram.currentPage();
-        response.appendResponseLine(`当前页面已更新`);
-      } catch (error) {
-        response.appendResponseLine(`警告: 无法更新当前页面信息`);
-      }
-
-      // 重定向后建议获取新快照
-      response.setIncludeSnapshot(true);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`页面重定向失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
+// 注意: get_page_info 已合并到 get_current_page
+// 注意: redirect_to 已合并到 navigate_to（使用 redirect: true 参数）

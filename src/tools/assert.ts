@@ -6,119 +6,18 @@
 import { z } from 'zod';
 
 import {
-  assertElementExists,
   assertElementVisible,
   assertElementText,
   assertElementAttribute,
-  type ExistenceAssertOptions,
   type StateAssertOptions,
   type ContentAssertOptions,
   type AssertResult
 } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
-/**
- * 断言元素存在
- */
-export const assertExistsTool = defineTool({
-  name: 'assert_exists',
-  description: '断言元素存在或不存在',
-  schema: z.object({
-    selector: z.string().optional().describe('CSS选择器'),
-    uid: z.string().optional().describe('元素UID'),
-    shouldExist: z.boolean().describe('期望存在状态，true为存在，false为不存在'),
-    timeout: z.number().optional().default(5000).describe('等待超时时间(毫秒)，默认5000ms'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { selector, uid, shouldExist, timeout } = request.params;
-
-    if (!selector && !uid) {
-      throw new Error('必须提供selector或uid参数');
-    }
-
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
-
-    try {
-      const options: ExistenceAssertOptions = {
-        selector,
-        uid,
-        shouldExist,
-        timeout
-      };
-
-      const result: AssertResult = await assertElementExists(context.currentPage, options);
-
-      // 根据断言结果返回信息
-      response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
-      response.appendResponseLine(`消息: ${result.message}`);
-      response.appendResponseLine(`期望: ${result.expected}`);
-      response.appendResponseLine(`实际: ${result.actual}`);
-      response.appendResponseLine(`时间戳: ${new Date(result.timestamp).toISOString()}`);
-
-      if (!result.passed) {
-        throw new Error(`断言失败: ${result.message}`);
-      }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`断言执行失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
-
-/**
- * 断言元素可见性
- */
-export const assertVisibleTool = defineTool({
-  name: 'assert_visible',
-  description: '断言元素可见或不可见',
-  schema: z.object({
-    uid: z.string().describe('元素UID'),
-    visible: z.boolean().describe('期望可见状态，true为可见，false为不可见'),
-  }),
-  annotations: {
-    audience: ['developers'],
-  },
-  handler: async (request, response, context) => {
-    const { uid, visible } = request.params;
-
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
-
-    try {
-      const options: StateAssertOptions = { uid, visible };
-      const result: AssertResult = await assertElementVisible(
-        context.currentPage,
-        context.elementMap,
-        options
-      );
-
-      // 根据断言结果返回信息
-      response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
-      response.appendResponseLine(`消息: ${result.message}`);
-      response.appendResponseLine(`期望: ${result.expected ? '可见' : '不可见'}`);
-      response.appendResponseLine(`实际: ${result.actual ? '可见' : '不可见'}`);
-      response.appendResponseLine(`时间戳: ${new Date(result.timestamp).toISOString()}`);
-
-      if (!result.passed) {
-        throw new Error(`断言失败: ${result.message}`);
-      }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`断言执行失败: ${errorMessage}`);
-      throw error;
-    }
-  },
-});
+// 注意: assert_exists 和 assert_visible 已合并到 assert_state
+// 使用 assert_state 工具即可验证元素的存在性和可见性
 
 /**
  * 断言元素文本内容

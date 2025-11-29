@@ -8,9 +8,9 @@ import { writeFile } from 'fs/promises';
 import { z } from 'zod';
 
 import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
-import { getPageSnapshot, type PageSnapshot } from '../tools.js';
+import { getPageSnapshot } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 
 /**

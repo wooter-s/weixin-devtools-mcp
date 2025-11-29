@@ -7,7 +7,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.ts 中的连接函数
 vi.mock('../../src/tools.js', () => ({
-  connectDevtools: vi.fn(),
   connectDevtoolsEnhanced: vi.fn(),
   DevToolsConnectionError: class DevToolsConnectionError extends Error {
     constructor(
@@ -24,14 +23,12 @@ vi.mock('../../src/tools.js', () => ({
 
 // 导入被测试的工具
 import {
-  connectDevtoolsTool,
   connectDevtoolsEnhancedTool,
   getCurrentPageTool
 } from '../../src/tools/connection.js'
 
 // 导入mock的函数用于验证
 import {
-  connectDevtools,
   connectDevtoolsEnhanced,
   DevToolsConnectionError
 } from '../../src/tools.js'
@@ -101,190 +98,6 @@ describe('connection.ts 工具测试', () => {
 
   afterEach(() => {
     vi.resetAllMocks()
-  })
-
-  describe('connectDevtoolsTool - 传统连接工具', () => {
-    it('应该成功连接到微信开发者工具', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      expect(connectDevtools).toHaveBeenCalledWith({
-        projectPath: '/path/to/project'
-      })
-
-      expect(mockContext.miniProgram).toBe(mockMiniProgram)
-      expect(mockContext.currentPage).toBe(mockCurrentPage)
-      expect(response.appendResponseLine).toHaveBeenCalledWith('成功连接到微信开发者工具 (传统模式)')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('项目路径: /path/to/project')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('当前页面: /pages/home/index')
-    })
-
-    it('应该支持可选的cliPath和port参数', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project',
-        cliPath: '/custom/cli/path',
-        port: 9420
-      })
-      const response = createMockResponse()
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      expect(connectDevtools).toHaveBeenCalledWith({
-        projectPath: '/path/to/project',
-        cliPath: '/custom/cli/path',
-        port: 9420
-      })
-    })
-
-    it('应该传递 autoAudits 参数', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project',
-        autoAudits: true
-      })
-      const response = createMockResponse()
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      expect(connectDevtools).toHaveBeenCalledWith({
-        projectPath: '/path/to/project',
-        autoAudits: true
-      })
-    })
-
-    it('应该复用已有的活跃连接', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      // 设置已有连接
-      mockContext.miniProgram = mockMiniProgram
-      mockContext.currentPage = mockCurrentPage
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      // 不应该调用 connectDevtools
-      expect(connectDevtools).not.toHaveBeenCalled()
-
-      // 应该输出复用连接的消息
-      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 检测到已有活跃连接，复用现有连接')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('项目路径: /path/to/project')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('当前页面: /pages/home/index')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('说明: 跳过重新连接，使用已建立的连接')
-    })
-
-    it('应该在连接失效时重新连接', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      // 设置已有连接，但 currentPage 会失败
-      mockContext.miniProgram = mockMiniProgram
-      mockMiniProgram.currentPage.mockRejectedValueOnce(new Error('连接已失效'))
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      // 应该重新连接
-      expect(connectDevtools).toHaveBeenCalled()
-      expect(mockContext.miniProgram).toBe(mockMiniProgram)
-      expect(mockContext.currentPage).toBe(mockCurrentPage)
-    })
-
-    it('应该自动启动console监听', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.removeAllListeners).toHaveBeenCalledWith('console')
-      expect(mockMiniProgram.removeAllListeners).toHaveBeenCalledWith('exception')
-      expect(mockMiniProgram.on).toHaveBeenCalledWith('console', expect.any(Function))
-      expect(mockMiniProgram.on).toHaveBeenCalledWith('exception', expect.any(Function))
-      expect(mockContext.consoleStorage.isMonitoring).toBe(true)
-      expect(response.appendResponseLine).toHaveBeenCalledWith('Console监听已自动启动')
-    })
-
-    it('应该自动启动网络监听', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      const connectResult = {
-        miniProgram: mockMiniProgram,
-        currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
-      }
-
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
-
-      await connectDevtoolsTool.handler(request, response, mockContext)
-
-      expect(mockMiniProgram.evaluate).toHaveBeenCalled()
-      expect(mockContext.networkStorage.isMonitoring).toBe(true)
-      expect(response.appendResponseLine).toHaveBeenCalledWith('网络监听已自动启动（增强型拦截）')
-    })
-
-    it('应该处理连接失败', async () => {
-      const request = createMockRequest({
-        projectPath: '/path/to/project'
-      })
-      const response = createMockResponse()
-
-      vi.mocked(connectDevtools).mockRejectedValue(new Error('连接失败'))
-
-      await expect(connectDevtoolsTool.handler(request, response, mockContext))
-        .rejects.toThrow('连接失败')
-
-      expect(response.appendResponseLine).toHaveBeenCalledWith('连接失败: 连接失败')
-    })
   })
 
   describe('connectDevtoolsEnhancedTool - 增强连接工具', () => {
@@ -589,42 +402,50 @@ describe('connection.ts 工具测试', () => {
   describe('错误处理测试', () => {
     it('应该处理console监听启动失败', async () => {
       const request = createMockRequest({
-        projectPath: '/path/to/project'
+        projectPath: '/path/to/project',
+        mode: 'auto'
       })
       const response = createMockResponse()
 
       const connectResult = {
         miniProgram: mockMiniProgram,
         currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
+        pagePath: '/pages/home/index',
+        connectionMode: 'launch' as const,
+        startupTime: 1234,
+        healthStatus: 'healthy' as const
       }
 
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
+      vi.mocked(connectDevtoolsEnhanced).mockResolvedValue(connectResult)
       mockMiniProgram.on.mockImplementation(() => {
         throw new Error('监听失败')
       })
 
-      await connectDevtoolsTool.handler(request, response, mockContext)
+      await connectDevtoolsEnhancedTool.handler(request, response, mockContext)
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('警告: Console监听启动失败 - 监听失败')
     })
 
     it('应该处理网络监听启动失败', async () => {
       const request = createMockRequest({
-        projectPath: '/path/to/project'
+        projectPath: '/path/to/project',
+        mode: 'auto'
       })
       const response = createMockResponse()
 
       const connectResult = {
         miniProgram: mockMiniProgram,
         currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
+        pagePath: '/pages/home/index',
+        connectionMode: 'launch' as const,
+        startupTime: 1234,
+        healthStatus: 'healthy' as const
       }
 
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
+      vi.mocked(connectDevtoolsEnhanced).mockResolvedValue(connectResult)
       mockMiniProgram.evaluate.mockRejectedValue(new Error('注入失败'))
 
-      await connectDevtoolsTool.handler(request, response, mockContext)
+      await connectDevtoolsEnhancedTool.handler(request, response, mockContext)
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('警告: 网络监听启动失败 - 注入失败')
     })
@@ -633,22 +454,26 @@ describe('connection.ts 工具测试', () => {
   describe('上下文状态管理测试', () => {
     it('应该清空elementMap在新连接时', async () => {
       const request = createMockRequest({
-        projectPath: '/path/to/project'
+        projectPath: '/path/to/project',
+        mode: 'auto'
       })
       const response = createMockResponse()
 
       const connectResult = {
         miniProgram: mockMiniProgram,
         currentPage: mockCurrentPage,
-        pagePath: '/pages/home/index'
+        pagePath: '/pages/home/index',
+        connectionMode: 'launch' as const,
+        startupTime: 1234,
+        healthStatus: 'healthy' as const
       }
 
       // 设置一些旧的元素映射
       mockContext.elementMap.set('old-uid', 'old-selector')
 
-      vi.mocked(connectDevtools).mockResolvedValue(connectResult)
+      vi.mocked(connectDevtoolsEnhanced).mockResolvedValue(connectResult)
 
-      await connectDevtoolsTool.handler(request, response, mockContext)
+      await connectDevtoolsEnhancedTool.handler(request, response, mockContext)
 
       expect(mockContext.elementMap.size).toBe(0)
     })

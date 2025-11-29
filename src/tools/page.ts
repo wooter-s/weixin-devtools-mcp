@@ -12,7 +12,7 @@ import {
   type WaitForOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 /**
  * $ 选择器工具 - 通过CSS选择器查找页面元素

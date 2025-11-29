@@ -8,7 +8,7 @@ import { resolve, isAbsolute } from 'path';
 
 import { z } from 'zod';
 
-import { defineTool, ToolCategories } from './ToolDefinition.js';
+import { defineTool } from './ToolDefinition.js';
 
 /**
  * 诊断连接问题工具
@@ -331,14 +331,14 @@ export const checkEnvironmentTool = defineTool({
   annotations: {
     audience: ['developers'],
   },
-  handler: async (request, response, context) => {
+  handler: async (_request, response, context) => {
     response.appendResponseLine('🌍 检查微信开发者工具自动化环境...');
     response.appendResponseLine('');
 
     // 检查依赖
     response.appendResponseLine('📦 依赖检查');
     try {
-      const automator = await import('miniprogram-automator');
+      await import('miniprogram-automator');
       response.appendResponseLine('✅ miniprogram-automator 模块加载成功');
     } catch (error) {
       response.appendResponseLine('❌ miniprogram-automator 模块加载失败');
@@ -613,8 +613,10 @@ export const debugConnectionFlowTool = defineTool({
             healthStatus: result.healthStatus,
           });
 
+          const miniProgramResult = result.miniProgram;
+
           // 更新上下文
-          context.miniProgram = result.miniProgram;
+          context.miniProgram = miniProgramResult;
           context.currentPage = result.currentPage;
           context.elementMap.clear();
 
@@ -628,6 +630,23 @@ export const debugConnectionFlowTool = defineTool({
           response.appendResponseLine('');
           captureStateSnapshot('连接执行完成');
 
+          // 步骤6: 初始化监听器（必须在连接成功的 try 块内执行）
+          trackStep('初始化监听器', 'running');
+          response.appendResponseLine('📡 步骤6: 初始化监听器');
+
+          // Console监听
+          try {
+            miniProgramResult.removeAllListeners('console');
+            miniProgramResult.removeAllListeners('exception');
+            context.consoleStorage.isMonitoring = true;
+            context.consoleStorage.startTime = new Date().toISOString();
+
+            response.appendResponseLine(`   ✅ Console监听器已启动`);
+          } catch (error) {
+            trackStep('初始化监听器', 'warning', null, 'Console监听器启动失败');
+            response.appendResponseLine(`   ⚠️ Console监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
+          }
+
         } catch (error) {
           const connectionDuration = Date.now() - connectionStartTime;
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -637,23 +656,6 @@ export const debugConnectionFlowTool = defineTool({
           response.appendResponseLine(`      错误: ${errorMessage}`);
           response.appendResponseLine('');
           throw error;
-        }
-
-        // 步骤6: 初始化监听器
-        trackStep('初始化监听器', 'running');
-        response.appendResponseLine('📡 步骤6: 初始化监听器');
-
-        // Console监听
-        try {
-          context.miniProgram.removeAllListeners('console');
-          context.miniProgram.removeAllListeners('exception');
-          context.consoleStorage.isMonitoring = true;
-          context.consoleStorage.startTime = new Date().toISOString();
-
-          response.appendResponseLine(`   ✅ Console监听器已启动`);
-        } catch (error) {
-          trackStep('初始化监听器', 'warning', null, 'Console监听器启动失败');
-          response.appendResponseLine(`   ⚠️ Console监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
         }
 
         // 网络监听
