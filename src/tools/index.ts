@@ -34,7 +34,11 @@ import {
   switchTabTool,
   reLaunchTool
 } from './navigate.js';
-import { getNetworkRequestsTool } from './network.js';
+import {
+  getNetworkRequestsTool,
+  stopNetworkMonitoringTool,
+  clearNetworkRequestsTool
+} from './network.js';
 import { querySelectorTool, waitForTool } from './page.js';
 import { screenshotTool } from './screenshot.js';
 import { evaluateScript } from './script.js';
@@ -87,8 +91,10 @@ export const allTools: ToolDefinition[] = [
   listConsoleMessagesTool,          // 列表查询（简短格式）
   getConsoleMessageTool,            // 详情查询（完整信息）
 
-  // 网络监控工具（1个）
+  // 网络监控工具（3个）
   getNetworkRequestsTool,           // 获取网络请求记录
+  stopNetworkMonitoringTool,        // 停止网络监听
+  clearNetworkRequestsTool,         // 清空网络请求记录
 
   // 诊断工具（4个）
   diagnoseConnectionTool,

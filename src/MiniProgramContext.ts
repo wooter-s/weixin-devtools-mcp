@@ -24,7 +24,7 @@ import type {
   ExceptionMessage,
   ConsoleMessageType,
 } from './tools/ToolDefinition.js';
-import type { ElementMapInfo } from './tools.js';
+import { getPageSnapshot, type ElementMapInfo, type PageSnapshot } from './tools.js';
 
 /**
  * MiniProgramContext 配置选项
@@ -34,6 +34,22 @@ export interface MiniProgramContextOptions {
   maxNavigations?: number;
   /** 是否启用详细日志 */
   verbose?: boolean;
+  /** 快照缓存 TTL（毫秒），默认 5000ms */
+  snapshotCacheTtl?: number;
+}
+
+/**
+ * 快照缓存结构
+ */
+interface SnapshotCache {
+  /** 缓存的快照数据 */
+  snapshot: PageSnapshot | null;
+  /** 元素映射 */
+  elementMap: Map<string, ElementMapInfo> | null;
+  /** 缓存时的页面路径 */
+  path: string;
+  /** 缓存时间戳 */
+  timestamp: number;
 }
 
 /**
@@ -42,6 +58,7 @@ export interface MiniProgramContextOptions {
 const DEFAULT_OPTIONS: Required<MiniProgramContextOptions> = {
   maxNavigations: 3,
   verbose: false,
+  snapshotCacheTtl: 5000,
 };
 
 /**
@@ -64,6 +81,14 @@ export class MiniProgramContext implements ToolContext {
   // 使用 Collector 模式管理数据
   #consoleCollector: ConsoleCollector;
   #networkCollector: NetworkCollector;
+
+  // 快照缓存
+  #snapshotCache: SnapshotCache = {
+    snapshot: null,
+    elementMap: null,
+    path: '',
+    timestamp: 0,
+  };
 
   /**
    * 私有构造函数，使用工厂方法创建实例
@@ -152,6 +177,7 @@ export class MiniProgramContext implements ToolContext {
     this.#consoleCollector.clear();
     this.#consoleCollector.stopMonitoring();
     this.#networkCollector.reset();
+    this.invalidateSnapshotCache();
   }
 
   // ============ 页面相关方法 ============
@@ -262,6 +288,116 @@ export class MiniProgramContext implements ToolContext {
     }
 
     return element;
+  }
+
+  // ============ 快照缓存相关方法 ============
+
+  /**
+   * 获取页面快照（带缓存）
+   *
+   * 缓存策略：
+   * - 在 TTL 内返回缓存的快照（避免重复调用 getPageSnapshot）
+   * - 页面路径变化时自动刷新缓存
+   * - 支持强制刷新
+   *
+   * @param options.forceRefresh 强制刷新缓存
+   * @param options.ttl 覆盖默认 TTL（毫秒）
+   * @returns 页面快照和元素映射
+   */
+  async getPageSnapshotCached(options?: {
+    forceRefresh?: boolean;
+    ttl?: number;
+  }): Promise<{ snapshot: PageSnapshot; elementMap: Map<string, ElementMapInfo> }> {
+    const { forceRefresh = false, ttl = this.#options.snapshotCacheTtl } = options || {};
+
+    const page = this.getCurrentPage();
+    const currentPath = await page.path;
+    const now = Date.now();
+
+    // 检查缓存有效性
+    const cacheValid =
+      !forceRefresh &&
+      this.#snapshotCache.snapshot !== null &&
+      this.#snapshotCache.elementMap !== null &&
+      this.#snapshotCache.path === currentPath &&
+      (now - this.#snapshotCache.timestamp) < ttl;
+
+    if (cacheValid) {
+      if (this.#options.verbose) {
+        console.log(`[SnapshotCache] 缓存命中，路径: ${currentPath}，缓存时长: ${now - this.#snapshotCache.timestamp}ms`);
+      }
+      return {
+        snapshot: this.#snapshotCache.snapshot!,
+        elementMap: this.#snapshotCache.elementMap!,
+      };
+    }
+
+    // 缓存未命中，获取新快照
+    if (this.#options.verbose) {
+      const reason = forceRefresh
+        ? '强制刷新'
+        : this.#snapshotCache.snapshot === null
+          ? '首次获取'
+          : this.#snapshotCache.path !== currentPath
+            ? '页面路径变化'
+            : 'TTL 过期';
+      console.log(`[SnapshotCache] 缓存未命中（${reason}），获取新快照...`);
+    }
+
+    const { snapshot, elementMap } = await getPageSnapshot(page);
+
+    // 更新缓存
+    this.#snapshotCache = {
+      snapshot,
+      elementMap,
+      path: currentPath,
+      timestamp: now,
+    };
+
+    // 同步更新 elementMap
+    this.#elementMap = elementMap;
+
+    if (this.#options.verbose) {
+      console.log(`[SnapshotCache] 缓存已更新，元素数量: ${snapshot.elements.length}`);
+    }
+
+    return { snapshot, elementMap };
+  }
+
+  /**
+   * 使缓存失效
+   * 在导航后或 DOM 发生变化时调用
+   */
+  invalidateSnapshotCache(): void {
+    this.#snapshotCache = {
+      snapshot: null,
+      elementMap: null,
+      path: '',
+      timestamp: 0,
+    };
+    if (this.#options.verbose) {
+      console.log('[SnapshotCache] 缓存已失效');
+    }
+  }
+
+  /**
+   * 获取缓存状态信息（用于调试）
+   */
+  getSnapshotCacheStatus(): {
+    isCached: boolean;
+    path: string;
+    age: number;
+    elementCount: number;
+    ttl: number;
+  } {
+    const now = Date.now();
+    return {
+      isCached: this.#snapshotCache.snapshot !== null,
+      path: this.#snapshotCache.path,
+      age: this.#snapshotCache.timestamp > 0 ? now - this.#snapshotCache.timestamp : -1,
+      elementCount: this.#snapshotCache.snapshot?.elements.length ?? 0,
+      ttl: this.#options.snapshotCacheTtl,
+    };
   }
 
   // ============ Console Collector 相关方法 ============
@@ -611,7 +747,10 @@ export class MiniProgramContext implements ToolContext {
     consoleMessageCount: number;
     networkMonitoring: boolean;
     networkRequestCount: number;
+    snapshotCached: boolean;
+    snapshotCacheAge: number;
   } {
+    const now = Date.now();
     return {
       connected: this.isConnected(),
       hasCurrentPage: this.#currentPage !== null,
@@ -620,6 +759,8 @@ export class MiniProgramContext implements ToolContext {
       consoleMessageCount: this.#consoleCollector.getTotalCount(),
       networkMonitoring: this.#networkCollector.isMonitoring(),
       networkRequestCount: this.#networkCollector.getCurrentCount(),
+      snapshotCached: this.#snapshotCache.snapshot !== null,
+      snapshotCacheAge: this.#snapshotCache.timestamp > 0 ? now - this.#snapshotCache.timestamp : -1,
     };
   }
 }

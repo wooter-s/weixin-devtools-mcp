@@ -135,12 +135,13 @@ export const listConsoleMessagesTool = defineTool({
       allMessages = allMessages.filter(msg => normalizedTypes.has(msg.type as any));
     }
 
-    // 按时间排序（最新的在前）
-    allMessages.sort((a, b) => {
-      const timeA = new Date(a.timestamp || 0).getTime();
-      const timeB = new Date(b.timestamp || 0).getTime();
-      return timeB - timeA;
-    });
+    // 按时间排序（最新的在前）- 预处理时间戳避免重复 Date 创建
+    const messagesWithTime = allMessages.map(msg => ({
+      msg,
+      time: new Date(msg.timestamp || 0).getTime(),
+    }));
+    messagesWithTime.sort((a, b) => b.time - a.time);
+    allMessages = messagesWithTime.map(item => item.msg);
 
     // 分页
     const total = allMessages.length;

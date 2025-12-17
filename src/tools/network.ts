@@ -206,5 +206,126 @@ export const getNetworkRequestsTool = defineTool({
   },
 });
 
-// 注意: diagnose_interceptor 和 clear_network_requests 已移除
-// diagnose_interceptor 功能可通过 diagnose_connection 和 check_environment 替代
+/**
+ * 停止网络监听工具
+ */
+export const stopNetworkMonitoringTool = defineTool({
+  name: 'stop_network_monitoring',
+  description: '停止网络请求监听，禁用拦截器',
+  schema: z.object({
+    clearLogs: z.boolean().optional().default(false).describe('是否同时清空已收集的日志'),
+  }),
+  annotations: {
+    audience: ['developers'],
+  },
+  handler: async (request, response, context) => {
+    const { clearLogs } = request.params;
+
+    if (!context.miniProgram) {
+      throw new Error('请先连接到微信开发者工具');
+    }
+
+    if (!context.networkStorage) {
+      throw new Error('网络存储未初始化');
+    }
+
+    try {
+      // 设置禁用标志
+      await context.miniProgram.evaluate(function() {
+        // @ts-ignore - wx is available in WeChat miniprogram environment
+        const wxObj = typeof wx !== 'undefined' ? wx : null;
+        if (wxObj) {
+          wxObj.__networkInterceptorsDisabled = true;
+        }
+      });
+
+      // 更新本地状态
+      context.networkStorage.isMonitoring = false;
+
+      let clearedCount = 0;
+      if (clearLogs) {
+        // 清空远程日志
+        clearedCount = await context.miniProgram.evaluate(function() {
+          // @ts-ignore
+          const wxObj = typeof wx !== 'undefined' ? wx : null;
+          if (wxObj && wxObj.__networkLogs) {
+            const count = wxObj.__networkLogs.length;
+            wxObj.__networkLogs = [];
+            return count;
+          }
+          return 0;
+        });
+      }
+
+      response.appendResponseLine('=== 网络监听已停止 ===');
+      response.appendResponseLine(`监听状态: 已停止`);
+      if (clearLogs) {
+        response.appendResponseLine(`已清空日志: ${clearedCount} 条`);
+      }
+      response.appendResponseLine('');
+      response.appendResponseLine('💡 提示: 使用 connect_devtools_enhanced 重新连接可恢复监听');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`停止网络监听失败: ${errorMessage}`);
+    }
+  },
+});
+
+/**
+ * 清空网络请求记录工具
+ */
+export const clearNetworkRequestsTool = defineTool({
+  name: 'clear_network_requests',
+  description: '清空已收集的网络请求记录',
+  schema: z.object({
+    clearRemote: z.boolean().optional().default(true).describe('是否同时清空小程序端的日志'),
+  }),
+  annotations: {
+    audience: ['developers'],
+  },
+  handler: async (request, response, context) => {
+    const { clearRemote } = request.params;
+
+    if (!context.miniProgram) {
+      throw new Error('请先连接到微信开发者工具');
+    }
+
+    if (!context.networkStorage) {
+      throw new Error('网络存储未初始化');
+    }
+
+    try {
+      // 记录当前数量
+      const localCountBefore = context.networkStorage.requests?.length || 0;
+
+      // 清空本地存储
+      context.networkStorage.requests = [];
+
+      // 清空远程日志
+      let remoteCount = 0;
+      if (clearRemote) {
+        remoteCount = await context.miniProgram.evaluate(function() {
+          // @ts-ignore
+          const wxObj = typeof wx !== 'undefined' ? wx : null;
+          if (wxObj && wxObj.__networkLogs) {
+            const count = wxObj.__networkLogs.length;
+            wxObj.__networkLogs = [];
+            return count;
+          }
+          return 0;
+        });
+      }
+
+      response.appendResponseLine('=== 网络请求记录已清空 ===');
+      response.appendResponseLine(`本地清空: ${localCountBefore} 条`);
+      if (clearRemote) {
+        response.appendResponseLine(`远程清空: ${remoteCount} 条`);
+      }
+      response.appendResponseLine('');
+      response.appendResponseLine('💡 提示: 网络监听仍在运行，新的请求会继续被收集');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`清空网络请求失败: ${errorMessage}`);
+    }
+  },
+});

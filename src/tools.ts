@@ -1127,22 +1127,64 @@ export interface ElementMapInfo {
 }
 
 /**
+ * 生成简单的文本哈希（用于增强 UID 唯一性）
+ */
+function simpleTextHash(text: string): string {
+  if (!text || text.length === 0) return '';
+  // 取文本的前 8 个字符，过滤特殊字符
+  const sanitized = text.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(0, 8);
+  if (sanitized.length === 0) return '';
+  return `_${sanitized}`;
+}
+
+/**
  * 生成元素的唯一标识符 (uid)
+ *
+ * 优先级顺序（稳定性从高到低）：
+ * 1. data-testid（专门用于测试，最稳定）
+ * 2. id 属性
+ * 3. data-id（自定义数据属性）
+ * 4. class + 文本哈希（中等稳定性）
+ * 5. class:eq(index)
+ * 6. nth-child（兜底）
  */
 export async function generateElementUid(element: any, index: number): Promise<string> {
   try {
     const tagName = element.tagName;
-    const className = await element.attribute('class').catch(() => '');
-    const id = await element.attribute('id').catch(() => '');
 
-    console.log(`[generateElementUid] tagName=${tagName}, className="${className}", id="${id}", index=${index}`);
+    // 并行获取所有可能的标识属性
+    const [className, id, testId, dataId, text] = await Promise.all([
+      element.attribute('class').catch(() => ''),
+      element.attribute('id').catch(() => ''),
+      element.attribute('data-testid').catch(() => ''),
+      element.attribute('data-id').catch(() => ''),
+      element.text().catch(() => '')
+    ]);
+
+    console.log(`[generateElementUid] tagName=${tagName}, id="${id}", testId="${testId}", dataId="${dataId}", className="${className}", index=${index}`);
 
     let selector = tagName;
-    if (id) {
+
+    // 优先级1: data-testid（最稳定）
+    if (testId) {
+      selector += `[data-testid="${testId}"]`;
+    }
+    // 优先级2: id 属性
+    else if (id) {
       selector += `#${id}`;
-    } else if (className) {
-      selector += `.${className.split(' ')[0]}`;
-    } else {
+    }
+    // 优先级3: data-id
+    else if (dataId) {
+      selector += `[data-id="${dataId}"]`;
+    }
+    // 优先级4: class + 文本哈希
+    else if (className) {
+      const firstClass = className.split(' ')[0];
+      const textHash = simpleTextHash(text);
+      selector += `.${firstClass}${textHash}`;
+    }
+    // 优先级5: nth-child（兜底）
+    else {
       selector += `:nth-child(${index + 1})`;
     }
 
@@ -1253,11 +1295,14 @@ export async function getPageSnapshot(page: any): Promise<{
       try {
         // 🚀 优化点1: 使用 Promise.allSettled 并行获取所有元素属性
         // 减少API调用往返次数：从 6次串行 → 1次并行
+        // 新增 data-testid 和 data-id 属性用于增强 UID 稳定性
         const [
           tagNameResult,
           textResult,
           classResult,
           idResult,
+          testIdResult,
+          dataIdResult,
           sizeResult,
           offsetResult
         ] = await Promise.allSettled([
@@ -1265,6 +1310,8 @@ export async function getPageSnapshot(page: any): Promise<{
           element.text().catch(() => ''),
           element.attribute('class').catch(() => ''),
           element.attribute('id').catch(() => ''),
+          element.attribute('data-testid').catch(() => ''),
+          element.attribute('data-id').catch(() => ''),
           element.size().catch(() => null),
           element.offset().catch(() => null)
         ]);
@@ -1274,16 +1321,30 @@ export async function getPageSnapshot(page: any): Promise<{
         const text = textResult.status === 'fulfilled' ? textResult.value : '';
         const className = classResult.status === 'fulfilled' ? classResult.value : '';
         const id = idResult.status === 'fulfilled' ? idResult.value : '';
+        const testId = testIdResult.status === 'fulfilled' ? testIdResult.value : '';
+        const dataId = dataIdResult.status === 'fulfilled' ? dataIdResult.value : '';
         const size = sizeResult.status === 'fulfilled' ? sizeResult.value : null;
         const offset = offsetResult.status === 'fulfilled' ? offsetResult.value : null;
 
-        // 生成UID（使用已获取的 tagName, className, id，避免重复查询）
+        // 生成 UID（增强版优先级顺序）
+        // 优先级：data-testid > id > data-id > class+文本哈希 > nth-child
         let selector = tagName;
-        if (id) {
+        if (testId) {
+          // 优先级1: data-testid（专门用于测试，最稳定）
+          selector += `[data-testid="${testId}"]`;
+        } else if (id) {
+          // 优先级2: id 属性
           selector += `#${id}`;
+        } else if (dataId) {
+          // 优先级3: data-id
+          selector += `[data-id="${dataId}"]`;
         } else if (className) {
-          selector += `.${className.split(' ')[0]}`;
+          // 优先级4: class + 文本哈希（中等稳定性）
+          const firstClass = className.split(' ')[0];
+          const textHash = simpleTextHash(text);
+          selector += `.${firstClass}${textHash}`;
         } else {
+          // 优先级5: nth-child（兜底）
           selector += `:nth-child(${i + 1})`;
         }
 
@@ -1315,10 +1376,14 @@ export async function getPageSnapshot(page: any): Promise<{
 
         elements.push(snapshot);
 
-        // 生成可查询的基础选择器
+        // 生成可查询的基础选择器（与 UID 优先级一致）
         let baseSelector = tagName;
-        if (id) {
+        if (testId) {
+          baseSelector = `${tagName}[data-testid="${testId}"]`;
+        } else if (id) {
           baseSelector = `${tagName}#${id}`;
+        } else if (dataId) {
+          baseSelector = `${tagName}[data-id="${dataId}"]`;
         } else if (className) {
           baseSelector = `${tagName}.${className.split(' ')[0]}`;
         }

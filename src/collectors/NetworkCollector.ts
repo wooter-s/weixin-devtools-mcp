@@ -91,8 +91,83 @@ export class NetworkCollector extends Collector<NetworkRequest> {
   /** 存储原始的 wx 网络方法 */
   #originalMethods: OriginalMethods = {};
 
+  /** 上次同步时间戳 */
+  #lastSyncTimestamp = 0;
+
+  /** 同步间隔（毫秒） */
+  #syncIntervalMs = 5000;
+
+  /** MiniProgram 引用（用于同步） */
+  #miniProgram: { evaluate: (fn: () => unknown) => Promise<unknown> } | null = null;
+
   constructor(options?: CollectorOptions) {
     super(options);
+  }
+
+  // ============ MiniProgram 引用管理 ============
+
+  /**
+   * 设置 MiniProgram 引用（用于远程同步）
+   */
+  setMiniProgram(miniProgram: { evaluate: (fn: () => unknown) => Promise<unknown> } | null): void {
+    this.#miniProgram = miniProgram;
+  }
+
+  /**
+   * 从远程同步数据（带节流）
+   * @param force 是否强制同步（跳过节流）
+   * @returns 同步的请求数量
+   */
+  async syncFromRemote(force = false): Promise<number> {
+    const now = Date.now();
+
+    // 节流：非强制且未到同步时间
+    if (!force && now - this.#lastSyncTimestamp < this.#syncIntervalMs) {
+      return 0;
+    }
+
+    if (!this.#miniProgram) {
+      return 0;
+    }
+
+    try {
+      // 从小程序环境拉取并清空远程日志
+      const remoteLogs = await this.#miniProgram.evaluate(function() {
+        // @ts-ignore
+        const wxObj = typeof wx !== 'undefined' ? wx : null;
+        if (!wxObj || !wxObj.__networkLogs) return [];
+
+        // 返回并清空（避免重复处理）
+        // @ts-ignore
+        const logs = [...wxObj.__networkLogs];
+        // @ts-ignore
+        wxObj.__networkLogs = [];
+        return logs;
+      }) as NetworkRequest[];
+
+      this.#lastSyncTimestamp = now;
+
+      // 批量添加到本地存储
+      let addedCount = 0;
+      for (const log of remoteLogs) {
+        if (log && typeof log === 'object' && log.url) {
+          this.addRequest(log);
+          addedCount++;
+        }
+      }
+
+      return addedCount;
+    } catch (error) {
+      console.warn('[NetworkCollector] 同步失败:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * 设置同步间隔
+   */
+  setSyncInterval(intervalMs: number): void {
+    this.#syncIntervalMs = Math.max(1000, intervalMs); // 最少 1 秒
   }
 
   // ============ 原始方法管理 ============

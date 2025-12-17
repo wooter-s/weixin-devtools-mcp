@@ -65,11 +65,11 @@ describe('MCP Protocol Tests', () => {
   });
 
   describe('Tools Registration', () => {
-    it('应该注册所有 25 个工具', async () => {
+    it('应该注册所有 27 个工具', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
 
-        expect(tools).toHaveLength(25);
+        expect(tools).toHaveLength(27);
 
         // 验证工具名称格式（支持 snake_case、camelCase 和特殊字符如 $）
         tools.forEach(tool => {

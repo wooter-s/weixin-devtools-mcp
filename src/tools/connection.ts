@@ -164,6 +164,24 @@ export const connectDevtoolsEnhancedTool = defineTool({
             if (typeof wx === 'undefined' || wx.__networkInterceptorsInstalled) return;
             // @ts-ignore
             wx.__networkLogs = wx.__networkLogs || [];
+            // @ts-ignore - 设置存储上限（环形缓冲区）
+            wx.__networkLogsLimit = 1000;
+            // @ts-ignore - 重置禁用标志
+            wx.__networkInterceptorsDisabled = false;
+
+            // 辅助函数：添加日志并自动裁剪
+            // @ts-ignore
+            wx.__pushNetworkLog = function(log: any) {
+              // @ts-ignore - 检查是否已禁用
+              if (wx.__networkInterceptorsDisabled) return;
+              // @ts-ignore
+              wx.__networkLogs.push(log);
+              // @ts-ignore - 环形缓冲区：超出限制时移除最旧的
+              while (wx.__networkLogs.length > wx.__networkLogsLimit) {
+                // @ts-ignore
+                wx.__networkLogs.shift();
+              }
+            };
 
             // Mpx 拦截器已在 tools.ts 的 connectDevtools() 中统一注入
             // 此处仅保留 wx.request 回退拦截器（用于非 Mpx 框架或直接调用 wx API 的场景）
@@ -181,20 +199,24 @@ export const connectDevtoolsEnhancedTool = defineTool({
             Object.defineProperty(wx, 'request', {
               configurable: true,
               value: function(options: any) {
+                // @ts-ignore - 检查是否已禁用
+                if (wx.__networkInterceptorsDisabled) {
+                  return _originalRequest.call(this, options);
+                }
                 const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
                 const start = Date.now();
                 const origSuccess = options.success;
                 const origFail = options.fail;
                 options.success = function(res: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'request', url: options.url, method: options.method || 'GET',
+                  wx.__pushNetworkLog({ id, type: 'request', url: options.url, method: options.method || 'GET',
                     headers: options.header, data: options.data, statusCode: res.statusCode,
                     response: res.data, duration: Date.now() - start, timestamp: new Date().toISOString(), success: true });
                   if (origSuccess) origSuccess.call(this, res);
                 };
                 options.fail = function(err: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'request', url: options.url, method: options.method || 'GET',
+                  wx.__pushNetworkLog({ id, type: 'request', url: options.url, method: options.method || 'GET',
                     headers: options.header, data: options.data, error: err.errMsg || String(err),
                     duration: Date.now() - start, timestamp: new Date().toISOString(), success: false });
                   if (origFail) origFail.call(this, err);
@@ -209,13 +231,17 @@ export const connectDevtoolsEnhancedTool = defineTool({
             Object.defineProperty(wx, 'uploadFile', {
               configurable: true,
               value: function(options: any) {
+                // @ts-ignore - 检查是否已禁用
+                if (wx.__networkInterceptorsDisabled) {
+                  return _originalUploadFile.call(this, options);
+                }
                 const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
                 const start = Date.now();
                 const origSuccess = options.success;
                 const origFail = options.fail;
                 options.success = function(res: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'uploadFile', url: options.url, headers: options.header,
+                  wx.__pushNetworkLog({ id, type: 'uploadFile', url: options.url, headers: options.header,
                     data: { filePath: options.filePath, name: options.name, formData: options.formData },
                     statusCode: res.statusCode, response: res.data, duration: Date.now() - start,
                     timestamp: new Date().toISOString(), success: true });
@@ -223,7 +249,7 @@ export const connectDevtoolsEnhancedTool = defineTool({
                 };
                 options.fail = function(err: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'uploadFile', url: options.url, headers: options.header,
+                  wx.__pushNetworkLog({ id, type: 'uploadFile', url: options.url, headers: options.header,
                     data: { filePath: options.filePath, name: options.name, formData: options.formData },
                     error: err.errMsg || String(err), duration: Date.now() - start,
                     timestamp: new Date().toISOString(), success: false });
@@ -239,20 +265,24 @@ export const connectDevtoolsEnhancedTool = defineTool({
             Object.defineProperty(wx, 'downloadFile', {
               configurable: true,
               value: function(options: any) {
+                // @ts-ignore - 检查是否已禁用
+                if (wx.__networkInterceptorsDisabled) {
+                  return _originalDownloadFile.call(this, options);
+                }
                 const id = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
                 const start = Date.now();
                 const origSuccess = options.success;
                 const origFail = options.fail;
                 options.success = function(res: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'downloadFile', url: options.url, headers: options.header,
+                  wx.__pushNetworkLog({ id, type: 'downloadFile', url: options.url, headers: options.header,
                     statusCode: res.statusCode, response: { tempFilePath: res.tempFilePath, filePath: res.filePath },
                     duration: Date.now() - start, timestamp: new Date().toISOString(), success: true });
                   if (origSuccess) origSuccess.call(this, res);
                 };
                 options.fail = function(err: any) {
                   // @ts-ignore
-                  wx.__networkLogs.push({ id, type: 'downloadFile', url: options.url, headers: options.header,
+                  wx.__pushNetworkLog({ id, type: 'downloadFile', url: options.url, headers: options.header,
                     error: err.errMsg || String(err), duration: Date.now() - start,
                     timestamp: new Date().toISOString(), success: false });
                   if (origFail) origFail.call(this, err);

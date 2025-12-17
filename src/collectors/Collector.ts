@@ -26,6 +26,8 @@ export interface NavigationSession<T> {
 export interface CollectorOptions {
   /** 最大保留的导航会话数 */
   maxNavigations?: number;
+  /** 单个会话最大条目数（环形缓冲区），默认 1000 */
+  maxItemsPerSession?: number;
   /** 是否启用详细日志 */
   verbose?: boolean;
 }
@@ -49,6 +51,7 @@ export interface QueryOptions<T> {
  */
 const DEFAULT_OPTIONS: Required<CollectorOptions> = {
   maxNavigations: 3,
+  maxItemsPerSession: 1000,
   verbose: false,
 };
 
@@ -122,6 +125,7 @@ export class Collector<T> {
 
   /**
    * 添加数据项（自动分配 Stable ID）
+   * 使用环形缓冲区，超出 maxItemsPerSession 时移除最旧的条目
    * @returns 分配的 ID
    */
   collect(item: T): number {
@@ -131,13 +135,28 @@ export class Collector<T> {
 
     // 添加到当前导航会话
     const currentSession = this.#navigations[0];
+
+    // 环形缓冲区：超出限制时移除最旧的条目
+    if (currentSession.items.length >= this.#options.maxItemsPerSession) {
+      const removed = currentSession.items.shift();
+      if (removed) {
+        const removedId = this.getIdForItem(removed);
+        if (removedId !== -1) {
+          this.#idMap.delete(removedId);
+        }
+      }
+      if (this.#options.verbose) {
+        console.log(`[Collector] 环形缓冲区已满，移除最旧条目`);
+      }
+    }
+
     currentSession.items.push(withId);
 
     // 添加到 ID 映射
     this.#idMap.set(id, withId);
 
     if (this.#options.verbose) {
-      console.log(`[Collector] 收集数据项，ID: ${id}`);
+      console.log(`[Collector] 收集数据项，ID: ${id}，当前会话条目数: ${currentSession.items.length}`);
     }
 
     return id;
