@@ -15,8 +15,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import { MiniProgramContext } from './MiniProgramContext.js';
 import type {
-  ToolContext,
   ToolRequest,
   ToolDefinition
 } from './tools/index.js';
@@ -25,75 +25,10 @@ import {
   SimpleToolResponse
 } from './tools/index.js';
 
-
 /**
- * 通过 UID 获取元素的实现
+ * 全局上下文状态 - 使用 MiniProgramContext 类管理
  */
-async function getElementByUid(uid: string): Promise<any> {
-  // 1. 检查页面是否已连接
-  if (!globalContext.currentPage) {
-    throw new Error('请先连接微信开发者工具并获取当前页面');
-  }
-
-  // 2. 检查 UID 是否存在于 elementMap
-  const mapInfo = globalContext.elementMap.get(uid);
-  if (!mapInfo) {
-    throw new Error(
-      `找不到 UID: ${uid}\n` +
-      `请先调用 get_page_snapshot 工具获取页面快照`
-    );
-  }
-
-  console.log(`[getElementByUid] UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
-
-  // 3. 使用选择器获取所有匹配元素
-  const elements = await globalContext.currentPage.$$(mapInfo.selector);
-  if (!elements || elements.length === 0) {
-    throw new Error(
-      `选择器 "${mapInfo.selector}" 未找到任何元素\n` +
-      `页面可能已发生变化，请重新获取快照`
-    );
-  }
-
-  // 4. 检查索引是否有效
-  if (mapInfo.index >= elements.length) {
-    throw new Error(
-      `元素索引 ${mapInfo.index} 超出范围（选择器 "${mapInfo.selector}" 共找到 ${elements.length} 个元素）\n` +
-      `页面可能已发生变化，请重新获取快照`
-    );
-  }
-
-  // 5. 返回目标元素
-  const element = elements[mapInfo.index];
-  if (!element) {
-    throw new Error(`无法获取索引 ${mapInfo.index} 的元素`);
-  }
-
-  return element;
-}
-
-/**
- * 全局上下文状态
- */
-const globalContext: ToolContext = {
-  miniProgram: null,
-  currentPage: null,
-  elementMap: new Map(),
-  consoleStorage: {
-    navigations: [{ messages: [], exceptions: [], timestamp: new Date().toISOString() }],
-    messageIdMap: new Map(),
-    isMonitoring: false,
-    startTime: null,
-    maxNavigations: 3,
-  },
-  networkStorage: {
-    requests: [],
-    isMonitoring: false,
-    startTime: null,
-    originalMethods: {},
-  },
-  getElementByUid,
-};
+const globalContext = MiniProgramContext.create();
 
 /**
  * 创建 MCP 服务器
@@ -138,7 +73,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   });
 
   // 如果已连接，提供页面快照资源
-  if (globalContext.miniProgram && globalContext.currentPage) {
+  if (globalContext.isConnected() && globalContext.currentPage) {
     resources.push({
       uri: "weixin://page/snapshot",
       mimeType: "application/json",
@@ -161,11 +96,17 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const resourcePath = `${url.host}${url.pathname}`;
 
   if (resourcePath === "connection/status") {
+    // 使用 MiniProgramContext 的 getStatusSummary 方法
+    const summary = globalContext.getStatusSummary();
     const status = {
-      connected: !!globalContext.miniProgram,
-      hasCurrentPage: !!globalContext.currentPage,
+      connected: summary.connected,
+      hasCurrentPage: summary.hasCurrentPage,
       pagePath: globalContext.currentPage ? await globalContext.currentPage.path : null,
-      elementCount: globalContext.elementMap.size
+      elementCount: summary.elementCount,
+      consoleMonitoring: summary.consoleMonitoring,
+      consoleMessageCount: summary.consoleMessageCount,
+      networkMonitoring: summary.networkMonitoring,
+      networkRequestCount: summary.networkRequestCount
     };
 
     return {
@@ -186,7 +127,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       // 这里可以实现获取页面快照的逻辑
       const snapshot = {
         path: await globalContext.currentPage.path,
-        elementCount: globalContext.elementMap.size,
+        elementCount: globalContext.getElementMap().size,
         timestamp: new Date().toISOString()
       };
 
