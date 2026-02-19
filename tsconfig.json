@@ -23,9 +23,9 @@
     "noImplicitThis": true,
     "alwaysStrict": true,
 
-    // 额外严格检查（渐进式启用）
-    "noUnusedLocals": false,  // TODO: 逐步修复后启用
-    "noUnusedParameters": false,  // TODO: 逐步修复后启用
+    // 额外严格检查
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": false,  // TODO: 逐步修复后启用

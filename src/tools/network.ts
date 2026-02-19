@@ -2,11 +2,12 @@
  * 网络请求监听工具
  * 通过拦截 wx.request, wx.uploadFile, wx.downloadFile 实现网络监控
  */
+/* eslint-disable @typescript-eslint/ban-ts-comment -- wx 运行时对象在 evaluate 上下文中动态注入，需保持现有注释抑制。 */
 
 import { z } from 'zod';
 
 import type { NetworkRequest } from './ToolDefinition.js';
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 // 注意: start_network_monitoring 和 stop_network_monitoring 已移除
 // 网络监听在连接时自动启动，无需手动管理
@@ -25,6 +26,7 @@ export const getNetworkRequestsTool = defineTool({
     since: z.string().optional().describe('获取指定时间之后的记录，格式：ISO 8601'),
   }),
   annotations: {
+    category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -216,6 +218,7 @@ export const stopNetworkMonitoringTool = defineTool({
     clearLogs: z.boolean().optional().default(false).describe('是否同时清空已收集的日志'),
   }),
   annotations: {
+    category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -263,7 +266,7 @@ export const stopNetworkMonitoringTool = defineTool({
         response.appendResponseLine(`已清空日志: ${clearedCount} 条`);
       }
       response.appendResponseLine('');
-      response.appendResponseLine('💡 提示: 使用 connect_devtools_enhanced 重新连接可恢复监听');
+      response.appendResponseLine('💡 提示: 使用 reconnect_devtools 重新连接可恢复监听');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`停止网络监听失败: ${errorMessage}`);
@@ -281,6 +284,7 @@ export const clearNetworkRequestsTool = defineTool({
     clearRemote: z.boolean().optional().default(true).describe('是否同时清空小程序端的日志'),
   }),
   annotations: {
+    category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

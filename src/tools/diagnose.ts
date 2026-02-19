@@ -8,7 +8,7 @@ import { resolve, isAbsolute } from 'path';
 
 import { z } from 'zod';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 /**
  * 诊断连接问题工具
@@ -21,6 +21,7 @@ export const diagnoseConnectionTool = defineTool({
     verbose: z.boolean().optional().default(false).describe('是否输出详细诊断信息'),
   }),
   annotations: {
+    category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -112,7 +113,7 @@ export const diagnoseConnectionTool = defineTool({
         try {
           const pagePath = await context.currentPage.path;
           response.appendResponseLine(`   当前页面: ${pagePath}`);
-        } catch (error) {
+        } catch {
           response.appendResponseLine('⚠️ 获取当前页面信息失败');
         }
       } else {
@@ -143,7 +144,7 @@ export const diagnoseConnectionTool = defineTool({
       response.appendResponseLine('✅ 项目配置检查通过，可以尝试连接');
       response.appendResponseLine('');
       response.appendResponseLine('💡 建议的连接命令:');
-      response.appendResponseLine(`connect_devtools(projectPath: "${resolvedPath}")`);
+      response.appendResponseLine(`connect_devtools(projectPath: "${resolvedPath}", strategy: "auto")`);
     } else {
       response.appendResponseLine('❌ 发现配置问题，请根据上述建议修复后重试');
     }
@@ -170,6 +171,7 @@ export const debugPageElementsTool = defineTool({
     customSelector: z.string().optional().describe('自定义选择器进行测试'),
   }),
   annotations: {
+    category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -287,7 +289,7 @@ export const debugPageElementsTool = defineTool({
                 const tagName = element.tagName || 'unknown';
                 const text = await element.text().catch(() => '');
                 response.appendResponseLine(`     [${i}] ${tagName}${text ? ` - "${text.substring(0, 50)}"` : ''}`);
-              } catch (error) {
+              } catch {
                 response.appendResponseLine(`     [${i}] 元素信息获取失败`);
               }
             }
@@ -329,6 +331,7 @@ export const checkEnvironmentTool = defineTool({
   description: '检查微信开发者工具自动化环境配置',
   schema: z.object({}),
   annotations: {
+    category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (_request, response, context) => {
@@ -350,11 +353,11 @@ export const checkEnvironmentTool = defineTool({
     // 检查MCP服务器配置
     response.appendResponseLine('');
     response.appendResponseLine('⚙️ MCP服务器配置建议');
-    response.appendResponseLine('1. 原版服务器 (兼容性)：');
-    response.appendResponseLine('   "command": "/path/to/weixin-devtools-mcp/build/index.js"');
-    response.appendResponseLine('');
-    response.appendResponseLine('2. 新版模块化服务器 (推荐)：');
+    response.appendResponseLine('1. 推荐使用模块化服务器：');
     response.appendResponseLine('   "command": "/path/to/weixin-devtools-mcp/build/server.js"');
+    response.appendResponseLine('');
+    response.appendResponseLine('2. 如需全量工具，可追加参数：');
+    response.appendResponseLine('   "args": ["--tools-profile=full"]');
     response.appendResponseLine('');
     response.appendResponseLine('💡 配置文件位置:');
     response.appendResponseLine('   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json');
@@ -392,6 +395,7 @@ export const debugConnectionFlowTool = defineTool({
     verbose: z.boolean().optional().default(true).describe('显示详细的调试信息'),
   }),
   annotations: {
+    category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -542,7 +546,7 @@ export const debugConnectionFlowTool = defineTool({
             response.appendResponseLine('');
             return; // 复用连接,不继续后续步骤
           }
-        } catch (error) {
+        } catch {
           trackStep('连接状态检查', 'warning', { connectionInvalid: true });
           response.appendResponseLine(`   ⚠️ 已有连接但已失效`);
           response.appendResponseLine(`      操作: 清除并准备新建连接`);

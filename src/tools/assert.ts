@@ -14,7 +14,7 @@ import {
   type AssertResult
 } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 // 注意: assert_exists 和 assert_visible 已合并到 assert_state
 // 使用 assert_state 工具即可验证元素的存在性和可见性
@@ -32,6 +32,7 @@ export const assertTextTool = defineTool({
     textMatches: z.string().optional().describe('正则表达式匹配'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -90,6 +91,7 @@ export const assertAttributeTool = defineTool({
     attributeValue: z.string().describe('期望的属性值'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -147,6 +149,7 @@ export const assertStateTool = defineTool({
     focused: z.boolean().optional().describe('期望焦点状态'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

@@ -16,6 +16,13 @@ import {
   isExceptionMessage,
 } from './collectors/index.js';
 import type { ConsoleEntry, NetworkRequest } from './collectors/index.js';
+import {
+  ConnectionManager,
+  createDisconnectedStatus,
+  type ConnectionConnectResult,
+  type ConnectionRequest,
+  type ConnectionStatusSnapshot,
+} from './connection/index.js';
 import type {
   ToolContext,
   ConsoleStorage,
@@ -77,6 +84,8 @@ export class MiniProgramContext implements ToolContext {
   #currentPage: Page | null = null;
   #elementMap: Map<string, ElementMapInfo> = new Map();
   #options: Required<MiniProgramContextOptions>;
+  #connectionManager: ConnectionManager;
+  #connectionStatus: ConnectionStatusSnapshot = createDisconnectedStatus();
 
   // 使用 Collector 模式管理数据
   #consoleCollector: ConsoleCollector;
@@ -95,6 +104,7 @@ export class MiniProgramContext implements ToolContext {
    */
   private constructor(options: MiniProgramContextOptions = {}) {
     this.#options = { ...DEFAULT_OPTIONS, ...options };
+    this.#connectionManager = new ConnectionManager();
 
     // 初始化 Console 收集器
     this.#consoleCollector = new ConsoleCollector({
@@ -152,6 +162,14 @@ export class MiniProgramContext implements ToolContext {
       const page = await miniProgram.currentPage();
       if (page) {
         this.#currentPage = page;
+        const pagePath = await page.path;
+        this.#connectionStatus = {
+          ...this.#connectionStatus,
+          state: 'connected',
+          connected: true,
+          hasCurrentPage: true,
+          pagePath,
+        };
       }
     } catch (error) {
       if (this.#options.verbose) {
@@ -164,7 +182,7 @@ export class MiniProgramContext implements ToolContext {
    * 检查是否已连接
    */
   isConnected(): boolean {
-    return this.#miniProgram !== null;
+    return this.#connectionStatus.connected;
   }
 
   /**
@@ -178,6 +196,53 @@ export class MiniProgramContext implements ToolContext {
     this.#consoleCollector.stopMonitoring();
     this.#networkCollector.reset();
     this.invalidateSnapshotCache();
+    this.#connectionStatus = createDisconnectedStatus();
+  }
+
+  async connectDevtools(request: ConnectionRequest): Promise<ConnectionConnectResult> {
+    const result = await this.#connectionManager.connect(request);
+    this.#miniProgram = result.miniProgram;
+    this.#currentPage = result.currentPage;
+    this.#elementMap.clear();
+    this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
+    return result;
+  }
+
+  async reconnectDevtools(request?: ConnectionRequest): Promise<ConnectionConnectResult> {
+    const result = await this.#connectionManager.reconnect(request);
+    this.#miniProgram = result.miniProgram;
+    this.#currentPage = result.currentPage;
+    this.#elementMap.clear();
+    this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
+    return result;
+  }
+
+  async disconnectDevtools(): Promise<ConnectionStatusSnapshot> {
+    await this.#connectionManager.disconnect();
+    this.disconnect();
+    return this.#connectionStatus;
+  }
+
+  async getConnectionStatus(options?: { refreshHealth?: boolean }): Promise<ConnectionStatusSnapshot> {
+    const refreshHealth = options?.refreshHealth ?? true;
+    this.#connectionStatus = refreshHealth
+      ? await this.#connectionManager.refreshHealth()
+      : this.#connectionManager.getStatusSnapshot();
+
+    if (!this.#connectionStatus.connected) {
+      this.#miniProgram = null;
+      this.#currentPage = null;
+      this.#elementMap.clear();
+      return this.#connectionStatus;
+    }
+
+    const session = this.#connectionManager.getSession();
+    if (session) {
+      this.#miniProgram = session.miniProgram;
+      this.#currentPage = session.currentPage;
+    }
+
+    return this.#connectionStatus;
   }
 
   // ============ 页面相关方法 ============
@@ -734,6 +799,20 @@ export class MiniProgramContext implements ToolContext {
     }
   }
 
+  /**
+   * ToolContext 接口：获取 connectionStatus
+   */
+  get connectionStatus(): ConnectionStatusSnapshot {
+    return this.#connectionStatus;
+  }
+
+  /**
+   * ToolContext 接口：设置 connectionStatus（兼容层）
+   */
+  set connectionStatus(value: ConnectionStatusSnapshot) {
+    this.#connectionStatus = value;
+  }
+
   // ============ 调试和日志 ============
 
   /**
@@ -752,8 +831,8 @@ export class MiniProgramContext implements ToolContext {
   } {
     const now = Date.now();
     return {
-      connected: this.isConnected(),
-      hasCurrentPage: this.#currentPage !== null,
+      connected: this.#connectionStatus.connected,
+      hasCurrentPage: this.#connectionStatus.hasCurrentPage,
       elementCount: this.#elementMap.size,
       consoleMonitoring: this.#consoleCollector.isMonitoring(),
       consoleMessageCount: this.#consoleCollector.getTotalCount(),

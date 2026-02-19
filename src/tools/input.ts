@@ -12,7 +12,7 @@ import {
   type FormControlOptions
 } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 /**
  * 点击页面元素
@@ -25,6 +25,7 @@ export const clickTool = defineTool({
     dblClick: z.boolean().optional().default(false).describe('是否为双击，默认false'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -91,6 +92,7 @@ export const inputTextTool = defineTool({
     append: z.boolean().optional().default(false).describe('是否追加到现有内容，默认false'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -140,6 +142,7 @@ export const getValueTool = defineTool({
     attribute: z.string().optional().describe('要获取的属性名，不指定则获取value或text'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -180,6 +183,7 @@ export const setFormControlTool = defineTool({
     trigger: z.string().optional().default('change').describe('触发的事件类型，默认为change'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

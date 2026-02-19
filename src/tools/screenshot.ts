@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { takeScreenshot, type ScreenshotOptions } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 /**
  * 页面截图
@@ -19,6 +19,7 @@ export const screenshotTool = defineTool({
     path: z.string().optional().describe('图片保存路径（可选），如果不提供则返回base64编码的图片数据'),
   }),
   annotations: {
+    category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

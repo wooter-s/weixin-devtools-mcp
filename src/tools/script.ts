@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 export const evaluateScript = defineTool({
   name: 'evaluate_script',
@@ -66,11 +66,15 @@ export const evaluateScript = defineTool({
 - 复杂对象: [{ name: "test", data: [1, 2, 3] }]`
     )
   }),
+  annotations: {
+    category: ToolCategory.CORE,
+    audience: ['developers'],
+  },
 
   handler: async (request, response, context) => {
     // 检查连接状态
     if (!context.miniProgram) {
-      throw new Error('未连接到微信开发者工具。请先使用 connect_devtools_enhanced 建立连接。');
+      throw new Error('未连接到微信开发者工具。请先使用 connect_devtools 建立连接。');
     }
 
     const { function: functionCode, args = [] } = request.params;

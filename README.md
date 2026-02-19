@@ -8,12 +8,13 @@
 
 ## ✨ 核心特性
 
-- 🚀 **41个专业工具** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
+- 🚀 **27个专业工具（full profile）** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
 - 🤖 **智能连接** - 支持 auto/launch/connect 三种模式，自动端口检测，无需手动配置
 - 🔍 **自动网络监控** - 连接时自动启动，实时拦截 wx.request/uploadFile/downloadFile
 - ✅ **完整断言体系** - 5类断言工具，验证元素存在、可见性、文本、属性、状态
 - 📸 **丰富调试能力** - 支持页面截图、Console 监听、网络请求追踪、诊断工具
 - 🏗️ **模块化架构** - 基于 chrome-devtools-mcp 架构模式，易于扩展和维护
+- 🧩 **可配置工具暴露** - 默认 core profile（17个工具），支持按类别开启 Console/Network/Debug
 - 🧪 **全面测试覆盖** - 单元测试 + 集成测试，测试覆盖率 >80%
 
 ## 📦 安装
@@ -101,15 +102,54 @@ npm run build
 }
 ```
 
+### 工具 Profile 配置（v0.4+）
+
+服务器支持按 profile 控制暴露工具，降低默认工具数量：
+
+- `core`（默认）：17 个核心自动化工具
+- `full`：27 个完整工具
+- `minimal`：9 个最小工具
+
+也支持按类别增减：
+
+- `--enable-categories=console,network,debug`
+- `--disable-categories=console,network,debug,core`
+
+`npx` 配置示例（启用 full）：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "npx",
+      "args": ["-y", "weixin-devtools-mcp", "--tools-profile=full"]
+    }
+  }
+}
+```
+
+本地二进制示例（在 core 基础上启用 network + debug）：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "/path/to/weixin-devtools-mcp/build/server.js",
+      "args": ["--enable-categories=network,debug"]
+    }
+  }
+}
+```
+
 ## 🚀 快速开始
 
 ### 第一个自动化测试
 
 ```typescript
-// 1. 智能连接到微信开发者工具（自动检测端口）
-connect_devtools_enhanced({
+// 1. 连接微信开发者工具（auto 策略）
+connect_devtools({
   projectPath: "/path/to/your/miniprogram",
-  mode: "auto",
+  strategy: "auto",
   verbose: true
 })
 
@@ -125,119 +165,25 @@ waitFor({ selector: ".welcome-message", timeout: 5000 })
 // 5. 验证登录成功
 assert_text({ uid: ".welcome-message", text: "欢迎回来" })
 
-// 6. 获取页面截图
+// 6. 获取页面截图（需在服务启动参数中启用 --enable-categories=debug）
 screenshot({ path: "/tmp/login-success.png" })
 ```
 
 ## 🛠️ 功能概览
 
-项目提供 **41个工具**，分为 8 大类别：
+当前工具暴露采用 profile 机制：
 
-| 类别 | 工具数 | 主要功能 |
-|------|--------|----------|
-| **连接管理** | 3个 | 智能连接、传统连接、获取当前页面 |
-| **页面查询** | 3个 | CSS选择器查找、条件等待、页面快照 |
-| **交互操作** | 7个 | 点击、输入、获取值、表单控件、选择器、开关、滑块 |
-| **断言验证** | 5个 | 存在性、可见性、文本、属性、状态断言 |
-| **页面导航** | 6个 | 跳转、返回、Tab切换、重启、重定向、页面信息 |
-| **Console监控** | 6个 | 监听控制、两阶段查询（list/get详情）、日志获取、清空 |
-| **网络监控** | 5个 | 请求拦截、监听控制、请求获取、清空记录、拦截器诊断 |
-| **诊断工具** | 4个 | 连接诊断、连接流程调试、环境检查、元素调试 |
-
-### 工具详细列表
-
-<details>
-<summary><b>连接管理（3个工具）</b></summary>
-
-- `connect_devtools` - 传统连接方式（兼容性）
-- `connect_devtools_enhanced` - 智能连接，支持三种模式，自动端口检测（推荐）
-- `get_current_page` - 获取当前活动页面信息
-
-</details>
-
-<details>
-<summary><b>页面查询和快照（3个工具）</b></summary>
-
-- `$` - 通过CSS选择器查找元素，返回详细信息
-- `waitFor` - 等待条件满足（时间/元素出现/消失/文本匹配）
-- `get_page_snapshot` - 获取完整页面快照和所有元素UID
-
-</details>
-
-<details>
-<summary><b>交互操作（7个工具）</b></summary>
-
-- `click` - 点击元素（支持单击/双击）
-- `input_text` - 向input/textarea输入文本
-- `get_value` - 获取元素的值或文本内容
-- `set_form_control` - 设置表单控件的值
-- `select_picker` - 选择picker控件选项
-- `toggle_switch` - 切换switch开关状态
-- `set_slider` - 设置slider滑块值
-
-</details>
-
-<details>
-<summary><b>断言验证（5个工具）</b></summary>
-
-- `assert_exists` - 断言元素存在或不存在
-- `assert_visible` - 断言元素可见或不可见
-- `assert_text` - 断言元素文本内容（精确/包含/正则）
-- `assert_attribute` - 断言元素属性值
-- `assert_state` - 断言元素状态（选中/启用/聚焦/可见）
-
-</details>
-
-<details>
-<summary><b>页面导航（6个工具）</b></summary>
-
-- `navigate_to` - 跳转到指定页面
-- `navigate_back` - 返回上一页
-- `switch_tab` - 切换到指定Tab页
-- `relaunch` - 重启小程序并跳转到指定页面
-- `redirect_to` - 关闭当前页并跳转
-- `get_page_info` - 获取当前页面详细信息
-
-</details>
-
-<details>
-<summary><b>Console监控（6个工具）</b></summary>
-
-- `start_console_monitoring` - 开始监听console和exception
-- `stop_console_monitoring` - 停止console监听
-- `list_console_messages` - 列表查询console消息（短格式，token优化）
-- `get_console_message` - 根据msgid获取消息详情（完整格式）
-- `get_console` - 获取收集的console消息（传统方式）
-- `clear_console` - 清空console缓存
-
-</details>
-
-<details>
-<summary><b>调试工具（1个工具）</b></summary>
-
-- `screenshot` - 页面截图（返回base64或保存文件）
-
-</details>
-
-<details>
-<summary><b>网络监控（5个工具）</b></summary>
-
-- `start_network_monitoring` - 开始监听网络请求
-- `stop_network_monitoring` - 停止网络监听
-- `get_network_requests` - 获取拦截的网络请求（支持过滤）
-- `clear_network_requests` - 清空网络请求记录
-- `diagnose_interceptor` - 诊断网络拦截器状态
-
-</details>
-
-<details>
-<summary><b>诊断工具（3个工具）</b></summary>
-
-- `diagnose_connection` - 诊断连接问题，检查配置和环境
-- `check_environment` - 检查自动化环境配置
-- `debug_page_elements` - 调试页面元素获取问题
-
-</details>
+- `core`（默认，20个）：
+  - 连接/页面：`connect_devtools`、`reconnect_devtools`、`disconnect_devtools`、`get_connection_status`、`get_current_page`、`get_page_snapshot`、`$`、`waitFor`
+  - 交互：`click`、`input_text`、`get_value`、`set_form_control`
+  - 断言：`assert_text`、`assert_attribute`、`assert_state`
+  - 导航：`navigate_to`、`navigate_back`、`switch_tab`、`relaunch`
+  - 脚本：`evaluate_script`
+- 可选类别（默认关闭）：
+  - `console`：`list_console_messages`、`get_console_message`
+  - `network`：`get_network_requests`、`stop_network_monitoring`、`clear_network_requests`
+  - `debug`：`screenshot`、`diagnose_connection`、`check_environment`、`debug_page_elements`、`debug_connection_flow`
+- `full` profile：暴露全部 30 个工具。
 
 ## 💡 使用示例
 
@@ -245,9 +191,9 @@ screenshot({ path: "/tmp/login-success.png" })
 
 ```typescript
 // 连接到开发者工具
-connect_devtools_enhanced({
+connect_devtools({
   projectPath: "/path/to/miniprogram",
-  mode: "auto"
+  strategy: "auto"
 })
 
 // 输入用户名
@@ -268,7 +214,7 @@ waitFor({ selector: ".welcome", timeout: 5000 })
 // 验证欢迎消息
 assert_text({ uid: ".welcome", textContains: "欢迎" })
 
-// 检查网络请求
+// 检查网络请求（需在服务启动参数中启用 --enable-categories=network）
 get_network_requests({ urlPattern: "/api/login", successOnly: true })
 ```
 
@@ -280,13 +226,13 @@ input_text({ uid: "input#name", text: "张三" })
 input_text({ uid: "input#email", text: "zhangsan@example.com" })
 
 // 选择下拉框
-select_picker({ uid: "picker#city", value: "北京" })
+set_form_control({ uid: "picker#city", value: "北京" })
 
 // 切换开关
-toggle_switch({ uid: "switch#agree", checked: true })
+set_form_control({ uid: "switch#agree", value: true })
 
 // 设置滑块
-set_slider({ uid: "slider#age", value: 25 })
+set_form_control({ uid: "slider#age", value: 25 })
 
 // 提交表单
 click({ uid: "button.submit" })

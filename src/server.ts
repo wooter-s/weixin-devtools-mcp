@@ -16,7 +16,9 @@ import {
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { MiniProgramContext } from './MiniProgramContext.js';
+import { parseToolProfileConfig, resolveToolsByProfile } from './config/tool-profile.js';
 import type {
+  ToolCategory,
   ToolRequest,
   ToolDefinition
 } from './tools/index.js';
@@ -50,6 +52,30 @@ const server = new Server(
  * 工具处理器映射
  */
 const toolHandlers = new Map<string, ToolDefinition>();
+
+/**
+ * 被 profile 禁用的工具映射
+ */
+const disabledToolHandlers = new Map<string, ToolDefinition>();
+
+/**
+ * 工具 profile 配置与激活结果
+ */
+const toolProfileConfig = parseToolProfileConfig();
+const { activeTools, disabledTools } = resolveToolsByProfile(allTools, toolProfileConfig);
+
+for (const [toolName, toolDefinition] of disabledTools) {
+  disabledToolHandlers.set(toolName, toolDefinition);
+}
+
+function getDisabledToolHint(category: ToolCategory): string {
+  return [
+    `工具类别: ${category}`,
+    `可用启用方式:`,
+    `1. --tools-profile=full (启用全部工具)`,
+    `2. --enable-categories=${category} (按类别启用)`
+  ].join('\n');
+}
 
 /**
  * 注册工具到 MCP 服务器
@@ -96,12 +122,20 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const resourcePath = `${url.host}${url.pathname}`;
 
   if (resourcePath === "connection/status") {
-    // 使用 MiniProgramContext 的 getStatusSummary 方法
+    const connectionStatus = await globalContext.getConnectionStatus({ refreshHealth: false });
     const summary = globalContext.getStatusSummary();
     const status = {
-      connected: summary.connected,
-      hasCurrentPage: summary.hasCurrentPage,
-      pagePath: globalContext.currentPage ? await globalContext.currentPage.path : null,
+      state: connectionStatus.state,
+      connectionId: connectionStatus.connectionId,
+      connected: connectionStatus.connected,
+      hasCurrentPage: connectionStatus.hasCurrentPage,
+      pagePath: connectionStatus.pagePath,
+      strategyUsed: connectionStatus.strategyUsed,
+      endpoint: connectionStatus.endpoint,
+      health: connectionStatus.health,
+      lastError: connectionStatus.lastError,
+      lastConnectedAt: connectionStatus.lastConnectedAt,
+      lastHealthCheckAt: connectionStatus.lastHealthCheckAt,
       elementCount: summary.elementCount,
       consoleMonitoring: summary.consoleMonitoring,
       consoleMessageCount: summary.consoleMessageCount,
@@ -150,7 +184,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
  * 处理工具列表请求
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = allTools.map(tool => ({
+  const tools = activeTools.map(tool => ({
     name: tool.name,
     description: tool.description,
     inputSchema: zodToJsonSchema(tool.schema, {
@@ -170,6 +204,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const tool = toolHandlers.get(toolName);
 
   if (!tool) {
+    const disabledTool = disabledToolHandlers.get(toolName);
+    if (disabledTool) {
+      const category = disabledTool.annotations?.category;
+      const disabledMessage = category
+        ? getDisabledToolHint(category)
+        : '请使用 --tools-profile=full 启用全部工具';
+
+      return {
+        content: [{
+          type: "text",
+          text: `工具 "${toolName}" 当前未启用。\n${disabledMessage}`
+        }],
+        isError: true
+      };
+    }
+
     throw new Error(`未知的工具: ${toolName}`);
   }
 
@@ -221,11 +271,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
- * 注册所有工具
+ * 注册激活工具
  */
-for (const tool of allTools) {
+for (const tool of activeTools) {
   registerTool(tool);
 }
+
+const profileSummary = `[ToolProfile] profile=${toolProfileConfig.profile}, active=${activeTools.length}, disabled=${disabledTools.size}`;
+console.error(profileSummary);
 
 /**
  * 启动服务器

@@ -24,6 +24,7 @@ import { createIdGenerator } from '../utils/idGenerator.js';
 
 import {
   defineTool,
+  ToolCategory,
   type ConsoleMessage,
 } from './ToolDefinition.js';
 
@@ -76,6 +77,7 @@ export const listConsoleMessagesTool = defineTool({
       .describe('是否包含历史导航的消息（最近3次导航）'),
   }),
   annotations: {
+    category: ToolCategory.CONSOLE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -186,6 +188,7 @@ export const getConsoleMessageTool = defineTool({
     msgid: z.number().positive().describe('消息的 Stable ID（从 list_console_messages 获取）'),
   }),
   annotations: {
+    category: ToolCategory.CONSOLE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

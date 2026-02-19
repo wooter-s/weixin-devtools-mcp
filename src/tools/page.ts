@@ -12,7 +12,7 @@ import {
   type WaitForOptions
 } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 /**
  * $ 选择器工具 - 通过CSS选择器查找页面元素
@@ -24,6 +24,7 @@ export const querySelectorTool = defineTool({
     selector: z.string().min(1, '选择器不能为空').describe('CSS选择器，如：view.container、#myId、.myClass、text=按钮'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -106,6 +107,7 @@ export const waitForTool = defineTool({
     { message: '必须提供 delay（时间等待）或 selector（选择器等待）' }
   ),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

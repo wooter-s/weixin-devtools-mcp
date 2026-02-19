@@ -15,7 +15,7 @@ import {
   type SwitchTabOptions
 } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 /**
  * 跳转到指定页面（支持普通跳转和重定向模式）
@@ -31,6 +31,7 @@ export const navigateToTool = defineTool({
     timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -126,6 +127,7 @@ export const navigateBackTool = defineTool({
     timeout: z.number().optional().default(5000).describe('等待超时时间(毫秒)，默认5000ms'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -151,7 +153,7 @@ export const navigateBackTool = defineTool({
       try {
         context.currentPage = await context.miniProgram.currentPage();
         response.appendResponseLine(`当前页面已更新`);
-      } catch (error) {
+      } catch {
         response.appendResponseLine(`警告: 无法更新当前页面信息`);
       }
 
@@ -178,6 +180,7 @@ export const switchTabTool = defineTool({
     timeout: z.number().optional().default(5000).describe('等待超时时间(毫秒)，默认5000ms'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -203,7 +206,7 @@ export const switchTabTool = defineTool({
       try {
         context.currentPage = await context.miniProgram.currentPage();
         response.appendResponseLine(`当前页面已更新`);
-      } catch (error) {
+      } catch {
         response.appendResponseLine(`警告: 无法更新当前页面信息`);
       }
 
@@ -231,6 +234,7 @@ export const reLaunchTool = defineTool({
     timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
@@ -260,7 +264,7 @@ export const reLaunchTool = defineTool({
       try {
         context.currentPage = await context.miniProgram.currentPage();
         response.appendResponseLine(`当前页面已更新`);
-      } catch (error) {
+      } catch {
         response.appendResponseLine(`警告: 无法更新当前页面信息`);
       }
 

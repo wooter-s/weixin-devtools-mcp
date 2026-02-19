@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
 import { getPageSnapshot } from '../tools.js';
 
-import { defineTool } from './ToolDefinition.js';
+import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 
 /**
@@ -41,6 +41,7 @@ minimal格式：
     filePath: z.string().optional().describe('保存快照到文件的路径（可选）'),
   }),
   annotations: {
+    category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {

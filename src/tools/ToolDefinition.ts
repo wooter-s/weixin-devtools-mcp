@@ -3,25 +3,32 @@
  * 参考 chrome-devtools-mcp 的设计模式
  */
 
-import type { z } from 'zod'
 import type { MiniProgram, Page, Element } from 'miniprogram-automator'
+import type { z } from 'zod'
 
+import type {
+  ConnectionConnectResult,
+  ConnectionRequest,
+  ConnectionStatusSnapshot
+} from '../connection/index.js';
 import type { ElementMapInfo } from '../tools.js'
 
 /**
  * 工具分类枚举
+ * 参考 chrome-devtools-mcp 的按类别暴露机制
  */
-export enum ToolCategories {
-  CONNECTION = 'Connection',
-  PAGE_INTERACTION = 'Page interaction',
-  AUTOMATION = 'Automation',
-  DEBUGGING = 'Debugging'
+export enum ToolCategory {
+  CORE = 'core',
+  CONSOLE = 'console',
+  NETWORK = 'network',
+  DEBUG = 'debug',
 }
 
 /**
  * 工具注解接口
  */
 export interface ToolAnnotations {
+  category: ToolCategory;
   audience?: string[];
   experimental?: boolean;
 }
@@ -168,6 +175,7 @@ export interface ToolContext {
   elementMap: Map<string, ElementMapInfo>;
   consoleStorage: ConsoleStorage;
   networkStorage: NetworkStorage;
+  connectionStatus: ConnectionStatusSnapshot;
 
   /**
    * 通过 UID 获取元素
@@ -177,6 +185,26 @@ export interface ToolContext {
    * @throws 如果页面未连接、UID 不存在、元素未找到等
    */
   getElementByUid(uid: string): Promise<Element>;
+
+  /**
+   * 建立连接
+   */
+  connectDevtools(request: ConnectionRequest): Promise<ConnectionConnectResult>;
+
+  /**
+   * 重新连接
+   */
+  reconnectDevtools(request?: ConnectionRequest): Promise<ConnectionConnectResult>;
+
+  /**
+   * 断开连接
+   */
+  disconnectDevtools(): Promise<ConnectionStatusSnapshot>;
+
+  /**
+   * 获取连接状态
+   */
+  getConnectionStatus(options?: { refreshHealth?: boolean }): Promise<ConnectionStatusSnapshot>;
 }
 
 /**
