@@ -1,469 +1,153 @@
 /**
- * 增强连接功能集成测试
- * 专门测试新的 connectDevtoolsEnhanced 功能
+ * 新连接层集成测试
  *
- * 运行方式：
- * RUN_INTEGRATION_TESTS=true npm test -- tests/enhanced-connection.integration.test.ts
+ * 覆盖 connect/reconnect/disconnect/status 的核心行为，
+ * 同时验证关键参数校验逻辑。
  */
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import {
-  connectDevtoolsEnhanced,
-  checkDevToolsRunning,
-  DevToolsConnectionError,
-  type EnhancedConnectOptions,
-  type DetailedConnectResult
-} from '../../src/tools.js'
-import {
-  allocatePorts,
-  checkIntegrationTestEnvironment,
-  cleanupConflictingWeChatInstances,
-  safeCleanup,
-  withTimeout
-} from '../utils/test-utils.js'
+import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import { connectDevtoolsTool, getConnectionStatusTool } from '../../src/tools/connection.js';
 
-// 环境检查：只有显式开启才运行集成测试
-const shouldRunIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true'
+import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
 
-// 测试配置
-const TEST_PROJECT_PATH = '/Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx'
-const TEST_CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli'
+const shouldRunIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
 
-// 分配的端口池
-let availablePorts: number[] = []
-let portIndex = 0
+describe.skipIf(!shouldRunIntegrationTests)('连接架构集成测试', () => {
+  const harness = new IntegrationHarness({
+    portCount: 8,
+    connectRetries: 3,
+    connectTimeoutMs: 60_000,
+  });
 
-// 获取下一个可用端口
-function getNextPort(): number {
-  if (portIndex >= availablePorts.length) {
-    throw new Error('可用端口已用完，请增加端口分配数量')
+  let context: MiniProgramContext | null = null;
+  let runtimeReady = false;
+
+  async function ensureConnected(): Promise<boolean> {
+    if (!runtimeReady || !context) {
+      return false;
+    }
+
+    const status = await context.getConnectionStatus({ refreshHealth: false });
+    if (status.connected) {
+      return true;
+    }
+
+    try {
+      await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
+      return true;
+    } catch {
+      runtimeReady = false;
+      return false;
+    }
   }
-  return availablePorts[portIndex++]
-}
-
-describe.skipIf(!shouldRunIntegrationTests)('增强连接功能集成测试', () => {
-  let connectedResources: DetailedConnectResult | null = null
 
   beforeAll(async () => {
-    console.log('🔧 检查增强连接功能集成测试环境...')
-
-    // 检查环境是否满足测试要求
-    const envCheck = await checkIntegrationTestEnvironment(TEST_PROJECT_PATH, TEST_CLI_PATH)
-
-    if (!envCheck.isReady) {
-      console.error('❌ 集成测试环境不满足要求:')
-      envCheck.issues.forEach(issue => console.error(`  • ${issue}`))
-      return
+    const state = await harness.prepare();
+    if (!state.ready) {
+      console.warn(`[integration] 跳过连接架构测试: ${state.reason ?? '环境未就绪'}`);
+      return;
     }
 
-    console.log('✅ 环境检查通过')
-
-    // 清理冲突实例
-    console.log('🧹 检查并清理冲突实例...')
-    await cleanupConflictingWeChatInstances(TEST_PROJECT_PATH, TEST_CLI_PATH)
-
-    // 分配足够的端口供测试使用
+    context = MiniProgramContext.create();
     try {
-      console.log('🔌 分配测试端口...')
-      availablePorts = await allocatePorts(8) // 分配8个端口用于多种测试
-      console.log(`✅ 已分配端口: ${availablePorts.join(', ')}`)
+      const connected = await harness.connect(context, {
+        strategy: 'auto',
+        timeoutMs: 60_000,
+        healthCheck: false,
+        autoDiscover: true,
+      });
+      context = connected.context;
+      runtimeReady = true;
     } catch (error) {
-      console.error('❌ 端口分配失败:', error)
-      throw error
+      runtimeReady = false;
+      console.warn(
+        `[integration] 初始连接失败，后续用例将跳过: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
-  })
+  }, 180_000);
 
-  afterEach(async () => {
-    // 确保每次测试后都清理资源
-    if (connectedResources?.miniProgram) {
-      await safeCleanup(async () => {
-        console.log('正在清理微信开发者工具连接...')
-        await connectedResources!.miniProgram.close()
-        console.log('连接已成功关闭')
-        connectedResources = null
+  afterAll(async () => {
+    if (!context) {
+      return;
+    }
+    await harness.disconnect(context);
+    context = null;
+  }, 120_000);
+
+  it('auto 策略应该返回可用连接状态', async () => {
+    if (!(await ensureConnected()) || !context) {
+      return;
+    }
+
+    const statusResponse = await runTool(context, getConnectionStatusTool.handler, { refreshHealth: true });
+    const text = statusResponse.getResponseText();
+    expect(text).toContain('连接状态:');
+    expect(text).toContain('已连接: 是');
+
+    const status = context.connectionStatus;
+    expect(status.connected).toBe(true);
+    expect(status.state).toMatch(/connected|degraded/);
+    expect(status.strategyUsed).toMatch(/auto|launch|connect|discover|wsEndpoint|browserUrl/);
+  }, 90_000);
+
+  it('reconnect_devtools 应该复用历史参数重连', async () => {
+    if (!(await ensureConnected()) || !context) {
+      return;
+    }
+
+    const reconnectResponse = await harness.reconnect(context, {
+      timeoutMs: 60_000,
+      healthCheck: false,
+    });
+    expect(reconnectResponse.getResponseText()).toContain('重连成功');
+
+    const status = await context.getConnectionStatus({ refreshHealth: false });
+    expect(status.connected).toBe(true);
+  }, 120_000);
+
+  it('disconnect 后应能再次 connect', async () => {
+    if (!runtimeReady || !context) {
+      return;
+    }
+
+    await harness.disconnect(context);
+    const disconnected = await context.getConnectionStatus({ refreshHealth: false });
+    expect(disconnected.connected).toBe(false);
+    expect(disconnected.state).toBe('disconnected');
+
+    const connected = await harness.connect(context, {
+      strategy: 'auto',
+      timeoutMs: 60_000,
+      healthCheck: false,
+    });
+    context = connected.context;
+
+    const restored = await context.getConnectionStatus({ refreshHealth: false });
+    expect(restored.connected).toBe(true);
+  }, 120_000);
+
+  it('connect 策略缺少 projectPath 时应返回参数错误', async () => {
+    const isolatedContext = MiniProgramContext.create();
+
+    await expect(
+      runTool(isolatedContext, connectDevtoolsTool.handler, {
+        strategy: 'connect',
+        timeoutMs: 5_000,
       })
-    }
-  })
-
-  describe('智能连接模式测试', () => {
-    it('应该支持auto模式智能连接', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`🤖 测试auto模式连接（端口: ${testPort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'auto',
-        autoPort: testPort,
-        timeout: 30000,
-        verbose: true,
-        healthCheck: false // 暂时跳过健康检查
-      }
-
-      try {
-        connectedResources = await withTimeout(
-          connectDevtoolsEnhanced(options),
-          45000,
-          'auto模式连接超时'
-        )
-
-        // 验证连接结果
-        expect(connectedResources).toBeDefined()
-        expect(connectedResources.miniProgram).toBeDefined()
-        expect(connectedResources.currentPage).toBeDefined()
-        expect(connectedResources.connectionMode).toMatch(/^(launch|connect)$/)
-        expect(connectedResources.startupTime).toBeGreaterThan(0)
-        expect(connectedResources.healthStatus).toMatch(/^(healthy|skipped)$/)
-
-        // 验证页面路径
-        const pagePath = await connectedResources.currentPage.path
-        expect(pagePath).toBeTruthy()
-        expect(typeof pagePath).toBe('string')
-
-        console.log(`✅ auto模式连接成功`)
-        console.log(`   连接模式: ${connectedResources.connectionMode}`)
-        console.log(`   启动耗时: ${connectedResources.startupTime}ms`)
-        console.log(`   当前页面: ${pagePath}`)
-
-      } catch (error) {
-        console.error('❌ auto模式连接失败:', error)
-
-        // 如果是增强错误，提供更详细信息
-        if (error instanceof DevToolsConnectionError) {
-          console.error(`   错误阶段: ${error.phase}`)
-          console.error(`   原始错误: ${error.originalError?.message || 'N/A'}`)
-        }
-
-        throw error
-      }
-    }, 60000)
-
-    it('应该支持connect模式两阶段连接', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`🔗 测试connect模式连接（端口: ${testPort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'connect',
-        autoPort: testPort,
-        timeout: 30000,
-        verbose: true,
-        healthCheck: false
-      }
-
-      try {
-        connectedResources = await withTimeout(
-          connectDevtoolsEnhanced(options),
-          45000,
-          'connect模式连接超时'
-        )
-
-        // 验证连接结果
-        expect(connectedResources).toBeDefined()
-        expect(connectedResources.connectionMode).toBe('connect')
-        expect(connectedResources.processInfo).toBeDefined()
-        expect(connectedResources.processInfo!.port).toBe(testPort)
-
-        console.log(`✅ connect模式连接成功`)
-        console.log(`   进程PID: ${connectedResources.processInfo!.pid}`)
-        console.log(`   使用端口: ${connectedResources.processInfo!.port}`)
-
-      } catch (error) {
-        console.error('❌ connect模式连接失败:', error)
-        throw error
-      }
-    }, 60000)
-
-    it('应该支持launch模式传统连接', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`🚀 测试launch模式连接（端口: ${testPort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'launch',
-        autoPort: testPort,
-        timeout: 30000,
-        verbose: true,
-        healthCheck: false
-      }
-
-      try {
-        connectedResources = await withTimeout(
-          connectDevtoolsEnhanced(options),
-          45000,
-          'launch模式连接超时'
-        )
-
-        // 验证连接结果
-        expect(connectedResources).toBeDefined()
-        expect(connectedResources.connectionMode).toBe('launch')
-
-        console.log(`✅ launch模式连接成功`)
-
-      } catch (error) {
-        console.error('❌ launch模式连接失败:', error)
-        throw error
-      }
-    }, 60000)
-  })
-
-  describe('错误处理和回退机制测试', () => {
-    it('应该能正确处理无效项目路径', async () => {
-      console.log('🛡️ 测试无效项目路径处理...')
-
-      const options: EnhancedConnectOptions = {
-        projectPath: '/invalid/nonexistent/path',
-        mode: 'auto',
-        autoPort: getNextPort(),
-        timeout: 5000,
-        verbose: false
-      }
-
-      await expect(connectDevtoolsEnhanced(options))
-        .rejects
-        .toThrow(/Project path.*doesn't exist/)
-
-      console.log('✅ 无效项目路径错误处理正确')
-    })
-
-    it('应该能正确分类错误阶段', async () => {
-      console.log('🛡️ 测试错误阶段分类...')
-
-      const options: EnhancedConnectOptions = {
-        projectPath: '/tmp', // 无效的小程序项目路径
-        mode: 'connect',
-        autoPort: getNextPort(),
-        timeout: 5000,
-        verbose: false
-      }
-
-      try {
-        await connectDevtoolsEnhanced(options)
-        // 如果没有抛出错误，测试失败
-        expect(false).toBe(true)
-      } catch (error) {
-        if (error instanceof DevToolsConnectionError) {
-          expect(error.phase).toMatch(/^(startup|connection|health_check)$/)
-          console.log(`✅ 错误阶段分类正确: ${error.phase}`)
-        } else {
-          console.log('✅ 基础错误处理正确')
-        }
-      }
-    })
-
-    it('应该正确处理 WebSocket 服务未启动的情况', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`🧪 测试 WebSocket 超时（端口: ${testPort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'connect',
-        autoPort: testPort,
-        timeout: 5000, // 短超时便于测试
-        fallbackMode: false, // 禁用回退，直接测试超时
-        verbose: true
-      }
-
-      try {
-        await connectDevtoolsEnhanced(options)
-        // 不应该成功
-        expect(false).toBe(true)
-      } catch (error) {
-        expect(error).toBeInstanceOf(DevToolsConnectionError)
-        if (error instanceof DevToolsConnectionError) {
-          expect(error.phase).toBe('startup')
-          expect(error.message).toContain('WebSocket')
-          expect(error.message).toContain(`端口: ${testPort}`)
-          expect(error.message).toMatch(/已等待: \d+ms/)
-
-          console.log(`✅ 超时错误正确捕获: ${error.message}`)
-        }
-      }
-    }, 10000)
-
-    it('应该在 auto 模式下检测到端口不可用时使用回退', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const unavailablePort = getNextPort()
-      console.log(`🔄 测试 auto 模式回退机制（端口: ${unavailablePort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'auto',
-        autoPort: unavailablePort,
-        timeout: 5000, // 短超时加速测试
-        fallbackMode: true, // 启用回退
-        verbose: true,
-        healthCheck: false
-      }
-
-      try {
-        connectedResources = await withTimeout(
-          connectDevtoolsEnhanced(options),
-          45000,
-          '回退测试超时'
-        )
-
-        // 如果成功，应该是通过 launch 模式回退成功的
-        expect(connectedResources.connectionMode).toBe('launch')
-        console.log(`✅ auto 模式回退成功: ${connectedResources.connectionMode}`)
-        console.log(`   启动耗时: ${connectedResources.startupTime}ms`)
-
-      } catch (error) {
-        // 如果失败，验证错误信息包含回退尝试的痕迹
-        console.log(`⚠️ 回退也失败了（这在某些环境下是正常的）: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }, 60000)
-
-    it('应该支持自定义超时配置', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      const customTimeout = 3000
-      console.log(`⏱️ 测试自定义超时配置（${customTimeout}ms）...`)
-
-      const startTime = Date.now()
-
-      try {
-        await connectDevtoolsEnhanced({
-          projectPath: TEST_PROJECT_PATH,
-          mode: 'connect',
-          autoPort: testPort,
-          timeout: customTimeout,
-          fallbackMode: false,
-          verbose: false
-        })
-      } catch (error) {
-        const elapsed = Date.now() - startTime
-
-        // 验证实际等待时间接近设定的超时时间
-        expect(elapsed).toBeGreaterThanOrEqual(customTimeout)
-        expect(elapsed).toBeLessThan(customTimeout + 2000) // 允许2秒误差
-        if (error instanceof Error) {
-          expect(error.message).toContain(String(customTimeout))
-        }
-
-        console.log(`✅ 自定义超时配置生效: ${elapsed}ms ≈ ${customTimeout}ms`)
-      }
-    }, 8000)
-  })
-
-  describe('功能特性测试', () => {
-    it('应该能检测开发者工具运行状态', async () => {
-      console.log('🔍 测试开发者工具状态检测...')
-
-      // 测试未运行的端口
-      const unusedPort = getNextPort()
-      const isRunning1 = await checkDevToolsRunning(unusedPort)
-      expect(isRunning1).toBe(false)
-
-      console.log(`✅ 状态检测功能正常: 端口${unusedPort}未运行`)
-
-      // TODO: 可以添加测试运行中端口的检测（需要先启动一个实例）
-    })
-
-    it('应该能提供详细的连接信息', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`📊 测试详细连接信息（端口: ${testPort}）...`)
-
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'auto',
-        autoPort: testPort,
-        timeout: 30000,
-        verbose: true,
-        healthCheck: false
-      }
-
-      try {
-        connectedResources = await withTimeout(
-          connectDevtoolsEnhanced(options),
-          45000,
-          '详细信息测试超时'
-        )
-
-        // 验证详细信息字段
-        expect(connectedResources.connectionMode).toBeDefined()
-        expect(connectedResources.startupTime).toBeGreaterThan(0)
-        expect(connectedResources.healthStatus).toBeDefined()
-        expect(connectedResources.pagePath).toBeDefined()
-
-        console.log(`✅ 详细连接信息完整`)
-        console.log(`   模式: ${connectedResources.connectionMode}`)
-        console.log(`   耗时: ${connectedResources.startupTime}ms`)
-        console.log(`   状态: ${connectedResources.healthStatus}`)
-
-      } catch (error) {
-        console.error('❌ 详细信息测试失败:', error)
-        throw error
-      }
-    }, 60000)
-  })
-
-  describe('性能和稳定性测试', () => {
-    it('应该在合理时间内完成连接', async () => {
-      if (availablePorts.length === 0) {
-        console.log('⚠️ 跳过测试：端口分配失败')
-        return
-      }
-
-      const testPort = getNextPort()
-      console.log(`⏱️ 测试连接性能（端口: ${testPort}）...`)
-
-      const startTime = Date.now()
-      const options: EnhancedConnectOptions = {
-        projectPath: TEST_PROJECT_PATH,
-        mode: 'auto',
-        autoPort: testPort,
-        timeout: 20000, // 较短的超时时间
-        verbose: false,
-        healthCheck: false
-      }
-
-      try {
-        connectedResources = await connectDevtoolsEnhanced(options)
-        const duration = Date.now() - startTime
-
-        // 验证连接时间合理（应该在20秒内完成）
-        expect(duration).toBeLessThan(20000)
-        console.log(`✅ 连接性能良好: ${duration}ms`)
-
-      } catch (error) {
-        const duration = Date.now() - startTime
-        console.error(`❌ 连接性能测试失败 (耗时: ${duration}ms):`, error)
-        throw error
-      }
-    }, 25000)
-  })
-})
+    ).rejects.toThrow(/projectPath/i);
+  });
+
+  it('timeoutMs 非法值应被拒绝', async () => {
+    const isolatedContext = MiniProgramContext.create();
+
+    await expect(
+      runTool(isolatedContext, connectDevtoolsTool.handler, {
+        strategy: 'auto',
+        projectPath: harness.projectPath,
+        timeoutMs: 0,
+      })
+    ).rejects.toThrow(/timeoutMs 必须是正数/);
+  });
+});

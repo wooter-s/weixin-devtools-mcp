@@ -4,9 +4,21 @@
  */
 
 import { execSync } from 'child_process'
-import { existsSync } from 'fs'
 import { access, constants } from 'fs/promises'
 import { createServer } from 'net'
+
+export type IntegrationCleanupMode = 'reuse' | 'smart' | 'force'
+
+export function getIntegrationCleanupMode(): IntegrationCleanupMode {
+  const rawMode = process.env.INTEGRATION_CLEANUP_MODE
+  if (rawMode === 'smart') {
+    return 'smart'
+  }
+  if (rawMode === 'force') {
+    return 'force'
+  }
+  return 'reuse'
+}
 
 /**
  * 检查端口是否被微信开发者工具占用
@@ -178,7 +190,7 @@ export async function closeWeChatProject(cliPath?: string): Promise<boolean> {
     await sleep(2000) // 等待关闭完成
     console.log('✅ 项目已关闭')
     return true
-  } catch (error) {
+  } catch {
     console.log('⚠️ 关闭项目失败，可能没有项目正在运行')
     return false
   }
@@ -239,6 +251,7 @@ export async function forceCleanupAllWeChatProcesses(cliPath?: string): Promise<
  */
 export async function cleanupConflictingWeChatInstances(targetProjectPath: string, cliPath?: string): Promise<boolean> {
   const runningProjects = getRunningWeChatProjects()
+  const cleanupMode = getIntegrationCleanupMode()
 
   if (runningProjects.length === 0) {
     console.log('💪 没有发现冲突的微信开发者工具实例')
@@ -257,8 +270,22 @@ export async function cleanupConflictingWeChatInstances(targetProjectPath: strin
     return true
   }
 
-  // 对于集成测试，始终进行完全清理以确保稳定性
-  console.log('🧹 对于集成测试，将进行完全环境清理...')
+  if (cleanupMode === 'reuse') {
+    console.log('♻️ 清理策略=reuse：保留现有实例，优先复用会话')
+    return true
+  }
+
+  if (cleanupMode === 'smart') {
+    console.log('🧹 清理策略=smart：先尝试优雅关闭当前项目')
+    const closedByCli = await closeWeChatProject(cliPath)
+    if (closedByCli) {
+      return true
+    }
+    console.log('⚠️ 优雅关闭失败，回退到强制清理')
+    return await forceCleanupAllWeChatProcesses(cliPath)
+  }
+
+  console.log('🧹 清理策略=force：执行完全环境清理...')
   return await forceCleanupAllWeChatProcesses(cliPath)
 }
 

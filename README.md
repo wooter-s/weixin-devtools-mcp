@@ -277,6 +277,18 @@ npm run test:tools         # 工具逻辑测试（196个）
 # 运行集成测试（需要微信开发者工具，46个测试）
 npm run test:integration
 
+# 推荐：复用现有 DevTools 会话，避免反复重启项目（默认）
+INTEGRATION_CLEANUP_MODE=reuse npm run test:integration
+
+# 如需强制隔离环境（CI 或排查端口脏状态）
+INTEGRATION_CLEANUP_MODE=force npm run test:integration
+
+# 禁用跨 suite 会话复用（仅调试时建议）
+INTEGRATION_REUSE_SESSION=false npm run test:integration
+
+# 如需每个 suite 结束后强制断开（默认不强制）
+INTEGRATION_FORCE_DISCONNECT_AFTER_EACH_SUITE=true npm run test:integration
+
 # 运行所有测试（单元 + 集成）
 npm run test:all
 
@@ -305,6 +317,13 @@ npm run inspector
 - **协议层测试** (`tests/protocol/`) - 测试 MCP 服务器协议实现
 - **工具逻辑测试** (`tests/tools/`) - 直接测试工具 handler，无需服务器
 - **集成测试** (`tests/integration/`) - 端到端测试，需要真实环境
+
+集成测试支持以下运行模式：
+- `INTEGRATION_CLEANUP_MODE=reuse`：复用已有 DevTools 实例（默认）
+- `INTEGRATION_CLEANUP_MODE=smart`：优雅关闭后重连
+- `INTEGRATION_CLEANUP_MODE=force`：强制清理全部实例
+- `INTEGRATION_REUSE_SESSION=true/false`：控制跨 suite 连接复用
+- `INTEGRATION_FORCE_DISCONNECT_AFTER_EACH_SUITE=true/false`：控制每个 suite 结束后是否强制断连（默认 `false`）
 
 ## 📋 系统要求
 

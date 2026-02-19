@@ -5,97 +5,54 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import { connectDevtools } from '../../src/tools.js';
-import {
-  findAvailablePort,
-  checkIntegrationTestEnvironment,
-  cleanupConflictingWeChatInstances,
-  safeCleanup,
-  withTimeout
-} from '../utils/test-utils.js';
+import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+
+import { IntegrationHarness } from './helpers/integration-harness.js';
 
 // 只在环境变量RUN_INTEGRATION_TESTS为true时运行
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === 'true';
 
-// 测试配置
-const TEST_PROJECT_PATH = '/Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx';
-const TEST_CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
-
 describe.skipIf(!shouldRun)('Script Integration Tests', () => {
+  const harness = new IntegrationHarness({
+    portCount: 4,
+    connectRetries: 3,
+    connectTimeoutMs: 60_000,
+  });
+
+  let context: MiniProgramContext | null = null;
   let miniProgram: any = null;
-  let currentPage: any = null;
-  let testPort: number = 0;
   let environmentReady = false;
 
   beforeAll(async () => {
-    console.log('🔧 检查Script集成测试环境...');
-
-    // 检查环境是否满足测试要求
-    const envCheck = await checkIntegrationTestEnvironment(TEST_PROJECT_PATH, TEST_CLI_PATH);
-
-    if (!envCheck.isReady) {
-      console.error('❌ Script集成测试环境不满足要求:');
-      envCheck.issues.forEach(issue => console.error(`  • ${issue}`));
-      console.log('\n💡 解决方案:');
-      console.log('  1. 确保微信开发者工具已安装并可通过CLI访问');
-      console.log('  2. 检查项目路径是否正确且包含app.json和project.config.json');
-      console.log('  3. 确保开发者工具的自动化权限已开启');
-
-      environmentReady = false;
+    const state = await harness.prepare();
+    if (!state.ready) {
+      console.warn(`[integration] 跳过 Script 测试: ${state.reason ?? '环境未就绪'}`);
       return;
     }
 
-    console.log('✅ 环境检查通过');
-
-    // 显示警告信息
-    if (envCheck.warnings && envCheck.warnings.length > 0) {
-      console.log('⚠️ 检测到潜在问题:');
-      envCheck.warnings.forEach(warning => console.log(`  • ${warning}`));
-    }
-
-    // 清理冲突的微信开发者工具实例
-    console.log('🧹 检查并清理冲突实例...');
-    const cleanupSuccess = await cleanupConflictingWeChatInstances(TEST_PROJECT_PATH, TEST_CLI_PATH);
-    if (!cleanupSuccess) {
-      console.log('⚠️ 清理未完全成功，测试可能遇到端口冲突');
-    }
-
-    environmentReady = true;
-
+    context = MiniProgramContext.create();
     try {
-      // 分配一个可用端口
-      console.log('🔌 分配测试端口...');
-      testPort = await findAvailablePort(9426);
-      console.log(`✅ 已分配端口: ${testPort}`);
-
-      console.log('正在连接微信开发者工具...');
-      const result = await withTimeout(
-        connectDevtools({
-          projectPath: TEST_PROJECT_PATH,
-          port: testPort,
-        }),
-        30000,
-        'Script测试连接超时'
-      );
-
-      miniProgram = result.miniProgram;
-      currentPage = result.currentPage;
-
-      console.log('连接成功，当前页面:', result.pagePath);
+      const connected = await harness.connect(context, {
+        strategy: 'auto',
+        timeoutMs: 60_000,
+        healthCheck: false,
+      });
+      context = connected.context;
+      miniProgram = context.miniProgram;
+      environmentReady = miniProgram !== null;
     } catch (error) {
       console.error('连接失败:', error);
       environmentReady = false;
     }
-  });
+  }, 180_000);
 
   afterAll(async () => {
-    if (miniProgram) {
-      await safeCleanup(async () => {
-        await miniProgram.close();
-        console.log('微信开发者工具连接已关闭');
-      });
+    if (context) {
+      await harness.disconnect(context);
+      context = null;
     }
-  });
+    miniProgram = null;
+  }, 120_000);
 
   describe('基本执行', () => {
     it('应该执行简单的算术运算', async () => {
@@ -210,7 +167,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       }
 
       const result = await miniProgram.evaluate(() => {
-        // @ts-ignore
+        // @ts-expect-error wx 在小程序运行时可用
         return wx.getSystemInfoSync();
       });
 
@@ -227,7 +184,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
 
       const result = await miniProgram.evaluate(() => {
         return new Promise((resolve) => {
-          // @ts-ignore
+          // @ts-expect-error wx 在小程序运行时可用
           wx.getSystemInfo({
             success: (res: any) => resolve(res)
           });
@@ -251,13 +208,13 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
 
       // 设置存储
       await miniProgram.evaluate((key: string, value: string) => {
-        // @ts-ignore
+        // @ts-expect-error wx 在小程序运行时可用
         wx.setStorageSync(key, value);
       }, testKey, testValue);
 
       // 获取存储
       const result = await miniProgram.evaluate((key: string) => {
-        // @ts-ignore
+        // @ts-expect-error wx 在小程序运行时可用
         return wx.getStorageSync(key);
       }, testKey);
 
@@ -265,7 +222,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
 
       // 清理
       await miniProgram.evaluate((key: string) => {
-        // @ts-ignore
+        // @ts-expect-error wx 在小程序运行时可用
         wx.removeStorageSync(key);
       }, testKey);
     });
@@ -279,7 +236,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       }
 
       const result = await miniProgram.evaluate(() => {
-        // @ts-ignore
+        // @ts-expect-error getApp 在小程序运行时可用
         const app = getApp();
         return {
           hasApp: !!app,
@@ -298,7 +255,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       }
 
       const result = await miniProgram.evaluate(() => {
-        // @ts-ignore
+        // @ts-expect-error getCurrentPages 在小程序运行时可用
         const pages = getCurrentPages();
         return {
           pageCount: pages.length,
@@ -317,7 +274,7 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       }
 
       const result = await miniProgram.evaluate(() => {
-        // @ts-ignore
+        // @ts-expect-error getCurrentPages 在小程序运行时可用
         const pages = getCurrentPages();
         const currentPage = pages[pages.length - 1];
         return {
