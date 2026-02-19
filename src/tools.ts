@@ -338,13 +338,13 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
           hasInterceptors: !!(app && app.$xfetch && app.$xfetch.interceptors),
           hasMpxFetch: hasMpxFetch
         };
-        console.log('[MCP-DEBUG] Mpx检测:', debugInfo);
+        console.error('[MCP-DEBUG] Mpx检测:', debugInfo);
 
         // 强制安装 Mpx 拦截器（不检查标志，每次都重新安装以覆盖旧的）
         // 这样可以解决小程序未重新加载导致标志残留的问题
         // @ts-ignore
         if (hasMpxFetch) {
-          console.log('[MCP] 正在安装 Mpx $xfetch 拦截器（强制覆盖）...');
+          console.error('[MCP] 正在安装 Mpx $xfetch 拦截器（强制覆盖）...');
 
           // 安装 Mpx 请求拦截器
           // @ts-ignore
@@ -416,14 +416,14 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
             }
           );
 
-          console.log('[MCP] Mpx $xfetch 拦截器安装完成');
+          console.error('[MCP] Mpx $xfetch 拦截器安装完成');
         }
 
         // @ts-ignore
         wx.__networkInterceptorsInstalled = true;
       });
 
-      console.log('[connectDevtools] 网络监听已自动启动（包含 Mpx 框架支持）');
+      console.error('[connectDevtools] 网络监听已自动启动（包含 Mpx 框架支持）');
     } catch (err) {
       console.warn('[connectDevtools] 网络监听启动失败:', err);
     }
@@ -475,8 +475,8 @@ export async function connectDevtoolsEnhanced(
   }
 
   if (verbose) {
-    console.log(`开始连接微信开发者工具，模式: ${mode}`);
-    console.log(`项目路径: ${resolvedProjectPath}`);
+    console.error(`开始连接微信开发者工具，模式: ${mode}`);
+    console.error(`项目路径: ${resolvedProjectPath}`);
   }
 
   try {
@@ -527,7 +527,7 @@ async function intelligentConnect(
   startTime: number
 ): Promise<DetailedConnectResult> {
   if (options.verbose) {
-    console.log('🎯 智能连接策略: 优先使用 launchMode（自动处理项目验证和会话复用）');
+    console.error('🎯 智能连接策略: 优先使用 launchMode（自动处理项目验证和会话复用）');
   }
 
   try {
@@ -539,13 +539,13 @@ async function intelligentConnect(
     return await launchMode(options, startTime);
   } catch (error) {
     if (options.verbose) {
-      console.log('⚠️ launchMode 失败，分析错误类型...');
+      console.error('⚠️ launchMode 失败，分析错误类型...');
     }
 
     // 仅在特定可恢复错误时回退到 connectMode
     if (options.fallbackMode && isSessionConflictError(error)) {
       if (options.verbose) {
-        console.log('🔄 检测到会话冲突，尝试回退到 connectMode');
+        console.error('🔄 检测到会话冲突，尝试回退到 connectMode');
       }
       return await connectMode(options, startTime);
     }
@@ -598,7 +598,7 @@ async function connectMode(
         error.details?.reason === 'session_conflict') {
 
       if (options.verbose) {
-        console.log('🔄 检测到会话冲突，自动回退到传统连接模式（launch）...');
+        console.error('🔄 检测到会话冲突，自动回退到传统连接模式（launch）...');
       }
 
       // 如果允许回退，自动使用launch模式
@@ -653,7 +653,7 @@ async function startupPhase(options: EnhancedConnectOptions): Promise<StartupRes
   const cliCommand = buildCliCommand(options);
 
   if (options.verbose) {
-    console.log('执行CLI命令:', cliCommand.join(' '));
+    console.error('执行CLI命令:', cliCommand.join(' '));
   }
 
   // 执行CLI命令
@@ -681,7 +681,7 @@ async function connectionPhase(
   const wsEndpoint = `ws://localhost:${startupResult.processInfo.port}`;
 
   if (options.verbose) {
-    console.log('连接WebSocket端点:', wsEndpoint);
+    console.error('连接WebSocket端点:', wsEndpoint);
   }
 
   // 连接到WebSocket端点
@@ -777,7 +777,7 @@ async function executeCliCommand(command: string[]): Promise<ChildProcess> {
       process.stdout.on('data', (data) => {
         const text = data.toString();
         output += text;
-        console.log('[CLI stdout]:', text.trim());
+        console.error('[CLI stdout]:', text.trim());
       });
     }
 
@@ -785,7 +785,7 @@ async function executeCliCommand(command: string[]): Promise<ChildProcess> {
       process.stderr.on('data', (data) => {
         const text = data.toString();
         errorOutput += text;
-        console.log('[CLI stderr]:', text.trim());
+        console.error('[CLI stderr]:', text.trim());
 
         // 检测端口冲突错误
         if (text.includes('must be restarted on port')) {
@@ -836,7 +836,7 @@ async function executeCliCommand(command: string[]): Promise<ChildProcess> {
         // 检测 CLI 命令失败（通用）
         if (text.includes('error') || text.includes('failed') || text.includes('失败')) {
           if (!resolved && text.length > 10) { // 确保不是误报
-            console.log('[CLI 警告] 检测到潜在错误:', text.trim());
+            console.error('[CLI 警告] 检测到潜在错误:', text.trim());
           }
         }
       });
@@ -885,7 +885,7 @@ export async function waitForWebSocketReady(port: number, timeout: number, verbo
   let attempt = 0;
 
   if (verbose) {
-    console.log(`等待WebSocket服务启动，端口: ${port}，超时: ${timeout}ms`);
+    console.error(`等待WebSocket服务启动，端口: ${port}，超时: ${timeout}ms`);
   }
 
   while (Date.now() - startTime < timeout) {
@@ -893,7 +893,7 @@ export async function waitForWebSocketReady(port: number, timeout: number, verbo
 
     if (verbose && attempt % 5 === 0) { // 每5秒显示一次进度
       const elapsed = Date.now() - startTime;
-      console.log(`WebSocket检测进度: ${Math.round(elapsed/1000)}s / ${Math.round(timeout/1000)}s`);
+      console.error(`WebSocket检测进度: ${Math.round(elapsed/1000)}s / ${Math.round(timeout/1000)}s`);
     }
 
     // 尝试多种检测方式
@@ -902,7 +902,7 @@ export async function waitForWebSocketReady(port: number, timeout: number, verbo
     if (isReady) {
       if (verbose) {
         const elapsed = Date.now() - startTime;
-        console.log(`WebSocket服务已启动，耗时: ${elapsed}ms`);
+        console.error(`WebSocket服务已启动，耗时: ${elapsed}ms`);
       }
       return;
     }
@@ -971,18 +971,18 @@ export async function detectIDEPort(verbose: boolean = false): Promise<number | 
   const commonPorts = [9420, 9440, 9430, 9450, 9460];
 
   if (verbose) {
-    console.log('🔍 检测微信开发者工具运行端口...');
+    console.error('🔍 检测微信开发者工具运行端口...');
   }
 
   // 策略1: 尝试常用端口
   for (const port of commonPorts) {
     if (verbose) {
-      console.log(`  检测端口 ${port}...`);
+      console.error(`  检测端口 ${port}...`);
     }
 
     if (await checkDevToolsRunning(port)) {
       if (verbose) {
-        console.log(`✅ 检测到IDE运行在端口 ${port}`);
+        console.error(`✅ 检测到IDE运行在端口 ${port}`);
       }
       return port;
     }
@@ -1002,7 +1002,7 @@ export async function detectIDEPort(verbose: boolean = false): Promise<number | 
         const ports = output.split('\n').map((p: string) => parseInt(p, 10)).filter((p: number) => !isNaN(p));
 
         if (verbose && ports.length > 0) {
-          console.log(`  lsof检测到端口: ${ports.join(', ')}`);
+          console.error(`  lsof检测到端口: ${ports.join(', ')}`);
         }
 
         // 遍历检测到的端口，验证是否为有效的自动化端口
@@ -1010,7 +1010,7 @@ export async function detectIDEPort(verbose: boolean = false): Promise<number | 
           if (port >= 9400 && port <= 9500) {
             if (await checkDevToolsRunning(port)) {
               if (verbose) {
-                console.log(`✅ 通过lsof检测到IDE运行在端口 ${port}`);
+                console.error(`✅ 通过lsof检测到IDE运行在端口 ${port}`);
               }
               return port;
             }
@@ -1020,13 +1020,13 @@ export async function detectIDEPort(verbose: boolean = false): Promise<number | 
     } catch (error) {
       // lsof 失败，继续
       if (verbose) {
-        console.log('  lsof检测失败');
+        console.error('  lsof检测失败');
       }
     }
   }
 
   if (verbose) {
-    console.log('❌ 未检测到IDE运行端口');
+    console.error('❌ 未检测到IDE运行端口');
   }
 
   return null;
@@ -1161,7 +1161,7 @@ export async function generateElementUid(element: any, index: number): Promise<s
       element.text().catch(() => '')
     ]);
 
-    console.log(`[generateElementUid] tagName=${tagName}, id="${id}", testId="${testId}", dataId="${dataId}", className="${className}", index=${index}`);
+    console.error(`[generateElementUid] tagName=${tagName}, id="${id}", testId="${testId}", dataId="${dataId}", className="${className}", index=${index}`);
 
     let selector = tagName;
 
@@ -1188,10 +1188,10 @@ export async function generateElementUid(element: any, index: number): Promise<s
       selector += `:nth-child(${index + 1})`;
     }
 
-    console.log(`[generateElementUid] Generated UID: ${selector}`);
+    console.error(`[generateElementUid] Generated UID: ${selector}`);
     return selector;
   } catch (error) {
-    console.log(`[generateElementUid] Error:`, error);
+    console.error(`[generateElementUid] Error:`, error);
     return `${element.tagName || 'unknown'}:nth-child(${index + 1})`;
   }
 }
@@ -1226,7 +1226,7 @@ export async function getPageSnapshot(page: any): Promise<{
       childElements = await page.$$('*');
       if (childElements.length > 0) {
         usedStrategy = 'wildcard(*)';
-        console.log(`✅ 策略1成功: 通配符查询获取到 ${childElements.length} 个元素`);
+        console.error(`✅ 策略1成功: 通配符查询获取到 ${childElements.length} 个元素`);
       }
     } catch (error) {
       console.warn('⚠️  策略1失败 (*)', error);
@@ -1234,7 +1234,7 @@ export async function getPageSnapshot(page: any): Promise<{
 
     // 策略2: 降级到常用组件选择器（仅当策略1失败时）
     if (childElements.length === 0) {
-      console.log('🔄 策略1无结果，降级到策略2（常用组件选择器）');
+      console.error('🔄 策略1无结果，降级到策略2（常用组件选择器）');
       const commonSelectors = [
         'view', 'text', 'button', 'image', 'input', 'textarea', 'picker', 'switch',
         'slider', 'scroll-view', 'swiper', 'icon', 'rich-text', 'progress',
@@ -1246,7 +1246,7 @@ export async function getPageSnapshot(page: any): Promise<{
           const elements = await page.$$(selector);
           childElements.push(...elements);
           if (elements.length > 0) {
-            console.log(`  - ${selector}: ${elements.length} 个元素`);
+            console.error(`  - ${selector}: ${elements.length} 个元素`);
           }
         } catch (error) {
           // 忽略单个选择器失败
@@ -1255,19 +1255,19 @@ export async function getPageSnapshot(page: any): Promise<{
 
       if (childElements.length > 0) {
         usedStrategy = 'common-selectors';
-        console.log(`✅ 策略2成功: 获取到 ${childElements.length} 个元素`);
+        console.error(`✅ 策略2成功: 获取到 ${childElements.length} 个元素`);
       }
     }
 
     // 策略3: 最后尝试层级选择器
     if (childElements.length === 0) {
-      console.log('🔄 策略2无结果，降级到策略3（层级选择器）');
+      console.error('🔄 策略2无结果，降级到策略3（层级选择器）');
       try {
         const rootElements = await page.$$('page > *');
         childElements = rootElements;
         if (childElements.length > 0) {
           usedStrategy = 'hierarchical(page>*)';
-          console.log(`✅ 策略3成功: 获取到 ${childElements.length} 个元素`);
+          console.error(`✅ 策略3成功: 获取到 ${childElements.length} 个元素`);
         }
       } catch (error) {
         console.warn('⚠️  策略3失败 (page > *)', error);
@@ -1282,7 +1282,7 @@ export async function getPageSnapshot(page: any): Promise<{
       };
     }
 
-    console.log(`📊 最终获取到 ${childElements.length} 个元素（策略：${usedStrategy}）`);
+    console.error(`📊 最终获取到 ${childElements.length} 个元素（策略：${usedStrategy}）`);
 
     // 用于跟踪每个基础选择器的元素计数
     const selectorIndexMap = new Map<string, number>();
@@ -1404,7 +1404,7 @@ export async function getPageSnapshot(page: any): Promise<{
     }
 
     const processingTime = Date.now() - startTime;
-    console.log(`⏱️  元素处理耗时: ${processingTime}ms (平均 ${(processingTime / childElements.length).toFixed(2)}ms/元素)`);
+    console.error(`⏱️  元素处理耗时: ${processingTime}ms (平均 ${(processingTime / childElements.length).toFixed(2)}ms/元素)`);
 
     const pagePath = await page.path;
     const snapshot: PageSnapshot = {
@@ -1456,7 +1456,7 @@ export async function clickElement(
       throw new Error(`找不到uid为 ${uid} 的元素，请先获取页面快照`);
     }
 
-    console.log(`[Click] 准备点击元素 - UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
+    console.error(`[Click] 准备点击元素 - UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
 
     // 使用选择器获取所有匹配元素
     const elements = await page.$$(mapInfo.selector);
@@ -1477,17 +1477,17 @@ export async function clickElement(
 
     // 记录点击前的页面路径
     const beforePath = await page.path;
-    console.log(`[Click] 点击前页面: ${beforePath}`);
+    console.error(`[Click] 点击前页面: ${beforePath}`);
 
     // 执行点击操作
     await element.tap();
-    console.log(`[Click] 已执行 tap() 操作`);
+    console.error(`[Click] 已执行 tap() 操作`);
 
     // 如果是双击，再点击一次
     if (dblClick) {
       await new Promise(resolve => setTimeout(resolve, 100)); // 短暂延迟
       await element.tap();
-      console.log(`[Click] 已执行第二次 tap() (双击)`);
+      console.error(`[Click] 已执行第二次 tap() (双击)`);
     }
 
     // 等待一小段时间，让页面有机会响应
@@ -1496,11 +1496,11 @@ export async function clickElement(
     // 记录点击后的页面路径
     try {
       const afterPath = await page.path;
-      console.log(`[Click] 点击后页面: ${afterPath}`);
+      console.error(`[Click] 点击后页面: ${afterPath}`);
       if (beforePath !== afterPath) {
-        console.log(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
+        console.error(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
       } else {
-        console.log(`[Click] ⚠️  页面未切换，可能是同页面操作或导航延迟`);
+        console.error(`[Click] ⚠️  页面未切换，可能是同页面操作或导航延迟`);
       }
     } catch (error) {
       console.warn(`[Click] 无法获取点击后的页面路径:`, error);
@@ -1540,12 +1540,12 @@ export async function takeScreenshot(
 
     // 确保页面完全加载和稳定
     try {
-      console.log('获取当前页面并等待稳定...')
+      console.error('获取当前页面并等待稳定...')
       const currentPage = await miniProgram.currentPage();
       if (currentPage && typeof currentPage.waitFor === 'function') {
         // 等待页面稳定，增加等待时间
         await currentPage.waitFor(1000);
-        console.log('页面等待完成')
+        console.error('页面等待完成')
       }
     } catch (waitError) {
       console.warn('页面等待失败，继续尝试截图:', waitError)
@@ -1553,24 +1553,30 @@ export async function takeScreenshot(
 
     // 重试机制执行截图
     let result: string | undefined
+    let screenshotSucceeded = false
     let lastError: Error | undefined
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`截图尝试 ${attempt}/3`)
+        console.error(`截图尝试 ${attempt}/3`)
         if (path) {
           // 保存到指定路径
           await miniProgram.screenshot({ path });
+          if (!fs.existsSync(path)) {
+            throw new Error(`截图命令返回成功，但目标文件不存在: ${path}`)
+          }
+          screenshotSucceeded = true
           result = undefined
-          console.log(`截图保存成功: ${path}`)
+          console.error(`截图保存成功: ${path}`)
           break
         } else {
           // 返回base64数据
           const base64Data = await miniProgram.screenshot();
-          console.log('截图API调用完成，检查返回数据...')
+          console.error('截图API调用完成，检查返回数据...')
           if (base64Data && typeof base64Data === 'string' && base64Data.length > 0) {
+            screenshotSucceeded = true
             result = base64Data
-            console.log(`截图成功，数据长度: ${base64Data.length}`)
+            console.error(`截图成功，数据长度: ${base64Data.length}`)
             break
           } else {
             throw new Error(`截图返回无效数据: ${typeof base64Data}, 长度: ${base64Data ? base64Data.length : 'null'}`)
@@ -1582,13 +1588,13 @@ export async function takeScreenshot(
 
         if (attempt < 3) {
           // 重试前等待更长时间，让页面稳定
-          console.log(`等待 ${1000 + attempt * 500}ms 后重试...`)
+          console.error(`等待 ${1000 + attempt * 500}ms 后重试...`)
           await new Promise(resolve => setTimeout(resolve, 1000 + attempt * 500))
         }
       }
     }
 
-    if (!result && !path) {
+    if (!screenshotSucceeded) {
       const troubleshootingTips = `
 
 ⚠️  截图功能故障排除建议：

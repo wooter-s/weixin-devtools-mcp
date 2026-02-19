@@ -42,17 +42,17 @@ export const clickTool = defineTool({
 
     // 记录点击前的页面路径
     const beforePath = currentPage.path;
-    console.log(`[Click] 点击前页面: ${beforePath}`);
+    console.error(`[Click] 点击前页面: ${beforePath}`);
 
     // 执行点击操作
     await element.tap();
-    console.log(`[Click] 已执行 tap() 操作`);
+    console.error(`[Click] 已执行 tap() 操作`);
 
     // 如果是双击，再点击一次
     if (dblClick) {
       await new Promise(resolve => setTimeout(resolve, 100));
       await element.tap();
-      console.log(`[Click] 已执行第二次 tap() (双击)`);
+      console.error(`[Click] 已执行第二次 tap() (双击)`);
     }
 
     // 等待页面响应
@@ -62,9 +62,9 @@ export const clickTool = defineTool({
     try {
       const updatedPage = context.currentPage;
       const afterPath = updatedPage?.path;
-      console.log(`[Click] 点击后页面: ${afterPath}`);
+      console.error(`[Click] 点击后页面: ${afterPath}`);
       if (beforePath !== afterPath) {
-        console.log(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
+        console.error(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
       }
     } catch (error) {
       console.warn(`[Click] 无法获取点击后的页面路径:`, error);
@@ -106,16 +106,16 @@ export const inputTextTool = defineTool({
       // 清空并输入
       element.value = '';
       await element.input(text);
-      console.log(`[InputText] 清空并输入: ${text}`);
+      console.error(`[InputText] 清空并输入: ${text}`);
     } else if (append) {
       // 追加内容
       const currentValue = element.value || '';
       await element.input(currentValue + text);
-      console.log(`[InputText] 追加文本: ${text}`);
+      console.error(`[InputText] 追加文本: ${text}`);
     } else {
       // 直接输入
       await element.input(text);
-      console.log(`[InputText] 输入文本: ${text}`);
+      console.error(`[InputText] 输入文本: ${text}`);
     }
 
     let action = '输入文本';

@@ -146,7 +146,7 @@ export class Collector<T> {
         }
       }
       if (this.#options.verbose) {
-        console.log(`[Collector] 环形缓冲区已满，移除最旧条目`);
+        console.error(`[Collector] 环形缓冲区已满，移除最旧条目`);
       }
     }
 
@@ -156,7 +156,7 @@ export class Collector<T> {
     this.#idMap.set(id, withId);
 
     if (this.#options.verbose) {
-      console.log(`[Collector] 收集数据项，ID: ${id}，当前会话条目数: ${currentSession.items.length}`);
+      console.error(`[Collector] 收集数据项，ID: ${id}，当前会话条目数: ${currentSession.items.length}`);
     }
 
     return id;
@@ -187,7 +187,7 @@ export class Collector<T> {
     }
 
     if (this.#options.verbose) {
-      console.log(`[Collector] 导航分割，当前会话数: ${this.#navigations.length}`);
+      console.error(`[Collector] 导航分割，当前会话数: ${this.#navigations.length}`);
     }
   }
 

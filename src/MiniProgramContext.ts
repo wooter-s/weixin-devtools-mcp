@@ -326,7 +326,7 @@ export class MiniProgramContext implements ToolContext {
     }
 
     if (this.#options.verbose) {
-      console.log(`[getElementByUid] UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
+      console.error(`[getElementByUid] UID: ${uid}, Selector: ${mapInfo.selector}, Index: ${mapInfo.index}`);
     }
 
     // 3. 使用选择器获取所有匹配元素
@@ -389,7 +389,7 @@ export class MiniProgramContext implements ToolContext {
 
     if (cacheValid) {
       if (this.#options.verbose) {
-        console.log(`[SnapshotCache] 缓存命中，路径: ${currentPath}，缓存时长: ${now - this.#snapshotCache.timestamp}ms`);
+        console.error(`[SnapshotCache] 缓存命中，路径: ${currentPath}，缓存时长: ${now - this.#snapshotCache.timestamp}ms`);
       }
       return {
         snapshot: this.#snapshotCache.snapshot!,
@@ -406,7 +406,7 @@ export class MiniProgramContext implements ToolContext {
           : this.#snapshotCache.path !== currentPath
             ? '页面路径变化'
             : 'TTL 过期';
-      console.log(`[SnapshotCache] 缓存未命中（${reason}），获取新快照...`);
+      console.error(`[SnapshotCache] 缓存未命中（${reason}），获取新快照...`);
     }
 
     const { snapshot, elementMap } = await getPageSnapshot(page);
@@ -423,7 +423,7 @@ export class MiniProgramContext implements ToolContext {
     this.#elementMap = elementMap;
 
     if (this.#options.verbose) {
-      console.log(`[SnapshotCache] 缓存已更新，元素数量: ${snapshot.elements.length}`);
+      console.error(`[SnapshotCache] 缓存已更新，元素数量: ${snapshot.elements.length}`);
     }
 
     return { snapshot, elementMap };
@@ -441,7 +441,7 @@ export class MiniProgramContext implements ToolContext {
       timestamp: 0,
     };
     if (this.#options.verbose) {
-      console.log('[SnapshotCache] 缓存已失效');
+      console.error('[SnapshotCache] 缓存已失效');
     }
   }
 
