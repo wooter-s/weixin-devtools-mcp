@@ -1,6 +1,6 @@
 {
   "name": "weixin-devtools-mcp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "WeChat Mini Program automation MCP server with intelligent connection, page interaction, assertion validation and network monitoring",
   "type": "module",
   "author": "Wooter Shen",
