@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { ValidationConnectionError } from '../../src/connection/errors.js';
 import {
   connectDevtoolsTool,
   disconnectDevtoolsTool,
@@ -182,5 +183,44 @@ describe('connection tools', () => {
     const response = createMockResponse();
     await expect(getCurrentPageTool.handler({ params: {} }, response as any, mockContext))
       .rejects.toThrow('请先连接到微信开发者工具');
+  });
+
+  it('connect_devtools 应透传 wsHeaders 契约错误信息', async () => {
+    const response = createMockResponse();
+    const contractError = new ValidationConnectionError(
+      '当前连接链路不支持 wsHeaders 参数',
+      ['请移除 wsHeaders 参数后重试'],
+      { strategy: 'wsEndpoint' },
+    );
+
+    mockContext.connectDevtools.mockRejectedValue(contractError);
+
+    await expect(connectDevtoolsTool.handler({
+      params: {
+        strategy: 'wsEndpoint',
+        wsEndpoint: 'ws://127.0.0.1:9420',
+        wsHeaders: {
+          authorization: 'Bearer token',
+        },
+      },
+    }, response as any, mockContext)).rejects.toThrow('当前连接链路不支持 wsHeaders 参数');
+
+    expect(mockContext.connectDevtools).toHaveBeenCalledWith({
+      strategy: 'wsEndpoint',
+      projectPath: undefined,
+      cliPath: undefined,
+      autoPort: undefined,
+      browserUrl: undefined,
+      wsEndpoint: 'ws://127.0.0.1:9420',
+      wsHeaders: {
+        authorization: 'Bearer token',
+      },
+      timeoutMs: undefined,
+      fallback: undefined,
+      healthCheck: undefined,
+      autoDiscover: undefined,
+      verbose: undefined,
+      autoAudits: undefined,
+    });
   });
 });

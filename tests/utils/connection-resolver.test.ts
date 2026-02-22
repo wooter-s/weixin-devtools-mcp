@@ -28,4 +28,22 @@ describe('connection resolver', () => {
 
     expect(plan.attempts).toEqual(['connect', 'launch', 'discover']);
   });
+
+  it('传入 wsHeaders 时应 fail-fast 报错', () => {
+    expect(() => resolveConnectionPlan({
+      strategy: 'wsEndpoint',
+      wsEndpoint: 'ws://127.0.0.1:9420',
+      wsHeaders: {
+        authorization: 'Bearer token',
+      },
+    })).toThrow(ValidationConnectionError);
+
+    expect(() => resolveConnectionPlan({
+      strategy: 'wsEndpoint',
+      wsEndpoint: 'ws://127.0.0.1:9420',
+      wsHeaders: {
+        authorization: 'Bearer token',
+      },
+    })).toThrow('当前连接链路不支持 wsHeaders 参数');
+  });
 });

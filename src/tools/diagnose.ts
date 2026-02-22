@@ -144,7 +144,13 @@ export const diagnoseConnectionTool = defineTool({
       response.appendResponseLine('✅ 项目配置检查通过，可以尝试连接');
       response.appendResponseLine('');
       response.appendResponseLine('💡 建议的连接命令:');
-      response.appendResponseLine(`connect_devtools(projectPath: "${resolvedPath}", strategy: "auto")`);
+      response.appendResponseLine(JSON.stringify({
+        name: 'connect_devtools',
+        arguments: {
+          projectPath: resolvedPath,
+          strategy: 'auto',
+        },
+      }));
     } else {
       response.appendResponseLine('❌ 发现配置问题，请根据上述建议修复后重试');
     }

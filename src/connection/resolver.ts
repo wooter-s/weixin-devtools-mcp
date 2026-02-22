@@ -77,6 +77,14 @@ function resolveFallbackStrategies(
 }
 
 function validateRequest(request: ResolvedConnectionRequest): void {
+  if (request.wsHeaders !== undefined) {
+    throw new ValidationConnectionError(
+      '当前连接链路不支持 wsHeaders 参数',
+      ['请移除 wsHeaders 参数后重试'],
+      { strategy: request.strategy },
+    );
+  }
+
   if (request.strategy === 'launch' || request.strategy === 'connect') {
     if (!request.projectPath) {
       throw new ValidationConnectionError(
