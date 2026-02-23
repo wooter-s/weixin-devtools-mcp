@@ -1,5 +1,5 @@
 /**
- * $ 工具和 waitFor 工具的单元测试
+ * query_selector 工具和 wait_for 工具的单元测试
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

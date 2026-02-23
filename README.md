@@ -8,13 +8,13 @@
 
 ## ✨ 核心特性
 
-- 🚀 **27个专业工具（full profile）** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
+- 🚀 **31个专业工具（full profile）** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
 - 🤖 **智能连接** - 支持 auto/launch/connect 三种模式，自动端口检测，无需手动配置
 - 🔍 **自动网络监控** - 连接时自动启动，实时拦截 wx.request/uploadFile/downloadFile
-- ✅ **完整断言体系** - 5类断言工具，验证元素存在、可见性、文本、属性、状态
+- ✅ **完整断言体系** - 3类断言工具（`assert_text`/`assert_attribute`/`assert_state`），覆盖文本、属性与状态校验
 - 📸 **丰富调试能力** - 支持页面截图、Console 监听、网络请求追踪、诊断工具
 - 🏗️ **模块化架构** - 基于 chrome-devtools-mcp 架构模式，易于扩展和维护
-- 🧩 **可配置工具暴露** - 默认 core profile（17个工具），支持按类别开启 Console/Network/Debug
+- 🧩 **可配置工具暴露** - 默认 core profile（20个工具），支持按类别开启 Console/Network/Debug
 - 🧪 **全面测试覆盖** - 单元测试 + 集成测试，测试覆盖率 >80%
 
 ## 📦 安装
@@ -106,9 +106,9 @@ npm run build
 
 服务器支持按 profile 控制暴露工具，降低默认工具数量：
 
-- `core`（默认）：17 个核心自动化工具
-- `full`：27 个完整工具
-- `minimal`：9 个最小工具
+- `core`（默认）：20 个核心自动化工具
+- `full`：31 个完整工具
+- `minimal`：10 个最小工具
 
 也支持按类别增减：
 
@@ -154,13 +154,13 @@ connect_devtools({
 })
 
 // 2. 查找登录按钮
-$({ selector: "button.login-btn" })
+query_selector({ selector: "button.login-btn" })
 
 // 3. 点击登录按钮
 click({ uid: "button.login-btn" })
 
 // 4. 等待登录成功
-waitFor({ selector: ".welcome-message", timeout: 5000 })
+wait_for({ selector: ".welcome-message", timeout: 5000 })
 
 // 5. 验证登录成功
 assert_text({ uid: ".welcome-message", text: "欢迎回来" })
@@ -174,16 +174,16 @@ screenshot({ path: "/tmp/login-success.png" })
 当前工具暴露采用 profile 机制：
 
 - `core`（默认，20个）：
-  - 连接/页面：`connect_devtools`、`reconnect_devtools`、`disconnect_devtools`、`get_connection_status`、`get_current_page`、`get_page_snapshot`、`$`、`waitFor`
+  - 连接/页面：`connect_devtools`、`reconnect_devtools`、`disconnect_devtools`、`get_connection_status`、`get_current_page`、`get_page_snapshot`、`query_selector`、`wait_for`
   - 交互：`click`、`input_text`、`get_value`、`set_form_control`
   - 断言：`assert_text`、`assert_attribute`、`assert_state`
   - 导航：`navigate_to`、`navigate_back`、`switch_tab`、`relaunch`
   - 脚本：`evaluate_script`
 - 可选类别（默认关闭）：
   - `console`：`list_console_messages`、`get_console_message`
-  - `network`：`get_network_requests`、`stop_network_monitoring`、`clear_network_requests`
+  - `network`：`list_network_requests`、`get_network_request`、`stop_network_monitoring`、`clear_network_requests`
   - `debug`：`screenshot`、`diagnose_connection`、`check_environment`、`debug_page_elements`、`debug_connection_flow`
-- `full` profile：暴露全部 30 个工具。
+- `full` profile：暴露全部 31 个工具。
 
 ## 💡 使用示例
 
@@ -197,25 +197,26 @@ connect_devtools({
 })
 
 // 输入用户名
-$({ selector: "input#username" })
+query_selector({ selector: "input#username" })
 input_text({ uid: "input#username", text: "testuser" })
 
 // 输入密码
-$({ selector: "input#password" })
+query_selector({ selector: "input#password" })
 input_text({ uid: "input#password", text: "password123" })
 
 // 点击登录按钮
-$({ selector: "button.login" })
+query_selector({ selector: "button.login" })
 click({ uid: "button.login" })
 
 // 等待登录成功
-waitFor({ selector: ".welcome", timeout: 5000 })
+wait_for({ selector: ".welcome", timeout: 5000 })
 
 // 验证欢迎消息
 assert_text({ uid: ".welcome", textContains: "欢迎" })
 
-// 检查网络请求（需在服务启动参数中启用 --enable-categories=network）
-get_network_requests({ urlPattern: "/api/login", successOnly: true })
+// 检查网络请求（两阶段查询，需在服务启动参数中启用 --enable-categories=network）
+const requests = list_network_requests({ urlPattern: "/api/login", successOnly: true })
+get_network_request({ reqid: requests[0].reqid })
 ```
 
 ### 示例 2：表单填写和提交
@@ -238,10 +239,10 @@ set_form_control({ uid: "slider#age", value: 25 })
 click({ uid: "button.submit" })
 
 // 等待提交成功
-waitFor({ selector: ".success-toast", timeout: 3000 })
+wait_for({ selector: ".success-toast", timeout: 3000 })
 
 // 验证提交结果
-assert_visible({ uid: ".success-toast", visible: true })
+assert_state({ uid: ".success-toast", visible: true })
 assert_text({ uid: ".success-toast", text: "提交成功" })
 
 // 截图保存结果
@@ -267,14 +268,14 @@ screenshot({ path: "/tmp/form-submit-success.png" })
 # 开发模式（监听文件变化）
 npm run watch
 
-# 运行单元测试（224个测试：协议 + 工具 + 工具类）
+# 运行单元测试（协议 + 工具 + 工具类）
 npm test
 
 # 分类运行单元测试
-npm run test:protocol      # 协议层测试（19个）
-npm run test:tools         # 工具逻辑测试（196个）
+npm run test:protocol      # 协议层测试
+npm run test:tools         # 工具逻辑测试
 
-# 运行集成测试（需要微信开发者工具，46个测试）
+# 运行集成测试（需要微信开发者工具）
 npm run test:integration
 
 # 推荐：复用现有 DevTools 会话，避免反复重启项目（默认）

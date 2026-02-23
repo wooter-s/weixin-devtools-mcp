@@ -110,8 +110,8 @@ describe('MCP Protocol Tests', () => {
         expect(toolNames).toContain('disconnect_devtools');
         expect(toolNames).toContain('get_connection_status');
         expect(toolNames).toContain('get_current_page');
-        expect(toolNames).toContain('$');
-        expect(toolNames).toContain('waitFor');
+        expect(toolNames).toContain('query_selector');
+        expect(toolNames).toContain('wait_for');
         expect(toolNames).toContain('get_page_snapshot');
         expect(toolNames).toContain('click');
         expect(toolNames).toContain('input_text');
@@ -125,14 +125,14 @@ describe('MCP Protocol Tests', () => {
 
         expect(toolNames).not.toContain('diagnose_connection');
         expect(toolNames).not.toContain('list_console_messages');
-        expect(toolNames).not.toContain('get_network_requests');
+        expect(toolNames).not.toContain('list_network_requests');
       });
     });
 
-    it('full profile 应该注册所有 30 个工具', async () => {
+    it('full profile 应该注册所有 31 个工具', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
-        expect(tools).toHaveLength(30);
+        expect(tools).toHaveLength(31);
       }, {
         serverArgs: ['--tools-profile=full'],
       });
@@ -143,7 +143,8 @@ describe('MCP Protocol Tests', () => {
         const { tools } = await client.listTools();
         const toolNames = tools.map(t => t.name);
 
-        expect(toolNames).toContain('get_network_requests');
+        expect(toolNames).toContain('list_network_requests');
+        expect(toolNames).toContain('get_network_request');
         expect(toolNames).toContain('stop_network_monitoring');
         expect(toolNames).toContain('clear_network_requests');
       }, {
@@ -184,10 +185,10 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('$ 选择器工具应该有正确的 schema', async () => {
+    it('query_selector 工具应该有正确的 schema', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
-        const tool = tools.find(t => t.name === '$');
+        const tool = tools.find(t => t.name === 'query_selector');
 
         expect(tool).toBeDefined();
         expect(tool!.inputSchema.properties.selector).toBeDefined();
@@ -195,10 +196,10 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('waitFor 工具应该有正确的 schema', async () => {
+    it('wait_for 工具应该有正确的 schema', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
-        const tool = tools.find(t => t.name === 'waitFor');
+        const tool = tools.find(t => t.name === 'wait_for');
 
         expect(tool).toBeDefined();
         const props = tool!.inputSchema.properties;

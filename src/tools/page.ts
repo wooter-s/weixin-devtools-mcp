@@ -18,7 +18,7 @@ import { defineTool, ToolCategory } from './ToolDefinition.js';
  * $ 选择器工具 - 通过CSS选择器查找页面元素
  */
 export const querySelectorTool = defineTool({
-  name: '$',
+  name: 'query_selector',
   description: '通过CSS选择器查找页面元素，返回匹配元素的详细信息',
   schema: z.object({
     selector: z.string().min(1, '选择器不能为空').describe('CSS选择器，如：view.container、#myId、.myClass、text=按钮'),
@@ -89,7 +89,7 @@ export const querySelectorTool = defineTool({
  * waitFor 等待工具 - 等待条件满足
  */
 export const waitForTool = defineTool({
-  name: 'waitFor',
+  name: 'wait_for',
   description: '等待条件满足，支持等待元素出现、消失、文本匹配等',
   schema: z.object({
     // 支持三种模式:

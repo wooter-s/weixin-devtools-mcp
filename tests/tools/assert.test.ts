@@ -27,6 +27,10 @@ import {
 } from '../../src/tools.js'
 
 describe('assert.ts 工具测试', () => {
+  const mockElement = {
+    attribute: vi.fn(async (_name: string) => null),
+  };
+
   // 创建测试用的上下文对象
   const mockContext = {
     currentPage: {
@@ -36,7 +40,8 @@ describe('assert.ts 工具测试', () => {
       ['button-1', 'button[data-test="submit"]'],
       ['input-1', 'input[type="text"]']
     ]),
-    miniProgram: {}
+    miniProgram: {},
+    getElementByUid: vi.fn(async () => mockElement),
   } as any
 
   // 创建测试用的请求和响应对象
@@ -46,7 +51,8 @@ describe('assert.ts 工具测试', () => {
     return {
       appendResponseLine: vi.fn((line: string) => lines.push(line)),
       setIncludeSnapshot: vi.fn(),
-      getLines: () => lines
+      getLines: () => lines,
+      getResponseText: () => lines.join('\n'),
     }
   }
 
@@ -70,6 +76,8 @@ describe('assert.ts 工具测试', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockContext.getElementByUid.mockResolvedValue(mockElement)
+    mockElement.attribute.mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -220,6 +228,75 @@ describe('assert.ts 工具测试', () => {
       expect(response.appendResponseLine).toHaveBeenCalledWith('失败项数: 0')
     })
 
+    it('应该支持 enabled 状态断言', async () => {
+      const request = createMockRequest({ uid: 'button-1', enabled: true })
+      const response = createMockResponse()
+      mockElement.attribute.mockImplementation(async (name: string) => {
+        if (name === 'disabled') {
+          return null
+        }
+        return null
+      })
+
+      await assertStateTool.handler(request, response, mockContext)
+
+      expect(mockContext.getElementByUid).toHaveBeenCalledWith('button-1')
+      expect(mockElement.attribute).toHaveBeenCalledWith('disabled')
+      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+    })
+
+    it('应该支持 checked 状态断言', async () => {
+      const request = createMockRequest({ uid: 'button-1', checked: true })
+      const response = createMockResponse()
+      mockElement.attribute.mockImplementation(async (name: string) => {
+        if (name === 'checked') {
+          return 'true'
+        }
+        return null
+      })
+
+      await assertStateTool.handler(request, response, mockContext)
+
+      expect(mockElement.attribute).toHaveBeenCalledWith('checked')
+      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+    })
+
+    it('应该支持 focused 状态断言（focus）', async () => {
+      const request = createMockRequest({ uid: 'button-1', focused: true })
+      const response = createMockResponse()
+      mockElement.attribute.mockImplementation(async (name: string) => {
+        if (name === 'focus') {
+          return 'true'
+        }
+        return null
+      })
+
+      await assertStateTool.handler(request, response, mockContext)
+
+      expect(mockElement.attribute).toHaveBeenCalledWith('focus')
+      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+    })
+
+    it('应该支持 focused 状态断言（focused 回退）', async () => {
+      const request = createMockRequest({ uid: 'button-1', focused: true })
+      const response = createMockResponse()
+      mockElement.attribute.mockImplementation(async (name: string) => {
+        if (name === 'focus') {
+          return null
+        }
+        if (name === 'focused') {
+          return 'true'
+        }
+        return null
+      })
+
+      await assertStateTool.handler(request, response, mockContext)
+
+      expect(mockElement.attribute).toHaveBeenCalledWith('focus')
+      expect(mockElement.attribute).toHaveBeenCalledWith('focused')
+      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+    })
+
     it('应该处理部分断言失败', async () => {
       const request = createMockRequest({
         uid: 'button-1',
@@ -234,7 +311,7 @@ describe('assert.ts 工具测试', () => {
 
       expect(response.appendResponseLine).toHaveBeenCalledWith('断言结果: 部分失败')
       expect(response.appendResponseLine).toHaveBeenCalledWith('失败详情:')
-      expect(response.appendResponseLine).toHaveBeenCalledWith('1. 断言失败')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('1. [visible] 断言失败')
     })
 
     it('应该要求至少一个状态参数', async () => {
@@ -250,16 +327,22 @@ describe('assert.ts 工具测试', () => {
     it('应该处理多个状态断言', async () => {
       const request = createMockRequest({
         uid: 'button-1',
-        visible: true
-        // 注意：当前版本只实现了visible，其他状态需要后续扩展
+        visible: true,
+        enabled: true,
       })
       const response = createMockResponse()
 
       vi.mocked(assertElementVisible).mockResolvedValue(successResult)
+      mockElement.attribute.mockImplementation(async (name: string) => {
+        if (name === 'disabled') {
+          return null
+        }
+        return null
+      })
 
       await assertStateTool.handler(request, response, mockContext)
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('检查项数: 1')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('检查项数: 2')
     })
   })
 

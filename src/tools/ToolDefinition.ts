@@ -159,6 +159,19 @@ export interface NetworkStorage {
 /**
  * 工具处理器上下文
  */
+export interface NetworkCollectorContext {
+  syncFromRemote(includePreserved: boolean): Promise<number>;
+  getRequests(options?: {
+    includePreserved?: boolean;
+    types?: NetworkRequestType[];
+    urlPattern?: string;
+    successOnly?: boolean;
+    failedOnly?: boolean;
+    since?: string;
+  }): NetworkRequest[];
+  getCurrentCount(): number;
+}
+
 export interface ToolContext {
   /**
    * 小程序实例 (miniprogram-automator的MiniProgram类型)
@@ -176,6 +189,25 @@ export interface ToolContext {
   consoleStorage: ConsoleStorage;
   networkStorage: NetworkStorage;
   connectionStatus: ConnectionStatusSnapshot;
+
+  /**
+   * 绑定并替换 miniProgram 上的 console / exception 监听器
+   * 用于确保监听器所有权清晰（谁注册，谁解绑）
+   */
+  bindConsoleAndExceptionListeners?(handlers: {
+    consoleHandler: (msg: { type?: string; args?: unknown[] }) => void;
+    exceptionHandler: (err: { message?: string; stack?: string }) => void;
+  }): void;
+
+  /**
+   * 获取网络收集器
+   */
+  getNetworkCollector(): NetworkCollectorContext;
+
+  /**
+   * 清空当前会话的网络请求
+   */
+  clearNetworkRequests(): void;
 
   /**
    * 通过 UID 获取元素
@@ -217,10 +249,25 @@ export interface ToolRequest<T = unknown> {
 /**
  * 工具响应接口
  */
+export interface StructuredSnapshotMeta {
+  requested: boolean;
+  pagePath: string | null;
+  elementCount: number;
+  generatedAt: string;
+}
+
+export interface StructuredContent {
+  snapshot?: StructuredSnapshotMeta;
+  [key: string]: unknown;
+}
+
 export interface ToolResponse {
   appendResponseLine(text: string): void;
   setIncludeSnapshot(include: boolean): void;
   attachImage(data: string, mimeType: string): void;
+  shouldIncludeSnapshot(): boolean;
+  mergeStructuredContent(content: StructuredContent): void;
+  getStructuredContent(): StructuredContent;
 }
 
 /**
@@ -269,6 +316,7 @@ export class SimpleToolResponse implements ToolResponse {
   private responseLines: string[] = [];
   private includeSnapshot = false;
   private attachedImages: Array<{ data: string; mimeType: string }> = [];
+  private structuredContent: StructuredContent = {};
 
   appendResponseLine(text: string): void {
     this.responseLines.push(text);
@@ -280,6 +328,14 @@ export class SimpleToolResponse implements ToolResponse {
 
   attachImage(data: string, mimeType: string): void {
     this.attachedImages.push({ data, mimeType });
+  }
+
+  mergeStructuredContent(content: StructuredContent): void {
+    this.structuredContent = { ...this.structuredContent, ...content };
+  }
+
+  getStructuredContent(): StructuredContent {
+    return { ...this.structuredContent };
   }
 
   getResponseText(): string {

@@ -59,6 +59,11 @@ interface SnapshotCache {
   timestamp: number;
 }
 
+interface MiniProgramListenerState {
+  consoleHandler: ((msg: { type?: string; args?: unknown[] }) => void) | null;
+  exceptionHandler: ((err: { message?: string; stack?: string }) => void) | null;
+}
+
 /**
  * 默认配置
  */
@@ -86,6 +91,12 @@ export class MiniProgramContext implements ToolContext {
   #options: Required<MiniProgramContextOptions>;
   #connectionManager: ConnectionManager;
   #connectionStatus: ConnectionStatusSnapshot = createDisconnectedStatus();
+
+  // 监听器所有权状态（谁注册谁解绑）
+  #listenerState: MiniProgramListenerState = {
+    consoleHandler: null,
+    exceptionHandler: null,
+  };
 
   // 使用 Collector 模式管理数据
   #consoleCollector: ConsoleCollector;
@@ -151,11 +162,50 @@ export class MiniProgramContext implements ToolContext {
     return this.#miniProgram;
   }
 
+  #detachOwnedListeners(): void {
+    if (!this.#miniProgram) {
+      this.#listenerState.consoleHandler = null;
+      this.#listenerState.exceptionHandler = null;
+      return;
+    }
+
+    if (this.#listenerState.consoleHandler) {
+      this.#miniProgram.off('console', this.#listenerState.consoleHandler);
+      this.#listenerState.consoleHandler = null;
+    }
+
+    if (this.#listenerState.exceptionHandler) {
+      this.#miniProgram.off('exception', this.#listenerState.exceptionHandler);
+      this.#listenerState.exceptionHandler = null;
+    }
+  }
+
+  bindConsoleAndExceptionListeners(
+    handlers: {
+      consoleHandler: (msg: { type?: string; args?: unknown[] }) => void;
+      exceptionHandler: (err: { message?: string; stack?: string }) => void;
+    }
+  ): void {
+    if (!this.#miniProgram) {
+      throw new Error('请先连接到微信开发者工具');
+    }
+
+    this.#detachOwnedListeners();
+    this.#miniProgram.on('console', handlers.consoleHandler);
+    this.#miniProgram.on('exception', handlers.exceptionHandler);
+    this.#listenerState = {
+      consoleHandler: handlers.consoleHandler,
+      exceptionHandler: handlers.exceptionHandler,
+    };
+  }
+
   /**
    * 设置 MiniProgram 实例
    */
   async setMiniProgram(miniProgram: MiniProgram): Promise<void> {
+    this.#detachOwnedListeners();
     this.#miniProgram = miniProgram;
+    this.#networkCollector.setMiniProgram(miniProgram);
 
     // 自动获取当前页面
     try {
@@ -189,7 +239,9 @@ export class MiniProgramContext implements ToolContext {
    * 断开连接，重置状态
    */
   disconnect(): void {
+    this.#detachOwnedListeners();
     this.#miniProgram = null;
+    this.#networkCollector.setMiniProgram(null);
     this.#currentPage = null;
     this.#elementMap.clear();
     this.#consoleCollector.clear();
@@ -201,7 +253,9 @@ export class MiniProgramContext implements ToolContext {
 
   async connectDevtools(request: ConnectionRequest): Promise<ConnectionConnectResult> {
     const result = await this.#connectionManager.connect(request);
+    this.#detachOwnedListeners();
     this.#miniProgram = result.miniProgram;
+    this.#networkCollector.setMiniProgram(result.miniProgram);
     this.#currentPage = result.currentPage;
     this.#elementMap.clear();
     this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
@@ -210,7 +264,9 @@ export class MiniProgramContext implements ToolContext {
 
   async reconnectDevtools(request?: ConnectionRequest): Promise<ConnectionConnectResult> {
     const result = await this.#connectionManager.reconnect(request);
+    this.#detachOwnedListeners();
     this.#miniProgram = result.miniProgram;
+    this.#networkCollector.setMiniProgram(result.miniProgram);
     this.#currentPage = result.currentPage;
     this.#elementMap.clear();
     this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
@@ -230,7 +286,9 @@ export class MiniProgramContext implements ToolContext {
       : this.#connectionManager.getStatusSnapshot();
 
     if (!this.#connectionStatus.connected) {
+      this.#detachOwnedListeners();
       this.#miniProgram = null;
+      this.#networkCollector.setMiniProgram(null);
       this.#currentPage = null;
       this.#elementMap.clear();
       return this.#connectionStatus;
@@ -238,7 +296,11 @@ export class MiniProgramContext implements ToolContext {
 
     const session = this.#connectionManager.getSession();
     if (session) {
+      if (this.#miniProgram !== session.miniProgram) {
+        this.#detachOwnedListeners();
+      }
       this.#miniProgram = session.miniProgram;
+      this.#networkCollector.setMiniProgram(session.miniProgram);
       this.#currentPage = session.currentPage;
     }
 

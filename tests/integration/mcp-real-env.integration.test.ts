@@ -13,7 +13,7 @@ import { MiniProgramContext } from '../../src/MiniProgramContext.js';
 import { getConnectionStatusTool } from '../../src/tools/connection.js';
 import { listConsoleMessagesTool, getConsoleMessageTool } from '../../src/tools/console.js';
 import { clickTool } from '../../src/tools/input.js';
-import { getNetworkRequestsTool } from '../../src/tools/network.js';
+import { listNetworkRequestsTool, getNetworkRequestTool } from '../../src/tools/network.js';
 import { querySelectorTool, waitForTool } from '../../src/tools/page.js';
 import { screenshotTool } from '../../src/tools/screenshot.js';
 import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
@@ -29,6 +29,14 @@ function extractFirstMsgId(responseText: string): number | null {
   }
   const parsed = Number(match[1]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractFirstReqId(responseText: string): string | null {
+  const match = responseText.match(/reqid=([^\s]+)/);
+  if (!match) {
+    return null;
+  }
+  return match[1] ?? null;
 }
 
 describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests', () => {
@@ -155,19 +163,30 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
     expect(detailResponse.getResponseText()).toContain('Console Message');
   }, 90_000);
 
-  it('应该能获取网络请求记录', async () => {
+  it('应该支持两阶段 Network 查询（list -> get）', async () => {
     if (!(await ensureConnected()) || !context) {
       return;
     }
 
     await new Promise(resolve => setTimeout(resolve, 2500));
 
-    const networkResponse = await runTool(context, getNetworkRequestsTool.handler, {
-      type: 'all',
+    const listResponse = await runTool(context, listNetworkRequestsTool.handler, {
+      pageSize: 20,
+      pageIdx: 0,
+      includePreservedRequests: true,
       successOnly: false,
-      limit: 20,
+      failedOnly: false,
     });
-    expect(networkResponse.getResponseText()).toContain('网络请求记录');
+    const listText = listResponse.getResponseText();
+    expect(listText).toContain('Network Requests (List View)');
+
+    const reqid = extractFirstReqId(listText);
+    if (reqid === null) {
+      return;
+    }
+
+    const detailResponse = await runTool(context, getNetworkRequestTool.handler, { reqid });
+    expect(detailResponse.getResponseText()).toContain('Network Request (Detail View)');
   }, 90_000);
 
   it('应该兼容截图能力（成功或已知受限错误）', async () => {
@@ -211,11 +230,13 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
       }
     }
 
-    const networkResponse = await runTool(context, getNetworkRequestsTool.handler, {
-      type: 'all',
+    const listResponse = await runTool(context, listNetworkRequestsTool.handler, {
+      pageSize: 10,
+      pageIdx: 0,
+      includePreservedRequests: true,
       successOnly: false,
-      limit: 10,
+      failedOnly: false,
     });
-    expect(networkResponse.getResponseText()).toContain('网络请求记录');
+    expect(listResponse.getResponseText()).toContain('Network Requests (List View)');
   }, 150_000);
 });

@@ -18,6 +18,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MiniProgramContext } from './MiniProgramContext.js';
 import { parseToolProfileConfig, resolveToolsByProfile } from './config/tool-profile.js';
 import type {
+  StructuredSnapshotMeta,
   ToolCategory,
   ToolRequest,
   ToolDefinition
@@ -38,7 +39,7 @@ const globalContext = MiniProgramContext.create();
 const server = new Server(
   {
     name: "weixin-devtools-mcp",
-    version: "0.3.3",
+    version: "0.5.0",
   },
   {
     capabilities: {
@@ -75,6 +76,15 @@ function getDisabledToolHint(category: ToolCategory): string {
     `1. --tools-profile=full (启用全部工具)`,
     `2. --enable-categories=${category} (按类别启用)`
   ].join('\n');
+}
+
+function buildSnapshotMeta(): StructuredSnapshotMeta {
+  return {
+    requested: true,
+    pagePath: globalContext.currentPage?.path ?? null,
+    elementCount: globalContext.elementMap.size,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -234,8 +244,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // 执行工具处理器
     await tool.handler(toolRequest, toolResponse, globalContext);
 
+    if (toolResponse.shouldIncludeSnapshot()) {
+      toolResponse.mergeStructuredContent({
+        snapshot: buildSnapshotMeta(),
+      });
+    }
+
     // 构建响应内容
-    const content: any[] = [];
+    const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [];
 
     // 添加文本响应
     const responseText = toolResponse.getResponseText();
@@ -256,7 +272,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
     }
 
-    return { content };
+    return {
+      content,
+      structuredContent: toolResponse.getStructuredContent(),
+    };
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

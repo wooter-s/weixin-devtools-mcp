@@ -9,15 +9,44 @@ import {
   assertElementVisible,
   assertElementText,
   assertElementAttribute,
-  type StateAssertOptions,
   type ContentAssertOptions,
-  type AssertResult
+  type AssertResult,
 } from '../tools.js';
 
 import { defineTool, ToolCategory } from './ToolDefinition.js';
 
 // 注意: assert_exists 和 assert_visible 已合并到 assert_state
 // 使用 assert_state 工具即可验证元素的存在性和可见性
+
+function asBooleanStateLabel(value: boolean): string {
+  return value ? 'true' : 'false';
+}
+
+function isTruthyAttribute(value: string | null): boolean {
+  if (value === null) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return true;
+  }
+
+  return !['false', '0', 'no', 'off', 'null', 'undefined'].includes(normalized);
+}
+
+function buildBooleanStateResult(stateName: 'enabled' | 'checked' | 'focused', expected: boolean, actual: boolean): AssertResult {
+  const passed = expected === actual;
+  return {
+    passed,
+    message: passed
+      ? `[${stateName}] 断言通过: ${asBooleanStateLabel(expected)}`
+      : `[${stateName}] 断言失败: 期望 ${asBooleanStateLabel(expected)}，实际 ${asBooleanStateLabel(actual)}`,
+    expected,
+    actual,
+    timestamp: Date.now(),
+  };
+}
 
 /**
  * 断言元素文本内容
@@ -51,7 +80,7 @@ export const assertTextTool = defineTool({
         uid,
         text,
         textContains,
-        textMatches
+        textMatches,
       };
 
       const result: AssertResult = await assertElementText(
@@ -60,7 +89,6 @@ export const assertTextTool = defineTool({
         options
       );
 
-      // 根据断言结果返回信息
       response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
       response.appendResponseLine(`消息: ${result.message}`);
       response.appendResponseLine(`期望: ${result.expected}`);
@@ -106,8 +134,8 @@ export const assertAttributeTool = defineTool({
         uid,
         attribute: {
           key: attributeKey,
-          value: attributeValue
-        }
+          value: attributeValue,
+        },
       };
 
       const result: AssertResult = await assertElementAttribute(
@@ -116,7 +144,6 @@ export const assertAttributeTool = defineTool({
         options
       );
 
-      // 根据断言结果返回信息
       response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
       response.appendResponseLine(`消息: ${result.message}`);
       response.appendResponseLine(`期望: ${result.expected}`);
@@ -166,27 +193,47 @@ export const assertStateTool = defineTool({
     try {
       const results: AssertResult[] = [];
 
-      // 可见性断言
       if (visible !== undefined) {
-        const options: StateAssertOptions = { uid, visible };
         const result = await assertElementVisible(
           context.currentPage,
           context.elementMap,
-          options
+          { uid, visible }
         );
-        results.push(result);
+        results.push({
+          ...result,
+          message: `[visible] ${result.message}`,
+        });
       }
 
-      // TODO: 这里可以添加更多状态断言，如enabled、checked、focused
-      // 目前只实现了visible，其他状态需要扩展底层函数
+      if (enabled !== undefined || checked !== undefined || focused !== undefined) {
+        const element = await context.getElementByUid(uid);
 
-      // 汇总结果
-      const allPassed = results.every(r => r.passed);
-      const failedResults = results.filter(r => !r.passed);
+        if (enabled !== undefined) {
+          const disabledAttr = await element.attribute('disabled').catch(() => null);
+          const actualEnabled = !isTruthyAttribute(disabledAttr);
+          results.push(buildBooleanStateResult('enabled', enabled, actualEnabled));
+        }
+
+        if (checked !== undefined) {
+          const checkedAttr = await element.attribute('checked').catch(() => null);
+          const actualChecked = isTruthyAttribute(checkedAttr);
+          results.push(buildBooleanStateResult('checked', checked, actualChecked));
+        }
+
+        if (focused !== undefined) {
+          const focusAttr = await element.attribute('focus').catch(() => null);
+          const focusedAttr = focusAttr ?? await element.attribute('focused').catch(() => null);
+          const actualFocused = isTruthyAttribute(focusedAttr);
+          results.push(buildBooleanStateResult('focused', focused, actualFocused));
+        }
+      }
+
+      const allPassed = results.every(result => result.passed);
+      const failedResults = results.filter(result => !result.passed);
 
       response.appendResponseLine(`断言结果: ${allPassed ? '全部通过' : '部分失败'}`);
       response.appendResponseLine(`检查项数: ${results.length}`);
-      response.appendResponseLine(`通过项数: ${results.filter(r => r.passed).length}`);
+      response.appendResponseLine(`通过项数: ${results.filter(result => result.passed).length}`);
       response.appendResponseLine(`失败项数: ${failedResults.length}`);
 
       if (failedResults.length > 0) {

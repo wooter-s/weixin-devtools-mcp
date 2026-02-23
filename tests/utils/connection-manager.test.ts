@@ -160,8 +160,6 @@ describe('connection manager', () => {
 
     expect(result.strategyUsed).toBe('connect');
     expect(firstMiniProgram.disconnect).toHaveBeenCalledTimes(1);
-    expect(firstMiniProgram.removeAllListeners).toHaveBeenCalledWith('console');
-    expect(firstMiniProgram.removeAllListeners).toHaveBeenCalledWith('exception');
   });
 
   it('refreshHealth 返回 unhealthy 时应真实断开连接', async () => {
@@ -197,8 +195,6 @@ describe('connection manager', () => {
     expect(status.lastError?.code).toBe('HEALTH_CHECK_FAILED');
     expect(manager.getSession()).toBeNull();
     expect(miniProgram.disconnect).toHaveBeenCalledTimes(1);
-    expect(miniProgram.removeAllListeners).toHaveBeenCalledWith('console');
-    expect(miniProgram.removeAllListeners).toHaveBeenCalledWith('exception');
   });
 
   it('重复 connect 时应保持单活会话', async () => {

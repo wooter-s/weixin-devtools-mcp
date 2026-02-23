@@ -157,6 +157,16 @@ declare module 'miniprogram-automator' {
     removeAllListeners(event: string): void;
 
     /**
+     * 移除指定事件监听器
+     * @param event 事件名称
+     * @param handler 事件处理函数
+     */
+    off(event: 'console', handler: (msg: ConsoleMessage) => void): void;
+    off(event: 'exception', handler: (err: ExceptionInfo) => void): void;
+    off(event: 'pageNavigate', handler: (data: PageNavigateInfo) => void): void;
+    off(event: string, handler: (...args: unknown[]) => void): void;
+
+    /**
      * 断开与开发者工具的连接
      */
     disconnect(): Promise<void>;

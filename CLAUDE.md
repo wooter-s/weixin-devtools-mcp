@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-微信开发者工具自动化 MCP 服务器，提供40个工具用于微信小程序的自动化测试。基于 TypeScript 和 `miniprogram-automator` SDK 实现。
+微信开发者工具自动化 MCP 服务器，提供31个工具用于微信小程序的自动化测试。基于 TypeScript 和 `miniprogram-automator` SDK 实现。
 
 ## Common Commands
 
@@ -101,7 +101,7 @@ npm test -- tests/tools/console.test.ts -t "测试用例名称"
 - 源文件：`src/server.ts`
 - 特点：完全模块化的工具系统，代码简洁
 - 代码量：~245行
-- 工具处理：所有40个工具统一通过 `allTools` 数组和 `ToolDefinition` 框架处理
+- 工具处理：所有31个工具统一通过 `allTools` 数组和 `ToolDefinition` 框架处理
 - 配置：`npm install -g weixin-devtools-mcp` 默认使用此入口（package.json bin配置）
 
 ### 模块化工具系统
@@ -116,11 +116,11 @@ src/tools/
 │   ├── ToolHandler      # 工具处理器类型
 │   └── ToolResponse     # 响应构建接口
 │
-├── index.ts             # 统一导出 allTools[] (40个工具)
+├── index.ts             # 统一导出 allTools[] (31个工具)
 │
 └── [8个功能模块]
     ├── connection.ts    # 连接管理（3工具）
-    ├── page.ts          # 页面查询（2工具：$、waitFor）
+    ├── page.ts          # 页面查询（2工具：query_selector、wait_for）
     ├── snapshot.ts      # 页面快照（1工具）
     ├── input.ts         # 交互操作（7工具）
     ├── assert.ts        # 断言验证（5工具）
@@ -254,7 +254,7 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 - 直接调用工具 handler，无需启动 MCP 服务器
 - 使用 mock 对象模拟 miniProgram、page等依赖
 - 快速执行，专注于工具业务逻辑测试
-- **196个测试**，覆盖所有40个工具的核心逻辑
+- **196个测试**，覆盖所有31个工具的核心逻辑
 
 **3. 集成测试** (`tests/integration/`)
 - 测试真实环境下的端到端流程
@@ -269,7 +269,7 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 
 ### 重要实现细节
 
-1. **网络监控自动启动**：`connect_devtools_enhanced` 连接成功后自动调用 `start_network_monitoring`
+1. **网络监控自动启动**：`connect_devtools` 连接成功后自动启动网络监听，无需手动调用启动工具
 2. **导航API修复**（v0.3.3）：所有导航工具从 `await page.navigateTo()` 模式改为 `await miniProgram.navigateTo(page, ...)`
 3. **错误处理**：所有工具都进行连接状态检查和元素存在性验证
 4. **响应构建**：通过 `response.appendResponseLine()` 构建多行响应，支持 `attachImage()` 添加图片
@@ -296,12 +296,12 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 | 类别 | 数量 | 核心工具 |
 |------|------|----------|
 | 连接管理 | 3 | connect_devtools_enhanced（推荐） |
-| 页面查询 | 3 | $（选择器查找）、waitFor（条件等待） |
+| 页面查询 | 2 | query_selector（选择器查找）、wait_for（条件等待） |
 | 交互操作 | 7 | click, input_text, select_picker, toggle_switch |
 | 断言验证 | 5 | assert_exists, assert_visible, assert_text |
 | 页面导航 | 6 | navigate_to, navigate_back, switch_tab, relaunch |
 | Console监控 | 6 | start/stop_console_monitoring, list_console_messages, get_console_message |
-| 网络监控 | 5 | 自动启动，get_network_requests（过滤查询） |
+| 网络监控 | 4 | 自动启动，list_network_requests + get_network_request（两阶段查询） |
 | 诊断工具 | 4 | diagnose_connection, check_environment, debug_page_elements, debug_connection_flow |
 
 ### 典型工作流
@@ -311,8 +311,8 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 connect_devtools_enhanced({ projectPath: "/path/to/project", mode: "auto" })
 
 // 2. 页面查询和等待
-$({ selector: "button.login" })
-waitFor({ selector: ".success", timeout: 5000 })
+query_selector({ selector: "button.login" })
+wait_for({ selector: ".success", timeout: 5000 })
 
 // 3. 交互操作
 click({ uid: "button.login" })
@@ -338,7 +338,8 @@ const detail = get_console_message({ msgid: 1 })
 
 // 6. 网络监控和截图
 screenshot({ path: "/tmp/result.png" })
-get_network_requests({ urlPattern: "/api/", successOnly: true })
+const list = list_network_requests({ urlPattern: "/api/", successOnly: true })
+get_network_request({ reqid: list[0].reqid })
 
 // 7. 连接调试（当遇到连接问题时）
 debug_connection_flow({
@@ -384,7 +385,7 @@ check_environment()
 
 完整文档位于 `docs/` 目录：
 - `integration-guide.md` - 安装配置详细指南
-- `page-tools.md` - $ 和 waitFor API文档
+- `page-tools.md` - query_selector 和 wait_for API文档
 - `best-practices.md` - 测试脚本最佳实践
 - `testing-guide.md` - 测试策略和覆盖率
 - `examples/` - 登录、购物等场景示例

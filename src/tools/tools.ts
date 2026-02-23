@@ -39,7 +39,8 @@ import {
   reLaunchTool
 } from './navigate.js';
 import {
-  getNetworkRequestsTool,
+  listNetworkRequestsTool,
+  getNetworkRequestTool,
   stopNetworkMonitoringTool,
   clearNetworkRequestsTool
 } from './network.js';
@@ -72,7 +73,8 @@ const tools: ToolDefinition[] = [
   evaluateScript,
   listConsoleMessagesTool,
   getConsoleMessageTool,
-  getNetworkRequestsTool,
+  listNetworkRequestsTool,
+  getNetworkRequestTool,
   stopNetworkMonitoringTool,
   clearNetworkRequestsTool,
   diagnoseConnectionTool,

@@ -114,15 +114,7 @@ async function startAutomaticMonitoring(
   response: ToolResponse,
 ): Promise<void> {
   try {
-    miniProgram.removeAllListeners('console');
-    miniProgram.removeAllListeners('exception');
-
-    updateConsoleStorage(context, storage => {
-      storage.isMonitoring = true;
-      storage.startTime = new Date().toISOString();
-    });
-
-    miniProgram.on('console', (msg: { type?: string; args?: unknown[] }) => {
+    const consoleHandler = (msg: { type?: string; args?: unknown[] }) => {
       const consoleMessage: ConsoleMessage = {
         type: (msg.type as ConsoleMessage['type']) || 'log',
         args: msg.args || [],
@@ -143,9 +135,9 @@ async function startAutomaticMonitoring(
         }
         currentSession.messages.push(consoleMessage);
       });
-    });
+    };
 
-    miniProgram.on('exception', (err: { message?: string; stack?: string }) => {
+    const exceptionHandler = (err: { message?: string; stack?: string }) => {
       const exceptionMessage: ExceptionMessage = {
         message: err.message || 'Unknown exception',
         stack: err.stack,
@@ -166,6 +158,33 @@ async function startAutomaticMonitoring(
         }
         currentSession.exceptions.push(exceptionMessage);
       });
+    };
+
+    if (typeof (context as ToolContext & {
+      bindConsoleAndExceptionListeners?: (handlers: {
+        consoleHandler: (msg: { type?: string; args?: unknown[] }) => void;
+        exceptionHandler: (err: { message?: string; stack?: string }) => void;
+      }) => void;
+    }).bindConsoleAndExceptionListeners === 'function') {
+      (context as ToolContext & {
+        bindConsoleAndExceptionListeners: (handlers: {
+          consoleHandler: (msg: { type?: string; args?: unknown[] }) => void;
+          exceptionHandler: (err: { message?: string; stack?: string }) => void;
+        }) => void;
+      }).bindConsoleAndExceptionListeners({
+        consoleHandler,
+        exceptionHandler,
+      });
+    } else {
+      miniProgram.off('console', consoleHandler);
+      miniProgram.off('exception', exceptionHandler);
+      miniProgram.on('console', consoleHandler);
+      miniProgram.on('exception', exceptionHandler);
+    }
+
+    updateConsoleStorage(context, storage => {
+      storage.isMonitoring = true;
+      storage.startTime = new Date().toISOString();
     });
 
     response.appendResponseLine('Console监听已自动启动');

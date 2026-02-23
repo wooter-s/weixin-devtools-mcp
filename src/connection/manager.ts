@@ -61,13 +61,6 @@ export class ConnectionManager {
 
   async #cleanupMiniProgram(miniProgram: MiniProgram): Promise<void> {
     try {
-      miniProgram.removeAllListeners('console');
-      miniProgram.removeAllListeners('exception');
-    } catch {
-      // 忽略监听器清理异常
-    }
-
-    try {
       await miniProgram.disconnect();
     } catch {
       // 忽略断连异常，始终收敛本地状态

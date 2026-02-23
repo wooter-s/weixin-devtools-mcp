@@ -29,7 +29,7 @@ describe('connection tools', () => {
   const mockCurrentPage = { path: '/pages/home/index' };
   const mockMiniProgram = {
     currentPage: vi.fn(async () => mockCurrentPage),
-    removeAllListeners: vi.fn(),
+    off: vi.fn(),
     on: vi.fn(),
     evaluate: vi.fn(async () => undefined),
   };
@@ -59,6 +59,7 @@ describe('connection tools', () => {
     reconnectDevtools: vi.fn(),
     disconnectDevtools: vi.fn(),
     getConnectionStatus: vi.fn(),
+    bindConsoleAndExceptionListeners: vi.fn(),
   } as any;
 
   beforeEach(() => {
@@ -120,8 +121,10 @@ describe('connection tools', () => {
     expect(response.getLines().join('\n')).toContain('✅ 连接成功');
     expect(response.getLines().join('\n')).toContain('连接ID: conn_1');
     expect(response.getLines().join('\n')).toContain('策略: launch');
-    expect(mockMiniProgram.removeAllListeners).toHaveBeenCalledWith('console');
-    expect(mockMiniProgram.on).toHaveBeenCalledWith('console', expect.any(Function));
+    expect(mockContext.bindConsoleAndExceptionListeners).toHaveBeenCalledWith({
+      consoleHandler: expect.any(Function),
+      exceptionHandler: expect.any(Function),
+    });
   });
 
   it('reconnect_devtools 应支持无参数重连', async () => {

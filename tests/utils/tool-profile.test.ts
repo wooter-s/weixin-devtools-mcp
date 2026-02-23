@@ -33,14 +33,14 @@ describe('tool-profile 配置测试', () => {
     expect(config.enabledCategories.has(ToolCategory.NETWORK)).toBe(false);
   });
 
-  it('full profile 应返回全部 30 个工具', () => {
+  it('full profile 应返回全部 31 个工具', () => {
     const result = resolveToolsByProfile(allTools, {
       profile: 'full',
       enabledCategories: new Set(),
       disabledCategories: new Set(),
     });
 
-    expect(result.activeTools).toHaveLength(30);
+    expect(result.activeTools).toHaveLength(31);
     expect(result.disabledTools.size).toBe(0);
   });
 
@@ -54,7 +54,7 @@ describe('tool-profile 配置测试', () => {
     expect(result.activeTools).toHaveLength(20);
     expect(result.disabledTools.has('list_console_messages')).toBe(true);
     expect(result.disabledTools.has('diagnose_connection')).toBe(true);
-    expect(result.disabledTools.has('get_network_requests')).toBe(true);
+    expect(result.disabledTools.has('list_network_requests')).toBe(true);
   });
 
   it('core profile 启用 debug 类别后应包含诊断工具', () => {

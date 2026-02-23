@@ -1,335 +1,361 @@
 /**
  * 网络请求监听工具
- * 通过拦截 wx.request, wx.uploadFile, wx.downloadFile 实现网络监控
+ * 采用两阶段查询：list -> get detail
  */
 /* eslint-disable @typescript-eslint/ban-ts-comment -- wx 运行时对象在 evaluate 上下文中动态注入，需保持现有注释抑制。 */
 
 import { z } from 'zod';
 
-import type { NetworkRequest } from './ToolDefinition.js';
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import type { NetworkRequest as StoredNetworkRequest } from './ToolDefinition.js';
+import { defineTool, ToolCategory, type NetworkRequestType } from './ToolDefinition.js';
 
-// 注意: start_network_monitoring 和 stop_network_monitoring 已移除
-// 网络监听在连接时自动启动，无需手动管理
+interface NetworkRequestSummary {
+  reqid: string;
+  type: NetworkRequestType;
+  method: string;
+  url: string;
+  status: 'pending' | 'success' | 'failed';
+  statusCode: number | null;
+  durationMs: number | null;
+  timestamp: string;
+}
+
+function sanitizeNetworkRequests(logs: StoredNetworkRequest[]): StoredNetworkRequest[] {
+  const deduped = new Map<string, StoredNetworkRequest>();
+
+  for (const request of logs) {
+    if (!request || typeof request !== 'object') {
+      continue;
+    }
+
+    if (!request.id || request.id === 'N/A') {
+      continue;
+    }
+
+    if (!request.url || request.url === 'undefined') {
+      continue;
+    }
+
+    if (request.type !== 'request' && request.type !== 'uploadFile' && request.type !== 'downloadFile') {
+      continue;
+    }
+
+    deduped.set(request.id, request);
+  }
+
+  return Array.from(deduped.values()).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+}
+
+function toRequestStatus(request: StoredNetworkRequest): 'pending' | 'success' | 'failed' {
+  if (request.pending === true) {
+    return 'pending';
+  }
+  return request.success ? 'success' : 'failed';
+}
+
+function toSummary(request: StoredNetworkRequest): NetworkRequestSummary {
+  return {
+    reqid: request.id,
+    type: request.type,
+    method: request.method ?? 'GET',
+    url: request.url,
+    status: toRequestStatus(request),
+    statusCode: request.statusCode ?? null,
+    durationMs: request.duration ?? null,
+    timestamp: request.timestamp,
+  };
+}
+
+function ensureConnected(context: { miniProgram: { evaluate: <T>(fn: () => T) => Promise<T> } | null }): void {
+  if (!context.miniProgram) {
+    throw new Error('请先连接到微信开发者工具');
+  }
+}
+
+const requestTypeSchema = z.enum(['request', 'uploadFile', 'downloadFile']);
+
+const listNetworkRequestsSchema = z.object({
+  pageSize: z.number().int().positive().optional().default(50).describe('每页条数'),
+  pageIdx: z.number().int().min(0).optional().default(0).describe('页码（从 0 开始）'),
+  resourceTypes: z.array(requestTypeSchema).optional().describe('按请求类型过滤'),
+  includePreservedRequests: z.boolean().optional().default(false).describe('是否包含历史请求（最近 3 次会话）'),
+  urlPattern: z.string().optional().describe('URL 匹配模式（支持正则）'),
+  successOnly: z.boolean().optional().default(false).describe('仅返回成功请求'),
+  failedOnly: z.boolean().optional().default(false).describe('仅返回失败请求'),
+  since: z.string().optional().describe('仅返回指定时间后的请求（ISO 8601）'),
+});
+
+const getNetworkRequestSchema = z.object({
+  reqid: z.string().min(1).describe('请求 ID（从 list_network_requests 获取）'),
+});
+
+const stopNetworkMonitoringSchema = z.object({
+  clearLogs: z.boolean().optional().default(false).describe('是否同时清空已收集的日志'),
+});
+
+const clearNetworkRequestsSchema = z.object({
+  clearRemote: z.boolean().optional().default(true).describe('是否同时清空小程序端日志'),
+});
+
+// 注意: start_network_monitoring 已移除，监听在连接成功后自动启动
 
 /**
- * 获取网络请求工具
+ * 第一阶段：列表查询网络请求（短格式）
  */
-export const getNetworkRequestsTool = defineTool({
-  name: 'get_network_requests',
-  description: '获取收集到的网络请求记录，支持按类型、URL、状态过滤',
-  schema: z.object({
-    type: z.enum(['all', 'request', 'uploadFile', 'downloadFile']).optional().default('all').describe('请求类型过滤'),
-    urlPattern: z.string().optional().describe('URL 匹配模式（支持正则表达式）'),
-    successOnly: z.boolean().optional().default(false).describe('仅返回成功的请求'),
-    limit: z.number().optional().default(50).describe('限制返回条数'),
-    since: z.string().optional().describe('获取指定时间之后的记录，格式：ISO 8601'),
-  }),
+export const listNetworkRequestsTool = defineTool({
+  name: 'list_network_requests',
+  description: '列表查询网络请求（短格式，支持分页和过滤），用于获取 reqid 后再查询详情',
+  schema: listNetworkRequestsSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { type, urlPattern, successOnly, limit, since } = request.params;
+    ensureConnected(context);
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
+    const {
+      pageSize,
+      pageIdx,
+      resourceTypes,
+      includePreservedRequests,
+      urlPattern,
+      successOnly,
+      failedOnly,
+      since,
+    } = request.params;
+
+    if (successOnly && failedOnly) {
+      throw new Error('successOnly 与 failedOnly 不能同时为 true');
     }
 
-    if (!context.networkStorage) {
-      throw new Error('网络存储未初始化');
+    const syncedCount = await context.getNetworkCollector().syncFromRemote(true);
+    const allRequests = context.getNetworkCollector().getRequests({
+      includePreserved: includePreservedRequests,
+    });
+
+    let filteredRequests = sanitizeNetworkRequests(allRequests);
+
+    if (resourceTypes && resourceTypes.length > 0) {
+      const typeSet = new Set(resourceTypes);
+      filteredRequests = filteredRequests.filter(req => typeSet.has(req.type));
     }
 
-    try {
-      // 从小程序环境读取网络请求数据
-      const logs: NetworkRequest[] = await context.miniProgram.evaluate(function() {
-        // @ts-ignore - wx is available in WeChat miniprogram environment
-        const wxObj = typeof wx !== 'undefined' ? wx : null;
-        return wxObj?.__networkLogs || [];
-      });
-
-      const sinceTime = since ? new Date(since) : null;
-      const urlRegex = urlPattern ? new RegExp(urlPattern) : null;
-
-      // 过滤函数
-      const filters = [
-        // 过滤无效记录（type='response' 或 url为空/undefined）
-        (req: NetworkRequest) => {
-          // 过滤掉 type='response' 的记录（不应该存在）
-          if (req.type === 'response' as any) {
-            return false;
-          }
-          // 过滤掉 URL 为空或 'undefined' 的记录
-          if (!req.url || req.url === 'undefined') {
-            return false;
-          }
-          // 过滤掉 ID 为空或 'N/A' 的记录
-          if (!req.id || req.id === 'N/A') {
-            return false;
-          }
-          return true;
-        },
-        // 类型过滤
-        (req: NetworkRequest) => type === 'all' || req.type === type,
-        // 时间过滤
-        (req: NetworkRequest) => !sinceTime || new Date(req.timestamp) >= sinceTime,
-        // URL 过滤
-        (req: NetworkRequest) => !urlRegex || urlRegex.test(req.url),
-        // 成功状态过滤
-        (req: NetworkRequest) => !successOnly || req.success,
-      ];
-
-      const filteredRequests = logs
-        .filter(req => filters.every(filter => filter(req)))
-        .slice(-limit);
-
-      // 生成响应
-      response.appendResponseLine('=== 网络请求记录 ===');
-      response.appendResponseLine(`监听状态: ${context.networkStorage.isMonitoring ? '运行中' : '已停止'}`);
-      response.appendResponseLine(`监听开始时间: ${context.networkStorage.startTime || '未设置'}`);
-      response.appendResponseLine(`总请求数: ${logs.length}`);
-      response.appendResponseLine(`过滤后: ${filteredRequests.length} 条`);
-      response.appendResponseLine('');
-
-      if (filteredRequests.length === 0) {
-        response.appendResponseLine('暂无符合条件的网络请求记录');
-        return;
+    if (urlPattern) {
+      try {
+        const regex = new RegExp(urlPattern);
+        filteredRequests = filteredRequests.filter(req => regex.test(req.url));
+      } catch {
+        filteredRequests = filteredRequests.filter(req => req.url.includes(urlPattern));
       }
+    }
 
-    filteredRequests.forEach((req, index) => {
-      response.appendResponseLine(`--- 请求 ${index + 1} ---`);
-      response.appendResponseLine(`ID: ${req.id || 'N/A'}`);
-      response.appendResponseLine(`类型: ${req.type}`);
+    if (successOnly) {
+      filteredRequests = filteredRequests.filter(req => req.success === true);
+    }
 
-      // 过滤掉旧的、无效的记录
-      if (!req.url || req.url === 'undefined') {
-        response.appendResponseLine(`⚠️ 无效记录（可能是旧数据）`);
-        response.appendResponseLine('');
-        return;
+    if (failedOnly) {
+      filteredRequests = filteredRequests.filter(req => req.success === false);
+    }
+
+    if (since) {
+      const sinceTime = new Date(since).getTime();
+      if (Number.isNaN(sinceTime)) {
+        throw new Error('since 参数必须是有效的 ISO 8601 时间字符串');
       }
+      filteredRequests = filteredRequests.filter(req => new Date(req.timestamp).getTime() >= sinceTime);
+    }
 
-      response.appendResponseLine(`URL: ${req.url}`);
+    const total = filteredRequests.length;
+    const start = pageIdx * pageSize;
+    const end = Math.min(start + pageSize, total);
+    const pageRequests = filteredRequests.slice(start, end);
 
-      if (req.method) {
-        response.appendResponseLine(`方法: ${req.method}`);
-      }
+    response.appendResponseLine('## Network Requests (List View)');
+    response.appendResponseLine(`监听状态: ${context.networkStorage.isMonitoring ? '运行中' : '已停止'}`);
+    response.appendResponseLine(`监听开始时间: ${context.networkStorage.startTime || '未设置'}`);
+    response.appendResponseLine(`本次同步新增: ${syncedCount}`);
+    response.appendResponseLine(`总数: ${total} 条`);
+    response.appendResponseLine(`显示: ${total === 0 ? 0 : start + 1}-${end}`);
+    response.appendResponseLine('');
 
-      // 优化的状态判断逻辑
-      const isPending = req.pending === true;
-      const isCompleted = req.pending === false;
-      const isSuccess = req.success === true;
-      const isFailed = req.success === false;
+    if (pageRequests.length === 0) {
+      response.appendResponseLine('<no requests found>');
+      return;
+    }
 
-      if (isPending) {
-        response.appendResponseLine(`状态: ⏳ 请求中（未收到响应）`);
-      } else if (isCompleted) {
-        if (isSuccess) {
-          response.appendResponseLine(`状态: ✅ 成功`);
-        } else if (isFailed) {
-          response.appendResponseLine(`状态: ❌ 失败`);
-        } else {
-          response.appendResponseLine(`状态: ⚠️ 未知（success=${req.success}）`);
-        }
-      } else {
-        // 兼容旧格式（wx.request等，没有pending字段）
-        if (isSuccess) {
-          response.appendResponseLine(`状态: ✅ 成功`);
-        } else if (isFailed) {
-          response.appendResponseLine(`状态: ❌ 失败`);
-        } else {
-          response.appendResponseLine(`状态: ⚠️ 未知状态`);
-        }
-      }
+    for (const item of pageRequests.map(toSummary)) {
+      response.appendResponseLine(
+        `reqid=${item.reqid} [${item.type}] ${item.method} ${item.url} status=${item.status}`
+      );
+    }
 
-      if (req.statusCode) {
-        response.appendResponseLine(`状态码: ${req.statusCode}`);
-      }
+    response.appendResponseLine('');
+    response.appendResponseLine('提示: 使用 get_network_request 结合 reqid 查看完整详情');
+  },
+});
 
-      if (req.duration !== undefined) {
-        response.appendResponseLine(`耗时: ${req.duration}ms`);
-      }
+/**
+ * 第二阶段：按 reqid 查询请求详情
+ */
+export const getNetworkRequestTool = defineTool({
+  name: 'get_network_request',
+  description: '通过 reqid 获取单条网络请求完整详情',
+  schema: getNetworkRequestSchema,
+  annotations: {
+    category: ToolCategory.NETWORK,
+    audience: ['developers'],
+  },
+  handler: async (request, response, context) => {
+    ensureConnected(context);
 
-      response.appendResponseLine(`时间: ${req.timestamp}`);
+    await context.getNetworkCollector().syncFromRemote(true);
+    const requests = sanitizeNetworkRequests(
+      context.getNetworkCollector().getRequests({ includePreserved: true })
+    );
 
-      if (req.source) {
-        response.appendResponseLine(`来源: ${req.source}`);
-      }
+    const matched = requests.find(item => item.id === request.params.reqid);
+    if (!matched) {
+      throw new Error(`未找到 reqid=${request.params.reqid} 的请求，请先调用 list_network_requests 获取可用 reqid`);
+    }
 
-      // === 请求信息 ===
-      if (req.headers && Object.keys(req.headers).length > 0) {
-        response.appendResponseLine(`请求头: ${JSON.stringify(req.headers)}`);
-      }
+    response.appendResponseLine('## Network Request (Detail View)');
+    response.appendResponseLine(`ID: ${matched.id}`);
+    response.appendResponseLine(`类型: ${matched.type}`);
+    response.appendResponseLine(`URL: ${matched.url}`);
+    response.appendResponseLine(`方法: ${matched.method ?? 'GET'}`);
+    response.appendResponseLine(`状态: ${toRequestStatus(matched)}`);
+    response.appendResponseLine(`状态码: ${matched.statusCode ?? 'N/A'}`);
+    response.appendResponseLine(`耗时: ${matched.duration ?? 'N/A'}ms`);
+    response.appendResponseLine(`时间: ${matched.timestamp}`);
 
-      if (req.data) {
-        const dataStr = typeof req.data === 'string'
-          ? req.data
-          : JSON.stringify(req.data);
-        const truncatedData = dataStr.length > 200
-          ? dataStr.substring(0, 200) + '...'
-          : dataStr;
-        response.appendResponseLine(`请求数据: ${truncatedData}`);
-      }
+    if (matched.headers && Object.keys(matched.headers).length > 0) {
+      response.appendResponseLine(`请求头: ${JSON.stringify(matched.headers)}`);
+    }
 
-      if (req.params) {
-        response.appendResponseLine(`请求参数: ${JSON.stringify(req.params)}`);
-      }
+    if (matched.data !== undefined) {
+      response.appendResponseLine(`请求数据: ${JSON.stringify(matched.data)}`);
+    }
 
-      // === 响应信息 ===
-      if (req.response) {
-        const respStr = typeof req.response === 'string'
-          ? req.response
-          : JSON.stringify(req.response);
-        const truncatedResp = respStr.length > 200
-          ? respStr.substring(0, 200) + '...'
-          : respStr;
-        response.appendResponseLine(`响应数据: ${truncatedResp}`);
-      }
+    if (matched.params && Object.keys(matched.params).length > 0) {
+      response.appendResponseLine(`请求参数: ${JSON.stringify(matched.params)}`);
+    }
 
-      if (req.responseHeaders && Object.keys(req.responseHeaders).length > 0) {
-        response.appendResponseLine(`响应头: ${JSON.stringify(req.responseHeaders)}`);
-      }
+    if (matched.response !== undefined) {
+      response.appendResponseLine(`响应数据: ${JSON.stringify(matched.response)}`);
+    }
 
-      if (req.error) {
-        response.appendResponseLine(`错误信息: ${req.error}`);
-      }
+    if (matched.responseHeaders && Object.keys(matched.responseHeaders).length > 0) {
+      response.appendResponseLine(`响应头: ${JSON.stringify(matched.responseHeaders)}`);
+    }
 
-      if (req.completedAt) {
-        response.appendResponseLine(`完成时间: ${req.completedAt}`);
-      }
+    if (matched.error) {
+      response.appendResponseLine(`错误信息: ${matched.error}`);
+    }
 
-      response.appendResponseLine('');
-      });
-
-      response.appendResponseLine('=== 获取完成 ===');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`获取网络请求失败: ${errorMessage}`);
+    if (matched.completedAt) {
+      response.appendResponseLine(`完成时间: ${matched.completedAt}`);
     }
   },
 });
 
 /**
- * 停止网络监听工具
+ * 停止网络监听
  */
 export const stopNetworkMonitoringTool = defineTool({
   name: 'stop_network_monitoring',
-  description: '停止网络请求监听，禁用拦截器',
-  schema: z.object({
-    clearLogs: z.boolean().optional().default(false).describe('是否同时清空已收集的日志'),
-  }),
+  description: '停止网络监听并禁用拦截器',
+  schema: stopNetworkMonitoringSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
+    ensureConnected(context);
+
     const { clearLogs } = request.params;
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    await context.miniProgram!.evaluate(function() {
+      // @ts-ignore - wx is available in WeChat miniprogram environment
+      const wxObj = typeof wx !== 'undefined' ? wx : null;
+      if (wxObj) {
+        // @ts-ignore
+        wxObj.__networkInterceptorsDisabled = true;
+      }
+    });
 
-    if (!context.networkStorage) {
-      throw new Error('网络存储未初始化');
-    }
+    const storage = context.networkStorage;
+    storage.isMonitoring = false;
+    context.networkStorage = storage;
 
-    try {
-      // 设置禁用标志
-      await context.miniProgram.evaluate(function() {
-        // @ts-ignore - wx is available in WeChat miniprogram environment
+    let clearedCount = 0;
+    if (clearLogs) {
+      clearedCount = await context.miniProgram!.evaluate(function() {
+        // @ts-ignore
         const wxObj = typeof wx !== 'undefined' ? wx : null;
-        if (wxObj) {
-          wxObj.__networkInterceptorsDisabled = true;
-        }
-      });
-
-      // 更新本地状态
-      context.networkStorage.isMonitoring = false;
-
-      let clearedCount = 0;
-      if (clearLogs) {
-        // 清空远程日志
-        clearedCount = await context.miniProgram.evaluate(function() {
+        if (wxObj && wxObj.__networkLogs) {
           // @ts-ignore
-          const wxObj = typeof wx !== 'undefined' ? wx : null;
-          if (wxObj && wxObj.__networkLogs) {
-            const count = wxObj.__networkLogs.length;
-            wxObj.__networkLogs = [];
-            return count;
-          }
-          return 0;
-        });
-      }
-
-      response.appendResponseLine('=== 网络监听已停止 ===');
-      response.appendResponseLine(`监听状态: 已停止`);
-      if (clearLogs) {
-        response.appendResponseLine(`已清空日志: ${clearedCount} 条`);
-      }
-      response.appendResponseLine('');
-      response.appendResponseLine('💡 提示: 使用 reconnect_devtools 重新连接可恢复监听');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`停止网络监听失败: ${errorMessage}`);
+          const count = wxObj.__networkLogs.length;
+          // @ts-ignore
+          wxObj.__networkLogs = [];
+          return count;
+        }
+        return 0;
+      });
     }
+
+    response.appendResponseLine('=== 网络监听已停止 ===');
+    response.appendResponseLine('监听状态: 已停止');
+    if (clearLogs) {
+      response.appendResponseLine(`已清空日志: ${clearedCount} 条`);
+    }
+    response.appendResponseLine('');
+    response.appendResponseLine('提示: 使用 reconnect_devtools 重新连接可恢复监听');
   },
 });
 
 /**
- * 清空网络请求记录工具
+ * 清空网络请求记录
  */
 export const clearNetworkRequestsTool = defineTool({
   name: 'clear_network_requests',
   description: '清空已收集的网络请求记录',
-  schema: z.object({
-    clearRemote: z.boolean().optional().default(true).describe('是否同时清空小程序端的日志'),
-  }),
+  schema: clearNetworkRequestsSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
+    ensureConnected(context);
+
     const { clearRemote } = request.params;
+    const localCountBefore = context.getNetworkCollector().getCurrentCount();
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    context.clearNetworkRequests();
 
-    if (!context.networkStorage) {
-      throw new Error('网络存储未初始化');
-    }
-
-    try {
-      // 记录当前数量
-      const localCountBefore = context.networkStorage.requests?.length || 0;
-
-      // 清空本地存储
-      context.networkStorage.requests = [];
-
-      // 清空远程日志
-      let remoteCount = 0;
-      if (clearRemote) {
-        remoteCount = await context.miniProgram.evaluate(function() {
+    let remoteCount = 0;
+    if (clearRemote) {
+      remoteCount = await context.miniProgram!.evaluate(function() {
+        // @ts-ignore
+        const wxObj = typeof wx !== 'undefined' ? wx : null;
+        if (wxObj && wxObj.__networkLogs) {
           // @ts-ignore
-          const wxObj = typeof wx !== 'undefined' ? wx : null;
-          if (wxObj && wxObj.__networkLogs) {
-            const count = wxObj.__networkLogs.length;
-            wxObj.__networkLogs = [];
-            return count;
-          }
-          return 0;
-        });
-      }
-
-      response.appendResponseLine('=== 网络请求记录已清空 ===');
-      response.appendResponseLine(`本地清空: ${localCountBefore} 条`);
-      if (clearRemote) {
-        response.appendResponseLine(`远程清空: ${remoteCount} 条`);
-      }
-      response.appendResponseLine('');
-      response.appendResponseLine('💡 提示: 网络监听仍在运行，新的请求会继续被收集');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`清空网络请求失败: ${errorMessage}`);
+          const count = wxObj.__networkLogs.length;
+          // @ts-ignore
+          wxObj.__networkLogs = [];
+          return count;
+        }
+        return 0;
+      });
     }
+
+    response.appendResponseLine('=== 网络请求记录已清空 ===');
+    response.appendResponseLine(`本地清空: ${localCountBefore} 条`);
+    if (clearRemote) {
+      response.appendResponseLine(`远程清空: ${remoteCount} 条`);
+    }
+    response.appendResponseLine('');
+    response.appendResponseLine('提示: 网络监听仍在运行，新的请求会继续被收集');
   },
 });
