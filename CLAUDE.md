@@ -93,6 +93,21 @@ RUN_INTEGRATION_TESTS=true npx vitest tests/integration/console.integration.test
 npm test -- tests/tools/console.test.ts -t "测试用例名称"
 ```
 
+### 诊断与手工验证脚本
+
+```bash
+# 诊断类脚本（scripts/diagnostics）
+npm run diagnose:devtools-connection
+npm run diagnose:mcp-config
+npm run diagnose:connection-flow
+
+# 手工验证脚本（tests/manual）
+npm run test:manual:mpx-runtime
+npm run test:manual:network-interception
+npm run test:manual:screenshot
+npm run test:manual:screenshot-diagnostic
+```
+
 ## Architecture
 
 ### MCP 服务器入口点
@@ -378,7 +393,7 @@ check_environment()
 // 验证 Node.js 版本、微信开发者工具安装等
 
 // 快速测试脚本
-// node test-debug-connection-flow.js
+// npm run diagnose:connection-flow
 ```
 
 ## Documentation

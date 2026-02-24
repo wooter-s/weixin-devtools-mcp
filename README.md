@@ -2,7 +2,7 @@
 
 > 强大的微信小程序自动化测试解决方案，基于 Model Context Protocol 实现
 
-[![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)](https://github.com/yourusername/weixin-devtools-mcp)
+[![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 
@@ -42,7 +42,7 @@ npm install -g weixin-devtools-mcp
 
 ```bash
 # 克隆项目
-git clone https://github.com/yourusername/weixin-devtools-mcp.git
+git clone https://github.com/wooter-s/weixin-devtools-mcp.git
 cd weixin-devtools-mcp
 
 # 安装依赖
@@ -298,7 +298,29 @@ npm run test:coverage
 
 # 使用 MCP Inspector 调试
 npm run inspector
+
+# 连接诊断（本地环境）
+npm run diagnose:devtools-connection
+
+# MCP 配置诊断
+npm run diagnose:mcp-config
+
+# debug_connection_flow 参数示例生成
+npm run diagnose:connection-flow
+
+# 手工验证脚本
+npm run test:manual:mpx-runtime
+npm run test:manual:network-interception
+npm run test:manual:screenshot
+npm run test:manual:screenshot-diagnostic
 ```
+
+### 手工验证与诊断脚本组织
+
+- 诊断类脚本统一放在 `scripts/diagnostics/`
+- 手工验证脚本统一放在 `tests/manual/`（按能力拆分子目录）
+- 集成测试夹具项目固定为 `playground/wx/`，请勿移动或删除目录
+- 夹具关键文件白名单：`playground/wx/app.json`、`playground/wx/project.config.json`
 
 ### 添加新工具
 
@@ -355,7 +377,7 @@ npm run inspector
 
 ## 📞 联系方式
 
-- 问题反馈：[GitHub Issues](https://github.com/yourusername/weixin-devtools-mcp/issues)
+- 问题反馈：[GitHub Issues](https://github.com/wooter-s/weixin-devtools-mcp/issues)
 - 文档网站：[项目文档](docs/)
 
 ---

@@ -3,3 +3,8 @@ build/
 *.log
 .env*
 .idea
+
+# Cache artifacts
+.DS_Store
+*.tsbuildinfo
+coverage/
