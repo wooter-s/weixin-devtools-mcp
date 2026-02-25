@@ -56,14 +56,74 @@ describe('getPageSnapshotTool', () => {
       currentPage: {} as any,
       elementMap: new Map(),
       consoleStorage: {
+        navigations: [
+          { messages: [], exceptions: [], timestamp: new Date().toISOString() },
+        ],
+        messageIdMap: new Map(),
         isMonitoring: false,
-        messages: []
+        startTime: null,
+        maxNavigations: 3,
       },
       networkStorage: {
-        isMonitoring: false,
         requests: [],
-        originalMethods: new Map()
-      }
+        isMonitoring: false,
+        startTime: null,
+        originalMethods: {},
+      },
+      connectionStatus: {
+        connectionId: null,
+        state: 'disconnected' as const,
+        strategyUsed: null,
+        endpoint: null,
+        connected: false,
+        hasCurrentPage: true,
+        pagePath: null,
+        health: null,
+        lastError: null,
+        lastConnectedAt: null,
+        lastHealthCheckAt: null,
+      },
+      getNetworkCollector: vi.fn(() => ({
+        syncFromRemote: vi.fn(async () => 0),
+        getRequests: vi.fn(() => []),
+        getCurrentCount: vi.fn(() => 0),
+      })),
+      clearNetworkRequests: vi.fn(),
+      getElementByUid: vi.fn(async () => {
+        throw new Error('getElementByUid not implemented in snapshot test');
+      }),
+      connectDevtools: vi.fn(async () => {
+        throw new Error('connectDevtools not implemented in snapshot test');
+      }),
+      reconnectDevtools: vi.fn(async () => {
+        throw new Error('reconnectDevtools not implemented in snapshot test');
+      }),
+      disconnectDevtools: vi.fn(async () => ({
+        connectionId: null,
+        state: 'disconnected' as const,
+        strategyUsed: null,
+        endpoint: null,
+        connected: false,
+        hasCurrentPage: false,
+        pagePath: null,
+        health: null,
+        lastError: null,
+        lastConnectedAt: null,
+        lastHealthCheckAt: null,
+      })),
+      getConnectionStatus: vi.fn(async () => ({
+        connectionId: null,
+        state: 'disconnected' as const,
+        strategyUsed: null,
+        endpoint: null,
+        connected: false,
+        hasCurrentPage: true,
+        pagePath: null,
+        health: null,
+        lastError: null,
+        lastConnectedAt: null,
+        lastHealthCheckAt: null,
+      })),
     };
 
     response = new SimpleToolResponse();

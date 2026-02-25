@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { takeScreenshot, type ScreenshotOptions } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram } from './ToolDefinition.js';
 
 /**
  * 页面截图
@@ -23,9 +23,7 @@ export const screenshotTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     const { path } = request.params;
 

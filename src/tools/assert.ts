@@ -13,7 +13,7 @@ import {
   type AssertResult,
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
 
 // 注意: assert_exists 和 assert_visible 已合并到 assert_state
 // 使用 assert_state 工具即可验证元素的存在性和可见性
@@ -71,9 +71,7 @@ export const assertTextTool = defineTool({
       throw new Error('必须指定text、textContains或textMatches参数之一');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: ContentAssertOptions = {
@@ -125,9 +123,7 @@ export const assertAttributeTool = defineTool({
   handler: async (request, response, context) => {
     const { uid, attributeKey, attributeValue } = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: ContentAssertOptions = {
@@ -186,9 +182,7 @@ export const assertStateTool = defineTool({
       throw new Error('必须指定至少一个状态参数');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const results: AssertResult[] = [];

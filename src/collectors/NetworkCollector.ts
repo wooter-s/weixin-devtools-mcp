@@ -133,14 +133,12 @@ export class NetworkCollector extends Collector<NetworkRequest> {
     try {
       // 从小程序环境拉取并清空远程日志
       const remoteLogs = await this.#miniProgram.evaluate(function() {
-        // @ts-ignore
+        // @ts-expect-error wx is available in WeChat miniprogram runtime
         const wxObj = typeof wx !== 'undefined' ? wx : null;
         if (!wxObj || !wxObj.__networkLogs) return [];
 
         // 返回并清空（避免重复处理）
-        // @ts-ignore
         const logs = [...wxObj.__networkLogs];
-        // @ts-ignore
         wxObj.__networkLogs = [];
         return logs;
       }) as NetworkRequest[];

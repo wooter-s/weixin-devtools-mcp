@@ -1,6 +1,6 @@
 {
   "name": "weixin-devtools-mcp",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "WeChat Mini Program automation MCP server with intelligent connection, page interaction, assertion validation and network monitoring",
   "type": "module",
   "author": "Wooter Shen",
@@ -42,14 +42,16 @@
   "scripts": {
     "build": "tsc && node scripts/set-executable.mjs",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run typecheck && npm test",
+    "prepublishOnly": "npm run typecheck && npm run typecheck:test && npm test",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/server.js",
     "lint": "eslint .",
+    "lint:links": "node scripts/check-readme-links.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest --run tests/protocol/ tests/tools/ tests/utils/",
     "test:watch": "vitest tests/protocol/ tests/tools/ tests/utils/",
     "test:coverage": "vitest --coverage tests/protocol/ tests/tools/ tests/utils/",
@@ -57,7 +59,14 @@
     "test:tools": "vitest --run tests/tools/",
     "test:integration": "RUN_INTEGRATION_TESTS=true vitest --run tests/integration/",
     "test:integration:watch": "RUN_INTEGRATION_TESTS=true vitest tests/integration/",
-    "test:all": "npm test && npm run test:integration"
+    "test:all": "npm test && npm run test:integration",
+    "diagnose:devtools-connection": "node scripts/diagnostics/diagnose-devtools-connection.mjs",
+    "diagnose:mcp-config": "node scripts/diagnostics/diagnose-mcp-config.mjs",
+    "diagnose:connection-flow": "node scripts/diagnostics/debug-connection-flow-examples.mjs",
+    "test:manual:mpx-runtime": "node tests/manual/mpx/verify-mpx-runtime.mjs",
+    "test:manual:network-interception": "node tests/manual/network/verify-network-interception.mjs",
+    "test:manual:screenshot": "TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm tests/manual/verify-screenshot-success.ts",
+    "test:manual:screenshot-diagnostic": "node tests/manual/diagnostics/verify-screenshot-diagnostic.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.6.0",
@@ -73,6 +82,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.46.4",
     "vitest": "^1.6.0"

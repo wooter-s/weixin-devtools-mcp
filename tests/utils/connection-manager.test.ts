@@ -39,13 +39,14 @@ function createDeferred<T>() {
     resolvePromise = resolve;
   });
 
-  if (!resolvePromise) {
-    throw new Error('deferred resolve 未初始化');
-  }
-
   return {
     promise,
-    resolve: resolvePromise,
+    resolve: (value: T) => {
+      if (!resolvePromise) {
+        throw new Error('deferred resolve 未初始化');
+      }
+      resolvePromise(value);
+    },
   };
 }
 

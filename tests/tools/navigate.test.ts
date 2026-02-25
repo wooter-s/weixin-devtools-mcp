@@ -55,6 +55,10 @@ describe('navigate.ts 工具测试', () => {
     return {
       appendResponseLine: vi.fn((line: string) => lines.push(line)),
       setIncludeSnapshot: vi.fn(),
+      attachImage: vi.fn(),
+      shouldIncludeSnapshot: vi.fn(() => false),
+      mergeStructuredContent: vi.fn(),
+      getStructuredContent: vi.fn(() => ({})),
       getLines: () => lines
     }
   }

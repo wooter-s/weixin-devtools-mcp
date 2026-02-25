@@ -15,6 +15,9 @@ function createMockResponse() {
     }),
     setIncludeSnapshot: vi.fn(),
     attachImage: vi.fn(),
+    shouldIncludeSnapshot: vi.fn(() => false),
+    mergeStructuredContent: vi.fn(),
+    getStructuredContent: vi.fn(() => ({})),
     getLines: () => lines,
     getResponseText: () => lines.join('\n'),
   };
@@ -226,7 +229,7 @@ describe('network tools', () => {
 
   it('未连接时应拒绝执行网络工具', async () => {
     const response = createMockResponse();
-    context.miniProgram = null;
+    context.miniProgram = null as any;
 
     await expect(
       listNetworkRequestsTool.handler(

@@ -27,6 +27,7 @@ import {
   allTools,
   SimpleToolResponse
 } from './tools/index.js';
+import { VERSION } from './version.js';
 
 /**
  * 全局上下文状态 - 使用 MiniProgramContext 类管理
@@ -39,7 +40,7 @@ const globalContext = MiniProgramContext.create();
 const server = new Server(
   {
     name: "weixin-devtools-mcp",
-    version: "0.5.0",
+    version: VERSION,
   },
   {
     capabilities: {

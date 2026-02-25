@@ -28,7 +28,7 @@ import {
 
 describe('assert.ts 工具测试', () => {
   const mockElement = {
-    attribute: vi.fn(async (_name: string) => null),
+    attribute: vi.fn(async (_name: string): Promise<string | null> => null),
   };
 
   // 创建测试用的上下文对象
@@ -51,6 +51,10 @@ describe('assert.ts 工具测试', () => {
     return {
       appendResponseLine: vi.fn((line: string) => lines.push(line)),
       setIncludeSnapshot: vi.fn(),
+      attachImage: vi.fn(),
+      shouldIncludeSnapshot: vi.fn(() => false),
+      mergeStructuredContent: vi.fn(),
+      getStructuredContent: vi.fn(() => ({})),
       getLines: () => lines,
       getResponseText: () => lines.join('\n'),
     }

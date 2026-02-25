@@ -23,8 +23,6 @@ import {
 
 // 导入mock的函数用于验证
 import {
-  clickElement,
-  inputText,
   getElementValue,
   setFormControl
 } from '../../src/tools.js'
@@ -42,7 +40,7 @@ describe('input.ts 新功能测试', () => {
   const mockContext = {
     currentPage: {
       path: '/pages/test/test',
-      $$: async (selector: string) => {
+      $$: async (_selector: string) => {
         // 根据选择器返回 mock 元素数组
         return [createMockElement()];
       }
@@ -56,10 +54,17 @@ describe('input.ts 新功能测试', () => {
     ]),
     miniProgram: {},
     consoleStorage: {
-      consoleMessages: [],
-      exceptionMessages: [],
+      navigations: [
+        {
+          messages: [],
+          exceptions: [],
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      messageIdMap: new Map(),
       isMonitoring: false,
-      startTime: null
+      startTime: null,
+      maxNavigations: 3,
     },
     networkStorage: {
       requests: [],
@@ -67,6 +72,36 @@ describe('input.ts 新功能测试', () => {
       startTime: null,
       originalMethods: {}
     },
+    connectionStatus: {
+      state: 'disconnected',
+      connected: false,
+      hasCurrentPage: true,
+      pagePath: '/pages/test/test',
+    },
+    getNetworkCollector: vi.fn(() => ({
+      syncFromRemote: vi.fn(async () => 0),
+      getRequests: vi.fn(() => []),
+      getCurrentCount: vi.fn(() => 0),
+    })),
+    clearNetworkRequests: vi.fn(),
+    connectDevtools: vi.fn(async () => {
+      throw new Error('connectDevtools not implemented in mock context');
+    }),
+    reconnectDevtools: vi.fn(async () => {
+      throw new Error('reconnectDevtools not implemented in mock context');
+    }),
+    disconnectDevtools: vi.fn(async () => ({
+      state: 'disconnected',
+      connected: false,
+      hasCurrentPage: false,
+    })),
+    getConnectionStatus: vi.fn(async () => ({
+      state: 'disconnected',
+      connected: false,
+      hasCurrentPage: true,
+      pagePath: '/pages/test/test',
+    })),
+    bindConsoleAndExceptionListeners: vi.fn(),
     // 实现 getElementByUid 方法
     getElementByUid: async (uid: string) => {
       const mapInfo = mockContext.elementMap.get(uid);
@@ -85,6 +120,10 @@ describe('input.ts 新功能测试', () => {
     return {
       appendResponseLine: vi.fn((line: string) => lines.push(line)),
       setIncludeSnapshot: vi.fn(),
+      attachImage: vi.fn(),
+      shouldIncludeSnapshot: vi.fn(() => false),
+      mergeStructuredContent: vi.fn(),
+      getStructuredContent: vi.fn(() => ({})),
       getLines: () => lines
     }
   }
@@ -167,18 +206,18 @@ describe('input.ts 新功能测试', () => {
 
     it('应该处理空值和特殊值', async () => {
       const testCases = [
-        { value: '', description: '空字符串' },
-        { value: 0, description: '数字0' },
-        { value: false, description: '布尔false' },
-        { value: null, description: 'null值' }
+        { value: '' },
+        { value: 0 },
+        { value: false },
+        { value: null }
       ]
 
-      for (const { value, description } of testCases) {
+      for (const { value } of testCases) {
         vi.clearAllMocks()
         const request = createMockRequest({ uid: 'input-1' })
         const response = createMockResponse()
 
-        vi.mocked(getElementValue).mockResolvedValue(value)
+        vi.mocked(getElementValue).mockResolvedValue(value as string | null)
 
         await getValueTool.handler(request, response, mockContext)
 
@@ -350,12 +389,12 @@ describe('input.ts 新功能测试', () => {
   describe('参数类型验证', () => {
     it('应该正确处理数字、字符串和数组类型的表单控件值', async () => {
       const testCases = [
-        { value: 0, type: 'number' },
-        { value: 'option1', type: 'string' },
-        { value: [0, 1, 2], type: 'array' }
+        { value: 0 },
+        { value: 'option1' },
+        { value: [0, 1, 2] }
       ]
 
-      for (const { value, type } of testCases) {
+      for (const { value } of testCases) {
         vi.clearAllMocks()
         const request = createMockRequest({
           uid: 'picker-1',

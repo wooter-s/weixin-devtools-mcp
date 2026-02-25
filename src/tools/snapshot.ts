@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
 import { getPageSnapshot } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
 
 
 /**
@@ -45,9 +45,7 @@ minimal格式：
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     const { format, includePosition, includeAttributes, maxElements, filePath } = request.params;
 

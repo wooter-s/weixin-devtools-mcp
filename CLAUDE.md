@@ -291,10 +291,9 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 
 ### 版本说明
 
-**代码版本**：v0.3.3（src/server.ts）
-**package.json版本**：v0.0.1（发布版本号）
+对外版本（MCP 握手 `server.version`）以 `package.json.version` 为准（由 `src/version.ts` 读取并在 `src/server.ts` 上报）。
 
-这个差异是正常的：代码版本用于跟踪功能迭代，package.json版本在发布时更新。
+为避免出现“代码版本/发布版本”双轨语义导致的回退或误判，请保持 `package.json.version` 单调递增，并将文档/CHANGELOG 与其对齐。
 
 ## Prerequisites
 

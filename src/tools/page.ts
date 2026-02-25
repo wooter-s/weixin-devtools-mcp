@@ -12,7 +12,7 @@ import {
   type WaitForOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
 
 /**
  * $ 选择器工具 - 通过CSS选择器查找页面元素
@@ -35,9 +35,7 @@ export const querySelectorTool = defineTool({
       throw new Error('选择器不能为空');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: QueryOptions = { selector };
@@ -113,9 +111,7 @@ export const waitForTool = defineTool({
   handler: async (request, response, context) => {
     const options = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const startTime = Date.now();

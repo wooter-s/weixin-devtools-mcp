@@ -2,7 +2,7 @@
 
 > 强大的微信小程序自动化测试解决方案，基于 Model Context Protocol 实现
 
-[![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 

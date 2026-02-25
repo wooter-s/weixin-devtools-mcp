@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram } from './ToolDefinition.js';
 
 export const evaluateScript = defineTool({
   name: 'evaluate_script',
@@ -72,10 +72,7 @@ export const evaluateScript = defineTool({
   },
 
   handler: async (request, response, context) => {
-    // 检查连接状态
-    if (!context.miniProgram) {
-      throw new Error('未连接到微信开发者工具。请先使用 connect_devtools 建立连接。');
-    }
+    ensureMiniProgram(context);
 
     const { function: functionCode, args = [] } = request.params;
 

@@ -310,6 +310,26 @@ export function defineTool<TSchema extends z.ZodTypeAny>(definition: {
 }
 
 /**
+ * 连接状态检查辅助函数
+ * 替代工具模块中重复的 `if (!context.miniProgram) throw ...` 模式
+ */
+export function ensureMiniProgram(context: ToolContext): asserts context is ToolContext & { miniProgram: MiniProgram } {
+  if (!context.miniProgram) {
+    throw new Error('请先连接到微信开发者工具');
+  }
+}
+
+/**
+ * 页面状态检查辅助函数
+ * 替代工具模块中重复的 `if (!context.currentPage) throw ...` 模式
+ */
+export function ensureCurrentPage(context: ToolContext): asserts context is ToolContext & { currentPage: Page } {
+  if (!context.currentPage) {
+    throw new Error('请先获取当前页面');
+  }
+}
+
+/**
  * 简单的响应实现类
  */
 export class SimpleToolResponse implements ToolResponse {

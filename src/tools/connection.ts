@@ -20,7 +20,7 @@ import type {
   ToolContext,
   ToolResponse
 } from './ToolDefinition.js';
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram } from './ToolDefinition.js';
 
 const strategyEnum = z.enum(['auto', 'launch', 'connect', 'wsEndpoint', 'browserUrl', 'discover']);
 
@@ -437,9 +437,7 @@ export const getCurrentPageTool = defineTool({
     audience: ['developers'],
   },
   handler: async (_request, response, context) => {
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     try {
       context.currentPage = await context.miniProgram.currentPage();

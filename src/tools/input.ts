@@ -12,7 +12,7 @@ import {
   type FormControlOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
 
 /**
  * 点击页面元素
@@ -148,9 +148,7 @@ export const getValueTool = defineTool({
   handler: async (request, response, context) => {
     const { uid, attribute } = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: GetValueOptions = { uid, attribute };
@@ -189,9 +187,7 @@ export const setFormControlTool = defineTool({
   handler: async (request, response, context) => {
     const { uid, value, trigger } = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: FormControlOptions = { uid, value, trigger };

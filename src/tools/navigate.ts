@@ -15,7 +15,20 @@ import {
   type SwitchTabOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, type ToolContext, type ToolResponse } from './ToolDefinition.js';
+
+/**
+ * 导航后刷新页面引用的辅助函数
+ */
+async function refreshPageAfterNavigation(context: ToolContext, response: ToolResponse): Promise<void> {
+  try {
+    context.currentPage = await context.miniProgram!.currentPage();
+    response.appendResponseLine('当前页面已更新');
+  } catch {
+    response.appendResponseLine('警告: 无法更新当前页面信息');
+  }
+  response.setIncludeSnapshot(true);
+}
 
 /**
  * 跳转到指定页面（支持普通跳转和重定向模式）
@@ -37,9 +50,7 @@ export const navigateToTool = defineTool({
   handler: async (request, response, context) => {
     const { url, params, redirect, waitForLoad, timeout } = request.params;
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     try {
       if (redirect) {
@@ -96,15 +107,7 @@ export const navigateToTool = defineTool({
       }
 
       // 页面跳转后，更新当前页面信息
-      try {
-        context.currentPage = await context.miniProgram.currentPage();
-        response.appendResponseLine(`当前页面已更新`);
-      } catch {
-        response.appendResponseLine(`警告: 无法更新当前页面信息`);
-      }
-
-      // 页面跳转后建议获取新快照
-      response.setIncludeSnapshot(true);
+      await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -133,9 +136,7 @@ export const navigateBackTool = defineTool({
   handler: async (request, response, context) => {
     const { delta, waitForLoad, timeout } = request.params;
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     try {
       const options: NavigateBackOptions = {
@@ -150,15 +151,7 @@ export const navigateBackTool = defineTool({
       response.appendResponseLine(`返回层数: ${delta}`);
 
       // 页面返回后，更新当前页面信息
-      try {
-        context.currentPage = await context.miniProgram.currentPage();
-        response.appendResponseLine(`当前页面已更新`);
-      } catch {
-        response.appendResponseLine(`警告: 无法更新当前页面信息`);
-      }
-
-      // 页面返回后建议获取新快照
-      response.setIncludeSnapshot(true);
+      await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -186,9 +179,7 @@ export const switchTabTool = defineTool({
   handler: async (request, response, context) => {
     const { url, waitForLoad, timeout } = request.params;
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     try {
       const options: SwitchTabOptions = {
@@ -203,15 +194,7 @@ export const switchTabTool = defineTool({
       response.appendResponseLine(`目标Tab: ${url}`);
 
       // Tab切换后，更新当前页面信息
-      try {
-        context.currentPage = await context.miniProgram.currentPage();
-        response.appendResponseLine(`当前页面已更新`);
-      } catch {
-        response.appendResponseLine(`警告: 无法更新当前页面信息`);
-      }
-
-      // Tab切换后建议获取新快照
-      response.setIncludeSnapshot(true);
+      await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -240,9 +223,7 @@ export const reLaunchTool = defineTool({
   handler: async (request, response, context) => {
     const { url, params, waitForLoad, timeout } = request.params;
 
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     try {
       const options: NavigateOptions = {
@@ -261,15 +242,7 @@ export const reLaunchTool = defineTool({
       }
 
       // 重新启动后，更新当前页面信息
-      try {
-        context.currentPage = await context.miniProgram.currentPage();
-        response.appendResponseLine(`当前页面已更新`);
-      } catch {
-        response.appendResponseLine(`警告: 无法更新当前页面信息`);
-      }
-
-      // 重新启动后建议获取新快照
-      response.setIncludeSnapshot(true);
+      await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

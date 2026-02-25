@@ -21,6 +21,9 @@ function createMockResponse() {
     }),
     setIncludeSnapshot: vi.fn(),
     attachImage: vi.fn(),
+    shouldIncludeSnapshot: vi.fn(() => false),
+    mergeStructuredContent: vi.fn(),
+    getStructuredContent: vi.fn(() => ({})),
     getLines: () => lines,
   };
 }
