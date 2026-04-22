@@ -732,8 +732,20 @@ function buildCliCommand(options: EnhancedConnectOptions): string[] {
 
 /**
  * 查找默认CLI路径
+ * 优先级：环境变量 > 默认路径
  */
 function findDefaultCliPath(): string {
+  // 1. 优先使用环境变量
+  const envCliPath = process.env.WECHAT_DEVTOOLS_CLI;
+  if (envCliPath) {
+    if (envCliPath.startsWith('@playground/')) {
+      // @playground/ 格式需要转换为实际路径
+      const relativePath = envCliPath.replace('@playground/', 'playground/');
+      return path.resolve(process.cwd(), relativePath);
+    }
+    return path.resolve(process.cwd(), envCliPath);
+  }
+
   const platform = process.platform;
 
   if (platform === 'darwin') {
@@ -741,7 +753,18 @@ function findDefaultCliPath(): string {
   } else if (platform === 'win32') {
     return 'C:/Program Files (x86)/Tencent/微信web开发者工具/cli.bat';
   } else {
-    throw new Error(`不支持的平台: ${platform}`);
+    // Linux: 尝试常见的 Linux 版开发者工具路径
+    const linuxPaths = [
+      '/opt/apps/io.github.msojocs.wechat-devtools-linux/files/bin/bin/wechat-devtools-cli',
+      '/usr/share/wechat-devtools/bin/cli',
+      '/usr/local/bin/wechat-devtools-cli',
+    ];
+    for (const p of linuxPaths) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    throw new Error(`不支持的平台: ${platform}。可在 Linux 上设置环境变量 WECHAT_DEVTOOLS_CLI 指定 CLI 路径`);
   }
 }
 
