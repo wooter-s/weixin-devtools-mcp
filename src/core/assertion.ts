@@ -11,6 +11,8 @@ import type {
   ContentAssertOptions,
 } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 /**
  * 断言元素存在性
  */
@@ -68,7 +70,7 @@ export async function assertElementExists(
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     return {
       passed: false,
       message: `断言执行失败: ${errorMessage}`,
@@ -160,7 +162,7 @@ export async function assertElementVisible(
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     return {
       passed: false,
       message: `断言执行失败: ${errorMessage}`,
@@ -272,7 +274,7 @@ export async function assertElementText(
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     return {
       passed: false,
       message: `断言执行失败: ${errorMessage}`,
@@ -363,7 +365,7 @@ export async function assertElementAttribute(
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     return {
       passed: false,
       message: `断言执行失败: ${errorMessage}`,

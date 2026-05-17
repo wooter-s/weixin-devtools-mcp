@@ -5,6 +5,8 @@
 
 import type { ElementMapInfo, ClickOptions, InputTextOptions, GetValueOptions, FormControlOptions } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 /**
  * 点击页面元素
  */
@@ -72,7 +74,7 @@ export async function clickElement(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     console.error(`[Click] 点击失败:`, error);
     throw new Error(`点击元素失败: ${errorMessage}`);
   }
@@ -128,7 +130,7 @@ export async function inputText(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`文本输入失败: ${errorMessage}`);
   }
 }
@@ -182,7 +184,7 @@ export async function getElementValue(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`获取元素值失败: ${errorMessage}`);
   }
 }
@@ -228,7 +230,7 @@ export async function setFormControl(
     await element.trigger(trigger, { value });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`设置表单控件失败: ${errorMessage}`);
   }
 }

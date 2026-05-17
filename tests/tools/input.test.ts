@@ -153,7 +153,7 @@ describe('input.ts 新功能测试', () => {
         { uid: 'input-1', attribute: undefined }
       )
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('获取元素值成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 获取元素值成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('UID: input-1')
       expect(response.appendResponseLine).toHaveBeenCalledWith('值: 测试内容')
     })
@@ -187,7 +187,7 @@ describe('input.ts 新功能测试', () => {
       const contextWithoutPage = { ...mockContext, currentPage: null }
 
       await expect(getValueTool.handler(request, response, contextWithoutPage))
-        .rejects.toThrow('请先获取当前页面')
+        .rejects.toThrow('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。')
     })
 
     it('应该处理获取值失败', async () => {
@@ -201,7 +201,7 @@ describe('input.ts 新功能测试', () => {
       await expect(getValueTool.handler(request, response, mockContext))
         .rejects.toThrow('元素不存在')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('获取元素值失败: 元素不存在')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 获取元素值失败: 元素不存在')
     })
 
     it('应该处理空值和特殊值', async () => {
@@ -245,7 +245,7 @@ describe('input.ts 新功能测试', () => {
         { uid: 'picker-1', value: 2, trigger: 'change' }
       )
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('设置表单控件成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 设置表单控件成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('UID: picker-1')
       expect(response.appendResponseLine).toHaveBeenCalledWith('值: 2')
       expect(response.appendResponseLine).toHaveBeenCalledWith('事件: change')
@@ -304,7 +304,7 @@ describe('input.ts 新功能测试', () => {
       await expect(setFormControlTool.handler(request, response, mockContext))
         .rejects.toThrow('选项不存在')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('设置表单控件失败: 选项不存在')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 设置表单控件失败: 选项不存在')
     })
   })
 
@@ -319,7 +319,7 @@ describe('input.ts 新功能测试', () => {
       await clickTool.handler(request, response, mockContext)
 
       // 验证响应内容
-      expect(response.appendResponseLine).toHaveBeenCalledWith('点击元素成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 点击元素成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('UID: button-1')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
     })
@@ -336,7 +336,7 @@ describe('input.ts 新功能测试', () => {
       await inputTextTool.handler(request, response, mockContext)
 
       // 验证响应内容
-      expect(response.appendResponseLine).toHaveBeenCalledWith('输入文本成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 输入文本成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('UID: input-1')
       expect(response.appendResponseLine).toHaveBeenCalledWith('内容: 测试文本')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
@@ -356,7 +356,7 @@ describe('input.ts 新功能测试', () => {
       for (const { tool, params } of tools) {
         const request = createMockRequest(params)
         await expect(tool.handler(request, response, contextWithoutPage))
-          .rejects.toThrow('请先获取当前页面')
+          .rejects.toThrow('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。')
       }
     })
 
@@ -371,7 +371,7 @@ describe('input.ts 新功能测试', () => {
       await expect(getValueTool.handler(request, response, mockContext))
         .rejects.toThrow('字符串错误')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('获取元素值失败: 字符串错误')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 获取元素值失败: 字符串错误')
     })
 
     it('应该处理setIncludeSnapshot调用', async () => {

@@ -251,25 +251,39 @@ export class MiniProgramContext implements ToolContext {
     this.#connectionStatus = createDisconnectedStatus();
   }
 
-  async connectDevtools(request: ConnectionRequest): Promise<ConnectionConnectResult> {
-    const result = await this.#connectionManager.connect(request);
+  #applyConnectedSession(result: ConnectionConnectResult): void {
     this.#detachOwnedListeners();
     this.#miniProgram = result.miniProgram;
     this.#networkCollector.setMiniProgram(result.miniProgram);
     this.#currentPage = result.currentPage;
-    this.#elementMap.clear();
+    this.clearElementMap();
+    this.invalidateSnapshotCache();
+    this.#consoleCollector.clear();
+    this.#consoleCollector.stopMonitoring();
+    this.#networkCollector.reset();
+    this.#networkCollector.setMiniProgram(result.miniProgram);
     this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
+  }
+
+  #applyDisconnectedSession(status: ConnectionStatusSnapshot): void {
+    this.#detachOwnedListeners();
+    this.#miniProgram = null;
+    this.#networkCollector.setMiniProgram(null);
+    this.#currentPage = null;
+    this.clearElementMap();
+    this.invalidateSnapshotCache();
+    this.#connectionStatus = status;
+  }
+
+  async connectDevtools(request: ConnectionRequest): Promise<ConnectionConnectResult> {
+    const result = await this.#connectionManager.connect(request);
+    this.#applyConnectedSession(result);
     return result;
   }
 
   async reconnectDevtools(request?: ConnectionRequest): Promise<ConnectionConnectResult> {
     const result = await this.#connectionManager.reconnect(request);
-    this.#detachOwnedListeners();
-    this.#miniProgram = result.miniProgram;
-    this.#networkCollector.setMiniProgram(result.miniProgram);
-    this.#currentPage = result.currentPage;
-    this.#elementMap.clear();
-    this.#connectionStatus = this.#connectionManager.getStatusSnapshot();
+    this.#applyConnectedSession(result);
     return result;
   }
 
@@ -281,18 +295,16 @@ export class MiniProgramContext implements ToolContext {
 
   async getConnectionStatus(options?: { refreshHealth?: boolean }): Promise<ConnectionStatusSnapshot> {
     const refreshHealth = options?.refreshHealth ?? true;
-    this.#connectionStatus = refreshHealth
+    const status = refreshHealth
       ? await this.#connectionManager.refreshHealth()
       : this.#connectionManager.getStatusSnapshot();
 
-    if (!this.#connectionStatus.connected) {
-      this.#detachOwnedListeners();
-      this.#miniProgram = null;
-      this.#networkCollector.setMiniProgram(null);
-      this.#currentPage = null;
-      this.#elementMap.clear();
+    if (!status.connected) {
+      this.#applyDisconnectedSession(status);
       return this.#connectionStatus;
     }
+
+    this.#connectionStatus = status;
 
     const session = this.#connectionManager.getSession();
     if (session) {

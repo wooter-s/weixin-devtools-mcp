@@ -8,7 +8,7 @@ import { resolve, isAbsolute } from 'path';
 
 import { z } from 'zod';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 /**
  * 诊断连接问题工具
@@ -33,11 +33,11 @@ export const diagnoseConnectionTool = defineTool({
     // 1. 检查参数有效性
     response.appendResponseLine('📋 1. 参数检查');
     if (!projectPath || typeof projectPath !== 'string') {
-      response.appendResponseLine('❌ projectPath 参数无效或缺失');
+      response.appendResponseLine(ResponseFormatter.error('projectPath 参数无效或缺失'));
       response.appendResponseLine('   修复建议: 确保传递有效的字符串路径');
       return;
     }
-    response.appendResponseLine(`✅ projectPath 参数正常: ${projectPath}`);
+    response.appendResponseLine(ResponseFormatter.success(`projectPath 参数正常: ${projectPath}`));
 
     // 2. 路径解析检查
     response.appendResponseLine('');
@@ -56,21 +56,21 @@ export const diagnoseConnectionTool = defineTool({
       response.appendResponseLine(`   原始路径: ${projectPath}`);
       response.appendResponseLine(`   解析后路径: ${resolvedPath}`);
     } else {
-      response.appendResponseLine(`✅ 已是绝对路径: ${resolvedPath}`);
+      response.appendResponseLine(ResponseFormatter.success(`已是绝对路径: ${resolvedPath}`));
     }
 
     // 3. 路径存在性检查
     response.appendResponseLine('');
     response.appendResponseLine('🗂️ 3. 路径存在性检查');
     if (!existsSync(resolvedPath)) {
-      response.appendResponseLine(`❌ 项目路径不存在: ${resolvedPath}`);
+      response.appendResponseLine(ResponseFormatter.error(`项目路径不存在: ${resolvedPath}`));
       response.appendResponseLine('   修复建议:');
       response.appendResponseLine('   - 检查路径是否拼写正确');
       response.appendResponseLine('   - 确保项目目录已创建');
       response.appendResponseLine('   - 使用绝对路径避免相对路径问题');
       return;
     }
-    response.appendResponseLine(`✅ 项目路径存在: ${resolvedPath}`);
+    response.appendResponseLine(ResponseFormatter.success(`项目路径存在: ${resolvedPath}`));
 
     // 4. 小程序项目结构检查
     response.appendResponseLine('');
@@ -83,21 +83,21 @@ export const diagnoseConnectionTool = defineTool({
     const hasProjectConfig = existsSync(projectConfigPath);
 
     if (!hasAppJson) {
-      response.appendResponseLine(`❌ 缺少 app.json 文件: ${appJsonPath}`);
+      response.appendResponseLine(ResponseFormatter.error(`缺少 app.json 文件: ${appJsonPath}`));
     } else {
-      response.appendResponseLine(`✅ 找到 app.json 文件: ${appJsonPath}`);
+      response.appendResponseLine(ResponseFormatter.success(`找到 app.json 文件: ${appJsonPath}`));
     }
 
     if (!hasProjectConfig) {
-      response.appendResponseLine(`⚠️ 缺少 project.config.json 文件: ${projectConfigPath}`);
+      response.appendResponseLine(ResponseFormatter.warning(`缺少 project.config.json 文件: ${projectConfigPath}`));
       response.appendResponseLine('   这可能不影响自动化，但建议配置该文件');
     } else {
-      response.appendResponseLine(`✅ 找到 project.config.json 文件: ${projectConfigPath}`);
+      response.appendResponseLine(ResponseFormatter.success(`找到 project.config.json 文件: ${projectConfigPath}`));
     }
 
     if (!hasAppJson) {
       response.appendResponseLine('');
-      response.appendResponseLine('❌ 项目结构不完整，这不是一个有效的小程序项目');
+      response.appendResponseLine(ResponseFormatter.error('项目结构不完整，这不是一个有效的小程序项目'));
       response.appendResponseLine('   修复建议:');
       response.appendResponseLine('   - 确保指向正确的小程序项目根目录');
       response.appendResponseLine('   - 小程序项目必须包含 app.json 文件');
@@ -108,19 +108,19 @@ export const diagnoseConnectionTool = defineTool({
     response.appendResponseLine('');
     response.appendResponseLine('🔗 5. 当前连接状态检查');
     if (context.miniProgram) {
-      response.appendResponseLine('✅ 已连接到微信开发者工具');
+      response.appendResponseLine(ResponseFormatter.success('已连接到微信开发者工具'));
       if (context.currentPage) {
         try {
           const pagePath = await context.currentPage.path;
           response.appendResponseLine(`   当前页面: ${pagePath}`);
         } catch {
-          response.appendResponseLine('⚠️ 获取当前页面信息失败');
+          response.appendResponseLine(ResponseFormatter.warning('获取当前页面信息失败'));
         }
       } else {
-        response.appendResponseLine('⚠️ 已连接但无当前页面信息');
+        response.appendResponseLine(ResponseFormatter.warning('已连接但无当前页面信息'));
       }
     } else {
-      response.appendResponseLine('❌ 未连接到微信开发者工具');
+      response.appendResponseLine(ResponseFormatter.error('未连接到微信开发者工具'));
     }
 
     // 6. 详细信息输出（如果启用verbose）
@@ -141,9 +141,9 @@ export const diagnoseConnectionTool = defineTool({
     response.appendResponseLine('');
     response.appendResponseLine('📝 诊断总结');
     if (hasAppJson && existsSync(resolvedPath)) {
-      response.appendResponseLine('✅ 项目配置检查通过，可以尝试连接');
+      response.appendResponseLine(ResponseFormatter.success('项目配置检查通过，可以尝试连接'));
       response.appendResponseLine('');
-      response.appendResponseLine('💡 建议的连接命令:');
+      response.appendResponseLine(ResponseFormatter.hint('建议的连接命令:'));
       response.appendResponseLine(JSON.stringify({
         name: 'connect_devtools',
         arguments: {
@@ -152,7 +152,7 @@ export const diagnoseConnectionTool = defineTool({
         },
       }));
     } else {
-      response.appendResponseLine('❌ 发现配置问题，请根据上述建议修复后重试');
+      response.appendResponseLine(ResponseFormatter.error('发现配置问题，请根据上述建议修复后重试'));
     }
 
     // 8. 常见问题解决方案
@@ -222,7 +222,7 @@ export const debugPageElementsTool = defineTool({
             const elements = await page.$$(selector);
             response.appendResponseLine(`   ${selector}: ${elements.length} 个元素`);
           } catch (error) {
-            response.appendResponseLine(`   ${selector}: 失败 - ${error instanceof Error ? error.message : String(error)}`);
+            response.appendResponseLine(`   ${selector}: 失败 - ${extractErrorMessage(error)}`);
           }
         }
 
@@ -245,7 +245,7 @@ export const debugPageElementsTool = defineTool({
               totalElements += elements.length;
             }
           } catch (error) {
-            response.appendResponseLine(`   ${selector}: 失败 - ${error instanceof Error ? error.message : String(error)}`);
+            response.appendResponseLine(`   ${selector}: 失败 - ${extractErrorMessage(error)}`);
           }
         }
         response.appendResponseLine(`   小程序组件总计: ${totalElements} 个元素`);
@@ -260,7 +260,7 @@ export const debugPageElementsTool = defineTool({
             const elements = await page.$$(selector);
             response.appendResponseLine(`   ${selector}: ${elements.length} 个元素`);
           } catch (error) {
-            response.appendResponseLine(`   ${selector}: 失败 - ${error instanceof Error ? error.message : String(error)}`);
+            response.appendResponseLine(`   ${selector}: 失败 - ${extractErrorMessage(error)}`);
           }
         }
 
@@ -274,7 +274,7 @@ export const debugPageElementsTool = defineTool({
             const elements = await page.$$(selector);
             response.appendResponseLine(`   ${selector}: ${elements.length} 个元素`);
           } catch (error) {
-            response.appendResponseLine(`   ${selector}: 失败 - ${error instanceof Error ? error.message : String(error)}`);
+            response.appendResponseLine(`   ${selector}: 失败 - ${extractErrorMessage(error)}`);
           }
         }
       }
@@ -301,13 +301,13 @@ export const debugPageElementsTool = defineTool({
             }
           }
         } catch (error) {
-          response.appendResponseLine(`   ${customSelector}: 失败 - ${error instanceof Error ? error.message : String(error)}`);
+          response.appendResponseLine(`   ${customSelector}: 失败 - ${extractErrorMessage(error)}`);
         }
       }
 
       // 诊断建议
       response.appendResponseLine('');
-      response.appendResponseLine('💡 诊断建议');
+      response.appendResponseLine(ResponseFormatter.hint('诊断建议'));
       response.appendResponseLine('1. 如果所有选择器都返回0个元素，请检查:');
       response.appendResponseLine('   - 页面是否已完全加载');
       response.appendResponseLine('   - 是否在正确的页面上');
@@ -322,7 +322,7 @@ export const debugPageElementsTool = defineTool({
       response.appendResponseLine('   - 使用data-testid属性便于自动化测试');
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
       response.appendResponseLine(`调试过程中发生错误: ${errorMessage}`);
       throw error;
     }
@@ -348,10 +348,10 @@ export const checkEnvironmentTool = defineTool({
     response.appendResponseLine('📦 依赖检查');
     try {
       await import('miniprogram-automator');
-      response.appendResponseLine('✅ miniprogram-automator 模块加载成功');
+      response.appendResponseLine(ResponseFormatter.success('miniprogram-automator 模块加载成功'));
     } catch (error) {
-      response.appendResponseLine('❌ miniprogram-automator 模块加载失败');
-      response.appendResponseLine(`   错误: ${error instanceof Error ? error.message : String(error)}`);
+      response.appendResponseLine(ResponseFormatter.error('miniprogram-automator 模块加载失败'));
+      response.appendResponseLine(`   错误: ${extractErrorMessage(error)}`);
       response.appendResponseLine('   修复建议: npm install miniprogram-automator');
       return;
     }
@@ -365,7 +365,7 @@ export const checkEnvironmentTool = defineTool({
     response.appendResponseLine('2. 如需全量工具，可追加参数：');
     response.appendResponseLine('   "args": ["--tools-profile=full"]');
     response.appendResponseLine('');
-    response.appendResponseLine('💡 配置文件位置:');
+    response.appendResponseLine(ResponseFormatter.hint('配置文件位置:'));
     response.appendResponseLine('   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json');
     response.appendResponseLine('   Windows: %APPDATA%/Claude/claude_desktop_config.json');
 
@@ -381,7 +381,7 @@ export const checkEnvironmentTool = defineTool({
     }
 
     response.appendResponseLine('');
-    response.appendResponseLine('✅ 环境检查完成');
+    response.appendResponseLine(ResponseFormatter.success('环境检查完成'));
   },
 });
 
@@ -416,16 +416,16 @@ export const debugConnectionFlowTool = defineTool({
         startTime: number;
         endTime?: number;
         duration?: number;
-        details?: any;
+        details?: Record<string, unknown>;
         error?: string;
       }>,
       snapshots: [] as Array<{
         timestamp: number;
-        state: any;
+        state: Record<string, unknown>;
       }>,
     };
 
-    const trackStep = (step: string, status: 'pending' | 'running' | 'success' | 'warning' | 'error', details?: any, error?: string) => {
+    const trackStep = (step: string, status: 'pending' | 'running' | 'success' | 'warning' | 'error', details?: Record<string, unknown>, error?: string) => {
       const now = Date.now();
       const existingStep = debugTracker.steps.find(s => s.step === step);
 
@@ -479,8 +479,8 @@ export const debugConnectionFlowTool = defineTool({
       response.appendResponseLine('📋 步骤1: 参数验证');
 
       if (!projectPath || typeof projectPath !== 'string') {
-        trackStep('参数验证', 'error', null, 'projectPath 无效');
-        response.appendResponseLine('❌ projectPath 参数无效');
+        trackStep('参数验证', 'error', undefined, 'projectPath 无效');
+        response.appendResponseLine(ResponseFormatter.error('projectPath 参数无效'));
         throw new Error('无效的 projectPath 参数');
       }
 
@@ -499,7 +499,7 @@ export const debugConnectionFlowTool = defineTool({
       }
 
       trackStep('参数验证', 'success', { resolvedPath, mode });
-      response.appendResponseLine(`   ✅ 参数验证通过`);
+      response.appendResponseLine(`   ${ResponseFormatter.success('参数验证通过')}`);
       response.appendResponseLine(`      项目路径: ${resolvedPath}`);
       response.appendResponseLine(`      连接模式: ${mode}`);
       response.appendResponseLine('');
@@ -510,8 +510,8 @@ export const debugConnectionFlowTool = defineTool({
       response.appendResponseLine('📦 步骤2: 项目结构验证');
 
       if (!existsSync(resolvedPath)) {
-        trackStep('项目结构验证', 'error', null, '项目路径不存在');
-        response.appendResponseLine(`   ❌ 项目路径不存在: ${resolvedPath}`);
+        trackStep('项目结构验证', 'error', undefined, '项目路径不存在');
+        response.appendResponseLine(`   ${ResponseFormatter.error(`项目路径不存在: ${resolvedPath}`)}`);
         throw new Error('项目路径不存在');
       }
 
@@ -522,13 +522,13 @@ export const debugConnectionFlowTool = defineTool({
 
       if (!hasAppJson) {
         trackStep('项目结构验证', 'error', { hasAppJson, hasProjectConfig }, '缺少 app.json');
-        response.appendResponseLine(`   ❌ 缺少必需文件: app.json`);
+        response.appendResponseLine(`   ${ResponseFormatter.error('缺少必需文件: app.json')}`);
         throw new Error('缺少 app.json 文件');
       }
 
       trackStep('项目结构验证', 'success', { hasAppJson, hasProjectConfig });
-      response.appendResponseLine(`   ✅ app.json: 存在`);
-      response.appendResponseLine(`   ${hasProjectConfig ? '✅' : '⚠️'} project.config.json: ${hasProjectConfig ? '存在' : '缺失(可选)'}`);
+      response.appendResponseLine(`   ${ResponseFormatter.success('app.json: 存在')}`);
+      response.appendResponseLine(`   ${hasProjectConfig ? ResponseFormatter.success('project.config.json: 存在') : ResponseFormatter.warning('project.config.json: 缺失(可选)')}`);
       response.appendResponseLine('');
       captureStateSnapshot('项目结构验证完成');
 
@@ -542,26 +542,26 @@ export const debugConnectionFlowTool = defineTool({
           const pagePath = await currentPage.path;
 
           trackStep('连接状态检查', 'warning', { reuseConnection: true, pagePath });
-          response.appendResponseLine(`   ⚠️ 检测到活跃连接`);
+          response.appendResponseLine(`   ${ResponseFormatter.warning('检测到活跃连接')}`);
           response.appendResponseLine(`      当前页面: ${pagePath}`);
           response.appendResponseLine(`      操作: 复用现有连接（跳过新建连接）`);
 
           if (!dryRun) {
             response.appendResponseLine('');
-            response.appendResponseLine('💡 提示: 如需强制重新连接,请先断开现有连接');
+            response.appendResponseLine(ResponseFormatter.hint('如需强制重新连接,请先断开现有连接'));
             response.appendResponseLine('');
             return; // 复用连接,不继续后续步骤
           }
         } catch {
           trackStep('连接状态检查', 'warning', { connectionInvalid: true });
-          response.appendResponseLine(`   ⚠️ 已有连接但已失效`);
+          response.appendResponseLine(`   ${ResponseFormatter.warning('已有连接但已失效')}`);
           response.appendResponseLine(`      操作: 清除并准备新建连接`);
           context.miniProgram = null;
           context.currentPage = null;
         }
       } else {
         trackStep('连接状态检查', 'success', { noExistingConnection: true });
-        response.appendResponseLine(`   ✅ 无已有连接,准备新建连接`);
+        response.appendResponseLine(`   ${ResponseFormatter.success('无已有连接,准备新建连接')}`);
       }
 
       response.appendResponseLine('');
@@ -576,19 +576,18 @@ export const debugConnectionFlowTool = defineTool({
         response.appendResponseLine('⚙️ 步骤4: 准备连接参数');
 
         const connectOptions = {
+          strategy: mode,
           projectPath: resolvedPath,
-          mode,
-          timeout: 45000,
-          fallbackMode: true,
+          timeoutMs: 45000,
           healthCheck: true,
           verbose,
         };
 
         trackStep('准备连接参数', 'success', connectOptions);
-        response.appendResponseLine(`   ✅ 连接参数准备完成`);
+        response.appendResponseLine(`   ${ResponseFormatter.success('连接参数准备完成')}`);
         if (verbose) {
-          response.appendResponseLine(`      超时设置: ${connectOptions.timeout}ms`);
-          response.appendResponseLine(`      模式回退: ${connectOptions.fallbackMode ? '启用' : '禁用'}`);
+          response.appendResponseLine(`      连接策略: ${connectOptions.strategy}`);
+          response.appendResponseLine(`      超时设置: ${connectOptions.timeoutMs}ms`);
           response.appendResponseLine(`      健康检查: ${connectOptions.healthCheck ? '启用' : '禁用'}`);
         }
         response.appendResponseLine('');
@@ -603,39 +602,25 @@ export const debugConnectionFlowTool = defineTool({
         const connectionStartTime = Date.now();
 
         try {
-          // 这里调用实际的连接逻辑
-          const { connectDevtoolsEnhanced } = await import('../tools.js');
-          const result = await connectDevtoolsEnhanced({
-            projectPath: resolvedPath,
-            mode,
-            timeout: 45000,
-            fallbackMode: true,
-            healthCheck: true,
-            verbose,
-          });
+          const result = await context.connectDevtools(connectOptions);
 
           const connectionDuration = Date.now() - connectionStartTime;
 
           trackStep('执行连接', 'success', {
             duration: connectionDuration,
-            connectionMode: result.connectionMode,
+            strategyUsed: result.strategyUsed,
             pagePath: result.pagePath,
-            healthStatus: result.healthStatus,
+            status: result.status,
           });
 
           const miniProgramResult = result.miniProgram;
 
-          // 更新上下文
-          context.miniProgram = miniProgramResult;
-          context.currentPage = result.currentPage;
-          context.elementMap.clear();
-
-          response.appendResponseLine(`   ✅ 连接成功 (耗时: ${connectionDuration}ms)`);
+          response.appendResponseLine(`   ${ResponseFormatter.success(`连接成功 (耗时: ${connectionDuration}ms)`)}`);
           response.appendResponseLine(`      当前页面: ${result.pagePath}`);
-          response.appendResponseLine(`      连接模式: ${result.connectionMode}`);
-          response.appendResponseLine(`      健康状态: ${result.healthStatus}`);
-          if (result.processInfo) {
-            response.appendResponseLine(`      进程信息: PID=${result.processInfo.pid}, Port=${result.processInfo.port}`);
+          response.appendResponseLine(`      连接策略: ${result.strategyUsed}`);
+          response.appendResponseLine(`      连接状态: ${result.status}`);
+          if (result.endpoint) {
+            response.appendResponseLine(`      端点: ${result.endpoint}`);
           }
           response.appendResponseLine('');
           captureStateSnapshot('连接执行完成');
@@ -651,18 +636,18 @@ export const debugConnectionFlowTool = defineTool({
             context.consoleStorage.isMonitoring = true;
             context.consoleStorage.startTime = new Date().toISOString();
 
-            response.appendResponseLine(`   ✅ Console监听器已启动`);
+            response.appendResponseLine(`   ${ResponseFormatter.success('Console监听器已启动')}`);
           } catch (error) {
-            trackStep('初始化监听器', 'warning', null, 'Console监听器启动失败');
-            response.appendResponseLine(`   ⚠️ Console监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
+            trackStep('初始化监听器', 'warning', undefined, 'Console监听器启动失败');
+            response.appendResponseLine(`   ${ResponseFormatter.warning(`Console监听器启动失败: ${extractErrorMessage(error)}`)}`);
           }
 
         } catch (error) {
           const connectionDuration = Date.now() - connectionStartTime;
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = extractErrorMessage(error);
 
           trackStep('执行连接', 'error', { duration: connectionDuration }, errorMessage);
-          response.appendResponseLine(`   ❌ 连接失败 (耗时: ${connectionDuration}ms)`);
+          response.appendResponseLine(`   ${ResponseFormatter.error(`连接失败 (耗时: ${connectionDuration}ms)`)}`);
           response.appendResponseLine(`      错误: ${errorMessage}`);
           response.appendResponseLine('');
           throw error;
@@ -673,13 +658,13 @@ export const debugConnectionFlowTool = defineTool({
           if (!context.networkStorage.isMonitoring) {
             context.networkStorage.isMonitoring = true;
             context.networkStorage.startTime = new Date().toISOString();
-            response.appendResponseLine(`   ✅ 网络监听器已启动`);
+            response.appendResponseLine(`   ${ResponseFormatter.success('网络监听器已启动')}`);
           } else {
             response.appendResponseLine(`   ℹ️ 网络监听器已在运行中`);
           }
         } catch (error) {
-          trackStep('初始化监听器', 'warning', null, '网络监听器启动失败');
-          response.appendResponseLine(`   ⚠️ 网络监听器启动失败: ${error instanceof Error ? error.message : String(error)}`);
+          trackStep('初始化监听器', 'warning', undefined, '网络监听器启动失败');
+          response.appendResponseLine(`   ${ResponseFormatter.warning(`网络监听器启动失败: ${extractErrorMessage(error)}`)}`);
         }
 
         trackStep('初始化监听器', 'success');
@@ -688,9 +673,9 @@ export const debugConnectionFlowTool = defineTool({
       }
 
       // 生成调试报告
-      response.appendResponseLine('═'.repeat(60));
-      response.appendResponseLine('📊 调试报告');
-      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine(ResponseFormatter.separator());
+      response.appendResponseLine(ResponseFormatter.section('调试报告'));
+      response.appendResponseLine(ResponseFormatter.separator());
       response.appendResponseLine('');
 
       // 步骤摘要
@@ -702,17 +687,17 @@ export const debugConnectionFlowTool = defineTool({
       let errorCount = 0;
 
       for (const step of debugTracker.steps) {
-        const icon = step.status === 'success' ? '✅' :
-                     step.status === 'warning' ? '⚠️' :
-                     step.status === 'error' ? '❌' :
-                     step.status === 'running' ? '⏳' : '⏸️';
-
         if (step.status === 'success') successCount++;
         if (step.status === 'warning') warningCount++;
         if (step.status === 'error') errorCount++;
 
         const durationInfo = step.duration !== undefined ? ` (${step.duration}ms)` : '';
-        response.appendResponseLine(`${icon} ${step.step}${durationInfo}`);
+        const stepText = `${step.step}${durationInfo}`;
+        const formattedLine = step.status === 'success' ? ResponseFormatter.success(stepText) :
+                              step.status === 'warning' ? ResponseFormatter.warning(stepText) :
+                              step.status === 'error' ? ResponseFormatter.error(stepText) :
+                              `⏳ ${stepText}`;
+        response.appendResponseLine(formattedLine);
 
         if (verbose && step.details) {
           const detailsStr = JSON.stringify(step.details, null, 2)
@@ -755,11 +740,11 @@ export const debugConnectionFlowTool = defineTool({
       }
 
       // 诊断建议
-      response.appendResponseLine('💡 诊断建议:');
+      response.appendResponseLine(ResponseFormatter.hint('诊断建议:'));
       response.appendResponseLine('');
 
       if (errorCount > 0) {
-        response.appendResponseLine('⚠️ 发现错误,建议检查:');
+        response.appendResponseLine(ResponseFormatter.warning('发现错误,建议检查:'));
         for (const step of debugTracker.steps) {
           if (step.status === 'error') {
             response.appendResponseLine(`   • ${step.step}: ${step.error || '未知错误'}`);
@@ -779,21 +764,21 @@ export const debugConnectionFlowTool = defineTool({
       }
 
       if (errorCount === 0 && warningCount === 0) {
-        response.appendResponseLine('✅ 所有步骤正常,连接流程健康!');
+        response.appendResponseLine(ResponseFormatter.success('所有步骤正常,连接流程健康!'));
         response.appendResponseLine('');
       }
 
-      response.appendResponseLine('🔧 使用 MCP Inspector 进行后续调试:');
+      response.appendResponseLine(ResponseFormatter.hint('使用 MCP Inspector 进行后续调试:'));
       response.appendResponseLine('   npm run inspector');
       response.appendResponseLine('');
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
 
-      response.appendResponseLine('═'.repeat(60));
-      response.appendResponseLine('❌ 调试过程失败');
-      response.appendResponseLine('═'.repeat(60));
+      response.appendResponseLine(ResponseFormatter.separator());
+      response.appendResponseLine(ResponseFormatter.error('调试过程失败'));
+      response.appendResponseLine(ResponseFormatter.separator());
       response.appendResponseLine('');
       response.appendResponseLine(`错误信息: ${errorMessage}`);
 
@@ -807,12 +792,11 @@ export const debugConnectionFlowTool = defineTool({
       response.appendResponseLine('📊 调试追踪 (失败前):');
 
       for (const step of debugTracker.steps) {
-        const icon = step.status === 'success' ? '✅' :
-                     step.status === 'warning' ? '⚠️' :
-                     step.status === 'error' ? '❌' :
-                     step.status === 'running' ? '⏳' : '⏸️';
-
-        response.appendResponseLine(`${icon} ${step.step}`);
+        const stepLine = step.status === 'success' ? ResponseFormatter.success(step.step) :
+                         step.status === 'warning' ? ResponseFormatter.warning(step.step) :
+                         step.status === 'error' ? ResponseFormatter.error(step.step) :
+                         `⏳ ${step.step}`;
+        response.appendResponseLine(stepLine);
         if (step.error) {
           response.appendResponseLine(`   错误: ${step.error}`);
         }

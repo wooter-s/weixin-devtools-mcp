@@ -106,7 +106,7 @@ describe('network tools', () => {
     expect(text).toContain('Network Requests (List View)');
     expect(text).toContain('reqid=req_1');
     expect(text).toContain('reqid=req_2');
-    expect(text).toContain('提示: 使用 get_network_request 结合 reqid 查看完整详情');
+    expect(text).toContain('💡 使用 get_network_request 结合 reqid 查看完整详情');
     expect(context.__collector.syncFromRemote).toHaveBeenCalledWith(true);
   });
 
@@ -245,6 +245,80 @@ describe('network tools', () => {
         response as any,
         context as any
       )
-    ).rejects.toThrow('请先连接到微信开发者工具');
+    ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+  });
+
+  describe('错误路径测试', () => {
+    it('get_network_request 使用无效 reqid 应抛出错误', async () => {
+      const response = createMockResponse();
+
+      await expect(
+        getNetworkRequestTool.handler(
+          { params: { reqid: 'invalid_req_999' } },
+          response as any,
+          context as any,
+        ),
+      ).rejects.toThrow('未找到 reqid=invalid_req_999 的请求');
+    });
+
+    it('未连接时 get_network_request 应拒绝执行', async () => {
+      const response = createMockResponse();
+      context.miniProgram = null as any;
+
+      await expect(
+        getNetworkRequestTool.handler(
+          { params: { reqid: 'req_1' } },
+          response as any,
+          context as any,
+        ),
+      ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+    });
+
+    it('未连接时 stop_network_monitoring 应拒绝执行', async () => {
+      const response = createMockResponse();
+      context.miniProgram = null as any;
+
+      await expect(
+        stopNetworkMonitoringTool.handler(
+          { params: { clearLogs: false } },
+          response as any,
+          context as any,
+        ),
+      ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+    });
+
+    it('未连接时 clear_network_requests 应拒绝执行', async () => {
+      const response = createMockResponse();
+      context.miniProgram = null as any;
+
+      await expect(
+        clearNetworkRequestsTool.handler(
+          { params: { clearRemote: false } },
+          response as any,
+          context as any,
+        ),
+      ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+    });
+
+    it('list_network_requests 无效 since 参数应抛出错误', async () => {
+      const response = createMockResponse();
+
+      await expect(
+        listNetworkRequestsTool.handler(
+          {
+            params: {
+              pageSize: 10,
+              pageIdx: 0,
+              includePreservedRequests: false,
+              successOnly: false,
+              failedOnly: false,
+              since: 'not-a-valid-date',
+            },
+          },
+          response as any,
+          context as any,
+        ),
+      ).rejects.toThrow('since 参数必须是有效的 ISO 8601 时间字符串');
+    });
   });
 });

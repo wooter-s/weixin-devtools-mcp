@@ -11,6 +11,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { describe, it, expect } from 'vitest';
 
+import packageJson from '../../package.json' assert { type: 'json' };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface WithClientOptions {
@@ -80,10 +82,13 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('应该返回正确的服务器信息', async () => {
+    it('应该返回与 package.json 一致的服务器信息', async () => {
       await withClient(async (client) => {
-        const { tools } = await client.listTools();
-        expect(tools).toBeDefined();
+        const serverInfo = client.getServerVersion();
+
+        expect(serverInfo).toBeDefined();
+        expect(serverInfo?.name).toBe(packageJson.name);
+        expect(serverInfo?.version).toBe(packageJson.version);
       });
     });
   });

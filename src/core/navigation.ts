@@ -5,6 +5,9 @@
 
 import type { NavigateOptions, NavigateBackOptions, SwitchTabOptions, PageInfo } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+import { DEFAULT_NAVIGATION_TIMEOUT, DEFAULT_WAIT_TIMEOUT } from '../tools/ToolDefinition.js';
+
 /**
  * 跳转到指定页面
  */
@@ -12,7 +15,7 @@ export async function navigateToPage(
   miniProgram: any,
   options: NavigateOptions
 ): Promise<void> {
-  const { url, params, waitForLoad = true, timeout = 10000 } = options;
+  const { url, params, waitForLoad = true, timeout = DEFAULT_NAVIGATION_TIMEOUT } = options;
 
   if (!url) {
     throw new Error("页面URL是必需的");
@@ -52,7 +55,7 @@ export async function navigateToPage(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`页面跳转失败: ${errorMessage}`);
   }
 }
@@ -64,7 +67,7 @@ export async function navigateBack(
   miniProgram: any,
   options: NavigateBackOptions = {}
 ): Promise<void> {
-  const { delta = 1, waitForLoad = true, timeout = 5000 } = options;
+  const { delta = 1, waitForLoad = true, timeout = DEFAULT_WAIT_TIMEOUT } = options;
 
   if (!miniProgram) {
     throw new Error("MiniProgram对象是必需的");
@@ -100,7 +103,7 @@ export async function navigateBack(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`页面返回失败: ${errorMessage}`);
   }
 }
@@ -112,7 +115,7 @@ export async function switchTab(
   miniProgram: any,
   options: SwitchTabOptions
 ): Promise<void> {
-  const { url, waitForLoad = true, timeout = 5000 } = options;
+  const { url, waitForLoad = true, timeout = DEFAULT_WAIT_TIMEOUT } = options;
 
   if (!url) {
     throw new Error("Tab页URL是必需的");
@@ -144,7 +147,7 @@ export async function switchTab(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`Tab切换失败: ${errorMessage}`);
   }
 }
@@ -187,7 +190,7 @@ export async function getCurrentPageInfo(
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`获取页面信息失败: ${errorMessage}`);
   }
 }
@@ -199,7 +202,7 @@ export async function reLaunch(
   miniProgram: any,
   options: NavigateOptions
 ): Promise<void> {
-  const { url, params, waitForLoad = true, timeout = 10000 } = options;
+  const { url, params, waitForLoad = true, timeout = DEFAULT_NAVIGATION_TIMEOUT } = options;
 
   if (!url) {
     throw new Error("页面URL是必需的");
@@ -239,7 +242,7 @@ export async function reLaunch(
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`重新启动失败: ${errorMessage}`);
   }
 }

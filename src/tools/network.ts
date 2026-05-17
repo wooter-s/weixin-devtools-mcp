@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 import type { NetworkRequest as StoredNetworkRequest } from './ToolDefinition.js';
-import { defineTool, ToolCategory, type NetworkRequestType } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, ResponseFormatter, type NetworkRequestType } from './ToolDefinition.js';
 
 interface NetworkRequestSummary {
   reqid: string;
@@ -68,12 +68,6 @@ function toSummary(request: StoredNetworkRequest): NetworkRequestSummary {
   };
 }
 
-function ensureConnected(context: { miniProgram: { evaluate: <T>(fn: () => T) => Promise<T> } | null }): void {
-  if (!context.miniProgram) {
-    throw new Error('请先连接到微信开发者工具');
-  }
-}
-
 const requestTypeSchema = z.enum(['request', 'uploadFile', 'downloadFile']);
 
 const listNetworkRequestsSchema = z.object({
@@ -113,7 +107,7 @@ export const listNetworkRequestsTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    ensureConnected(context);
+    ensureMiniProgram(context);
 
     const {
       pageSize,
@@ -172,7 +166,7 @@ export const listNetworkRequestsTool = defineTool({
     const end = Math.min(start + pageSize, total);
     const pageRequests = filteredRequests.slice(start, end);
 
-    response.appendResponseLine('## Network Requests (List View)');
+    response.appendResponseLine(ResponseFormatter.section('Network Requests (List View)'));
     response.appendResponseLine(`监听状态: ${context.networkStorage.isMonitoring ? '运行中' : '已停止'}`);
     response.appendResponseLine(`监听开始时间: ${context.networkStorage.startTime || '未设置'}`);
     response.appendResponseLine(`本次同步新增: ${syncedCount}`);
@@ -192,7 +186,7 @@ export const listNetworkRequestsTool = defineTool({
     }
 
     response.appendResponseLine('');
-    response.appendResponseLine('提示: 使用 get_network_request 结合 reqid 查看完整详情');
+    response.appendResponseLine(ResponseFormatter.hint('使用 get_network_request 结合 reqid 查看完整详情'));
   },
 });
 
@@ -208,7 +202,7 @@ export const getNetworkRequestTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    ensureConnected(context);
+    ensureMiniProgram(context);
 
     await context.getNetworkCollector().syncFromRemote(true);
     const requests = sanitizeNetworkRequests(
@@ -220,7 +214,7 @@ export const getNetworkRequestTool = defineTool({
       throw new Error(`未找到 reqid=${request.params.reqid} 的请求，请先调用 list_network_requests 获取可用 reqid`);
     }
 
-    response.appendResponseLine('## Network Request (Detail View)');
+    response.appendResponseLine(ResponseFormatter.section('Network Request (Detail View)'));
     response.appendResponseLine(`ID: ${matched.id}`);
     response.appendResponseLine(`类型: ${matched.type}`);
     response.appendResponseLine(`URL: ${matched.url}`);
@@ -272,7 +266,7 @@ export const stopNetworkMonitoringTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    ensureConnected(context);
+    ensureMiniProgram(context);
 
     const { clearLogs } = request.params;
 
@@ -305,13 +299,13 @@ export const stopNetworkMonitoringTool = defineTool({
       });
     }
 
-    response.appendResponseLine('=== 网络监听已停止 ===');
+    response.appendResponseLine(ResponseFormatter.section('网络监听已停止'));
     response.appendResponseLine('监听状态: 已停止');
     if (clearLogs) {
       response.appendResponseLine(`已清空日志: ${clearedCount} 条`);
     }
     response.appendResponseLine('');
-    response.appendResponseLine('提示: 使用 reconnect_devtools 重新连接可恢复监听');
+    response.appendResponseLine(ResponseFormatter.hint('使用 reconnect_devtools 重新连接可恢复监听'));
   },
 });
 
@@ -327,7 +321,7 @@ export const clearNetworkRequestsTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    ensureConnected(context);
+    ensureMiniProgram(context);
 
     const { clearRemote } = request.params;
     const localCountBefore = context.getNetworkCollector().getCurrentCount();
@@ -350,12 +344,12 @@ export const clearNetworkRequestsTool = defineTool({
       });
     }
 
-    response.appendResponseLine('=== 网络请求记录已清空 ===');
+    response.appendResponseLine(ResponseFormatter.section('网络请求记录已清空'));
     response.appendResponseLine(`本地清空: ${localCountBefore} 条`);
     if (clearRemote) {
       response.appendResponseLine(`远程清空: ${remoteCount} 条`);
     }
     response.appendResponseLine('');
-    response.appendResponseLine('提示: 网络监听仍在运行，新的请求会继续被收集');
+    response.appendResponseLine(ResponseFormatter.hint('网络监听仍在运行，新的请求会继续被收集'));
   },
 });

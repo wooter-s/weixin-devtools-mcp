@@ -9,37 +9,6 @@ import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import type { ToolContext } from '../../src/tools/ToolDefinition.js';
 import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
 
-// Mock 快照获取函数
-vi.mock('../../src/tools.js', async () => {
-  const actual = await vi.importActual('../../src/tools.js');
-  return {
-    ...actual,
-    getPageSnapshot: vi.fn().mockResolvedValue({
-      snapshot: {
-        path: 'pages/test/test',
-        elements: [
-          {
-            uid: 'view.container',
-            tagName: 'view',
-            text: 'Test View',
-            position: { left: 0, top: 0, width: 375, height: 667 }
-          },
-          {
-            uid: 'button.submit',
-            tagName: 'button',
-            text: 'Submit',
-            position: { left: 100, top: 400, width: 175, height: 44 }
-          }
-        ]
-      },
-      elementMap: new Map([
-        ['view.container', { selector: 'view.container', index: 0 }],
-        ['button.submit', { selector: 'button.submit', index: 0 }]
-      ])
-    })
-  };
-});
-
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined)
@@ -48,6 +17,30 @@ vi.mock('fs/promises', () => ({
 describe('getPageSnapshotTool', () => {
   let context: ToolContext;
   let response: SimpleToolResponse;
+
+  const baseSnapshotResult = {
+    snapshot: {
+      path: 'pages/test/test',
+      elements: [
+        {
+          uid: 'view.container',
+          tagName: 'view',
+          text: 'Test View',
+          position: { left: 0, top: 0, width: 375, height: 667 }
+        },
+        {
+          uid: 'button.submit',
+          tagName: 'button',
+          text: 'Submit',
+          position: { left: 100, top: 400, width: 175, height: 44 }
+        }
+      ]
+    },
+    elementMap: new Map([
+      ['view.container', { selector: 'view.container', index: 0 }],
+      ['button.submit', { selector: 'button.submit', index: 0 }]
+    ])
+  };
 
   beforeEach(() => {
     // 创建 mock context
@@ -89,6 +82,13 @@ describe('getPageSnapshotTool', () => {
         getCurrentCount: vi.fn(() => 0),
       })),
       clearNetworkRequests: vi.fn(),
+      getPageSnapshotCached: vi.fn(async () => ({
+        snapshot: {
+          ...baseSnapshotResult.snapshot,
+          elements: [...baseSnapshotResult.snapshot.elements],
+        },
+        elementMap: new Map(baseSnapshotResult.elementMap),
+      })),
       getElementByUid: vi.fn(async () => {
         throw new Error('getElementByUid not implemented in snapshot test');
       }),
@@ -146,6 +146,7 @@ describe('getPageSnapshotTool', () => {
       expect(responseText).toMatch(/uid=button\.submit/);
 
       // 验证 elementMap 已更新
+      expect(context.getPageSnapshotCached).toHaveBeenCalledWith({ forceRefresh: true });
       expect(context.elementMap.size).toBe(2);
       expect(context.elementMap.has('view.container')).toBe(true);
       expect(context.elementMap.has('button.submit')).toBe(true);
@@ -156,7 +157,7 @@ describe('getPageSnapshotTool', () => {
 
       await expect(
         getPageSnapshotTool.handler({ params: {} }, response, context)
-      ).rejects.toThrow('请先获取当前页面');
+      ).rejects.toThrow('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。');
     });
   });
 
@@ -224,8 +225,7 @@ describe('getPageSnapshotTool', () => {
 
     it('应该支持包含属性信息', async () => {
       // 修改 mock 数据包含属性
-      const { getPageSnapshot } = await import('../../src/tools.js');
-      vi.mocked(getPageSnapshot).mockResolvedValueOnce({
+      vi.mocked(context.getPageSnapshotCached).mockResolvedValueOnce({
         snapshot: {
           path: 'pages/test/test',
           elements: [
@@ -339,8 +339,7 @@ describe('getPageSnapshotTool', () => {
 
   describe('错误处理', () => {
     it('应该处理快照获取失败', async () => {
-      const { getPageSnapshot } = await import('../../src/tools.js');
-      vi.mocked(getPageSnapshot).mockRejectedValueOnce(
+      vi.mocked(context.getPageSnapshotCached).mockRejectedValueOnce(
         new Error('模拟快照获取失败')
       );
 
@@ -350,6 +349,16 @@ describe('getPageSnapshotTool', () => {
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('❌ 获取页面快照失败');
+    });
+
+    it('应该在上下文不支持缓存接口时返回明确错误', async () => {
+      delete (context as ToolContext & { getPageSnapshotCached?: unknown }).getPageSnapshotCached;
+
+      await expect(
+        getPageSnapshotTool.handler({ params: {} }, response, context)
+      ).rejects.toThrow('当前上下文不支持页面快照缓存接口');
+
+      expect(response.getResponseText()).toContain('❌ 获取页面快照失败');
     });
   });
 
@@ -393,8 +402,7 @@ describe('getPageSnapshotTool', () => {
 
   describe('边界条件', () => {
     it('应该处理空页面（无元素）', async () => {
-      const { getPageSnapshot } = await import('../../src/tools.js');
-      vi.mocked(getPageSnapshot).mockResolvedValueOnce({
+      vi.mocked(context.getPageSnapshotCached).mockResolvedValueOnce({
         snapshot: {
           path: 'pages/empty/empty',
           elements: []

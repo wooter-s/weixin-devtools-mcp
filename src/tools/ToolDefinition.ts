@@ -11,7 +11,7 @@ import type {
   ConnectionRequest,
   ConnectionStatusSnapshot
 } from '../connection/index.js';
-import type { ElementMapInfo } from '../tools.js'
+import type { ElementMapInfo, PageSnapshot } from '../tools.js'
 
 /**
  * 工具分类枚举
@@ -200,6 +200,18 @@ export interface ToolContext {
   }): void;
 
   /**
+   * 追加一条 Console 消息（优先使用 Collector 实现）
+   * 返回分配的稳定 ID
+   */
+  addConsoleMessage?(message: Omit<ConsoleMessage, 'msgid'>): number;
+
+  /**
+   * 追加一条异常消息（优先使用 Collector 实现）
+   * 返回分配的稳定 ID
+   */
+  addExceptionMessage?(exception: Omit<ExceptionMessage, 'msgid'>): number;
+
+  /**
    * 获取网络收集器
    */
   getNetworkCollector(): NetworkCollectorContext;
@@ -237,6 +249,39 @@ export interface ToolContext {
    * 获取连接状态
    */
   getConnectionStatus(options?: { refreshHealth?: boolean }): Promise<ConnectionStatusSnapshot>;
+
+  /**
+   * 获取页面快照（带缓存）
+   */
+  getPageSnapshotCached?(options?: {
+    forceRefresh?: boolean;
+    ttl?: number;
+  }): Promise<{ snapshot: PageSnapshot; elementMap: Map<string, ElementMapInfo> }>;
+
+  /**
+   * 刷新当前页面引用，并同步连接状态中的 pagePath
+   */
+  refreshCurrentPage?(): Promise<Page>;
+
+  /**
+   * 清空当前 UID 映射，避免导航后的旧元素继续被复用
+   */
+  clearElementMap?(): void;
+
+  /**
+   * 使页面快照缓存失效
+   */
+  invalidateSnapshotCache?(): void;
+
+  /**
+   * 在导航后切分 Console 会话，保留历史并开启新会话
+   */
+  splitConsoleAfterNavigation?(): void;
+
+  /**
+   * 在导航后切分 Network 会话，保留历史并开启新会话
+   */
+  splitNetworkAfterNavigation?(): void;
 }
 
 /**
@@ -315,7 +360,7 @@ export function defineTool<TSchema extends z.ZodTypeAny>(definition: {
  */
 export function ensureMiniProgram(context: ToolContext): asserts context is ToolContext & { miniProgram: MiniProgram } {
   if (!context.miniProgram) {
-    throw new Error('请先连接到微信开发者工具');
+    throw new Error('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
   }
 }
 
@@ -325,9 +370,60 @@ export function ensureMiniProgram(context: ToolContext): asserts context is Tool
  */
 export function ensureCurrentPage(context: ToolContext): asserts context is ToolContext & { currentPage: Page } {
   if (!context.currentPage) {
-    throw new Error('请先获取当前页面');
+    throw new Error('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。');
   }
 }
+
+/**
+ * 统一错误消息提取（从 utils/error.ts 重导出）
+ */
+export { extractErrorMessage } from '../utils/error.js';
+
+/**
+ * 响应格式化工具类
+ * 统一所有工具的响应消息格式
+ */
+export class ResponseFormatter {
+  /** 成功消息格式 */
+  static success(message: string): string {
+    return `✅ ${message}`;
+  }
+
+  /** 错误消息格式 */
+  static error(message: string): string {
+    return `❌ ${message}`;
+  }
+
+  /** 警告消息格式 */
+  static warning(message: string): string {
+    return `⚠️ ${message}`;
+  }
+
+  /** 章节标题格式 */
+  static section(title: string): string {
+    return `## ${title}`;
+  }
+
+  /** 提示消息格式 */
+  static hint(message: string): string {
+    return `💡 ${message}`;
+  }
+
+  /** 分隔线 */
+  static separator(): string {
+    return '---';
+  }
+}
+
+/**
+ * 默认导航超时时间（毫秒）
+ */
+export const DEFAULT_NAVIGATION_TIMEOUT = 10000;
+
+/**
+ * 默认等待超时时间（毫秒）
+ */
+export const DEFAULT_WAIT_TIMEOUT = 5000;
 
 /**
  * 简单的响应实现类

@@ -251,12 +251,13 @@ screenshot({ path: "/tmp/form-submit-success.png" })
 
 ## 📚 文档
 
-- [📖 完整集成指南](docs/integration-guide.md) - 详细的安装和配置步骤
-- [🔧 页面工具API](docs/page-tools.md) - 页面查询和等待工具详细文档
-- [✨ 最佳实践](docs/best-practices.md) - 编写高质量自动化测试的建议
-- [🧪 测试指南](docs/testing-guide.md) - 单元测试和集成测试说明
-- [🏗️ 模块化架构](docs/modular-architecture.md) - 项目架构设计文档
-- [📝 使用示例](docs/examples/) - 更多实际使用场景示例
+- [📖 完整集成指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/integration-guide.md) - 详细的安装和配置步骤
+- [🔧 页面工具 API](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/page-tools.md) - 页面查询和等待工具详细文档
+- [✨ 最佳实践](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/best-practices.md) - 编写高质量自动化测试的建议
+- [🧪 测试指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/testing-guide.md) - 单元测试和集成测试说明
+- [🏗️ 模块化架构](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/modular-architecture.md) - 项目架构设计文档
+- [📝 示例：登录自动化](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/examples/login-automation.md) - 登录流程自动化示例
+- [🛒 示例：电商购物自动化](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/examples/shopping-automation.md) - 购物流程自动化示例
 
 ## 🔧 开发指南
 
@@ -318,7 +319,7 @@ npm run test:manual:screenshot-diagnostic
 ### 手工验证与诊断脚本组织
 
 - 诊断类脚本统一放在 `scripts/diagnostics/`
-- 手工验证脚本统一放在 `tests/manual/`（按能力拆分子目录）
+- 手工验证脚本主要放在 `tests/manual/` 的能力子目录下，另有少量根级脚本用于通用验证
 - 集成测试夹具项目固定为 `playground/wx/`，请勿移动或删除目录
 - 夹具关键文件白名单：`playground/wx/app.json`、`playground/wx/project.config.json`
 
@@ -331,7 +332,7 @@ npm run test:manual:screenshot-diagnostic
 5. 编写集成测试（`tests/integration/*.integration.test.ts`）
 6. 更新文档
 
-详细开发指南请参考 [CLAUDE.md](CLAUDE.md)
+贡献者开发说明请参考 [CLAUDE.md](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/CLAUDE.md)
 
 ### 测试架构
 
@@ -378,7 +379,7 @@ npm run test:manual:screenshot-diagnostic
 ## 📞 联系方式
 
 - 问题反馈：[GitHub Issues](https://github.com/wooter-s/weixin-devtools-mcp/issues)
-- 文档网站：[项目文档](docs/)
+- 文档入口：见上方“文档”与“使用示例”章节中的 GitHub 文档链接
 
 ---
 

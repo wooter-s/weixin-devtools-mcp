@@ -12,7 +12,7 @@ import {
   type FormControlOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 /**
  * 点击页面元素
@@ -40,38 +40,20 @@ export const clickTool = defineTool({
       throw new Error('页面未连接，无法执行点击操作');
     }
 
-    // 记录点击前的页面路径
-    const beforePath = currentPage.path;
-    console.error(`[Click] 点击前页面: ${beforePath}`);
-
     // 执行点击操作
     await element.tap();
-    console.error(`[Click] 已执行 tap() 操作`);
 
     // 如果是双击，再点击一次
     if (dblClick) {
       await new Promise(resolve => setTimeout(resolve, 100));
       await element.tap();
-      console.error(`[Click] 已执行第二次 tap() (双击)`);
     }
 
     // 等待页面响应
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    // 记录点击后的页面路径
-    try {
-      const updatedPage = context.currentPage;
-      const afterPath = updatedPage?.path;
-      console.error(`[Click] 点击后页面: ${afterPath}`);
-      if (beforePath !== afterPath) {
-        console.error(`[Click] ✅ 页面已切换: ${beforePath} → ${afterPath}`);
-      }
-    } catch (error) {
-      console.warn(`[Click] 无法获取点击后的页面路径:`, error);
-    }
-
     const action = dblClick ? '双击' : '点击';
-    response.appendResponseLine(`${action}元素成功`);
+    response.appendResponseLine(ResponseFormatter.success(`${action}元素成功`));
     response.appendResponseLine(`UID: ${uid}`);
 
     // 点击后可能页面发生变化，建议包含快照
@@ -106,23 +88,20 @@ export const inputTextTool = defineTool({
       // 清空并输入
       element.value = '';
       await element.input(text);
-      console.error(`[InputText] 清空并输入: ${text}`);
     } else if (append) {
       // 追加内容
       const currentValue = element.value || '';
       await element.input(currentValue + text);
-      console.error(`[InputText] 追加文本: ${text}`);
     } else {
       // 直接输入
       await element.input(text);
-      console.error(`[InputText] 输入文本: ${text}`);
     }
 
     let action = '输入文本';
     if (clear) action = '清空并输入文本';
     if (append) action = '追加文本';
 
-    response.appendResponseLine(`${action}成功`);
+    response.appendResponseLine(ResponseFormatter.success(`${action}成功`));
     response.appendResponseLine(`UID: ${uid}`);
     response.appendResponseLine(`内容: ${text}`);
 
@@ -154,7 +133,7 @@ export const getValueTool = defineTool({
       const options: GetValueOptions = { uid, attribute };
       const value = await getElementValue(context.currentPage, context.elementMap, options);
 
-      response.appendResponseLine(`获取元素值成功`);
+      response.appendResponseLine(ResponseFormatter.success('获取元素值成功'));
       response.appendResponseLine(`UID: ${uid}`);
       if (attribute) {
         response.appendResponseLine(`属性: ${attribute}`);
@@ -162,8 +141,9 @@ export const getValueTool = defineTool({
       response.appendResponseLine(`值: ${value}`);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`获取元素值失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`获取元素值失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },
@@ -177,7 +157,7 @@ export const setFormControlTool = defineTool({
   description: '设置表单控件的值（如picker、switch、slider等）',
   schema: z.object({
     uid: z.string().describe('页面快照中元素的唯一标识符'),
-    value: z.any().describe('要设置的值'),
+    value: z.union([z.string(), z.number(), z.boolean()]).describe('要设置的值'),
     trigger: z.string().optional().default('change').describe('触发的事件类型，默认为change'),
   }),
   annotations: {
@@ -193,7 +173,7 @@ export const setFormControlTool = defineTool({
       const options: FormControlOptions = { uid, value, trigger };
       await setFormControl(context.currentPage, context.elementMap, options);
 
-      response.appendResponseLine(`设置表单控件成功`);
+      response.appendResponseLine(ResponseFormatter.success('设置表单控件成功'));
       response.appendResponseLine(`UID: ${uid}`);
       response.appendResponseLine(`值: ${JSON.stringify(value)}`);
       response.appendResponseLine(`事件: ${trigger}`);
@@ -202,8 +182,9 @@ export const setFormControlTool = defineTool({
       response.setIncludeSnapshot(true);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`设置表单控件失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`设置表单控件失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },

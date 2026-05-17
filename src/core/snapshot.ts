@@ -5,6 +5,8 @@
 
 import type { ElementSnapshot, PageSnapshot, ElementMapInfo } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 /**
  * 生成简单的文本哈希（用于增强 UID 唯一性）
  */
@@ -246,7 +248,7 @@ export async function getPageSnapshot(page: any): Promise<{
 
     return { snapshot: snapshotResult, elementMap };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`获取页面快照失败: ${errorMessage}`);
   }
 }

@@ -28,6 +28,8 @@ import type {
   AutomatorLaunchOptions,
 } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 const sleep = promisify(setTimeout);
 
 /**
@@ -349,7 +351,7 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
       pagePath
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`连接微信开发者工具失败: ${errorMessage}`);
   }
 }

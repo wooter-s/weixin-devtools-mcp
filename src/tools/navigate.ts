@@ -15,17 +15,26 @@ import {
   type SwitchTabOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory, ensureMiniProgram, type ToolContext, type ToolResponse } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, extractErrorMessage, DEFAULT_NAVIGATION_TIMEOUT, DEFAULT_WAIT_TIMEOUT, ResponseFormatter, type ToolContext, type ToolResponse } from './ToolDefinition.js';
 
 /**
- * 导航后刷新页面引用的辅助函数
+ * 导航后刷新页面引用并失效依赖旧页面的运行时状态
  */
 async function refreshPageAfterNavigation(context: ToolContext, response: ToolResponse): Promise<void> {
+  context.invalidateSnapshotCache?.();
+  context.clearElementMap?.();
+  context.splitConsoleAfterNavigation?.();
+  context.splitNetworkAfterNavigation?.();
+
   try {
-    context.currentPage = await context.miniProgram!.currentPage();
-    response.appendResponseLine('当前页面已更新');
+    if (typeof context.refreshCurrentPage === 'function') {
+      await context.refreshCurrentPage();
+    } else {
+      context.currentPage = await context.miniProgram!.currentPage();
+    }
+    response.appendResponseLine(ResponseFormatter.success('当前页面已更新'));
   } catch {
-    response.appendResponseLine('警告: 无法更新当前页面信息');
+    response.appendResponseLine(ResponseFormatter.warning('无法更新当前页面信息'));
   }
   response.setIncludeSnapshot(true);
 }
@@ -38,10 +47,10 @@ export const navigateToTool = defineTool({
   description: '跳转到指定页面',
   schema: z.object({
     url: z.string().describe('目标页面路径'),
-    params: z.record(z.string(), z.any()).optional().describe('页面参数（查询参数）'),
+    params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe('页面参数（查询参数）'),
     redirect: z.boolean().optional().default(false).describe('是否使用重定向模式（关闭当前页面），默认false'),
     waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
-    timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
+    timeout: z.number().optional().default(DEFAULT_NAVIGATION_TIMEOUT).describe(`等待超时时间(毫秒)，默认${DEFAULT_NAVIGATION_TIMEOUT}ms`),
   }),
   annotations: {
     category: ToolCategory.CORE,
@@ -84,7 +93,7 @@ export const navigateToTool = defineTool({
           }
         }
 
-        response.appendResponseLine(`页面重定向成功`);
+        response.appendResponseLine(ResponseFormatter.success('页面重定向成功'));
       } else {
         // 普通跳转模式
         const options: NavigateOptions = {
@@ -95,7 +104,7 @@ export const navigateToTool = defineTool({
         };
 
         await navigateToPage(context.miniProgram, options);
-        response.appendResponseLine(`页面跳转成功`);
+        response.appendResponseLine(ResponseFormatter.success('页面跳转成功'));
       }
 
       response.appendResponseLine(`目标页面: ${url}`);
@@ -110,9 +119,9 @@ export const navigateToTool = defineTool({
       await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
       const action = redirect ? '重定向' : '跳转';
-      response.appendResponseLine(`页面${action}失败: ${errorMessage}`);
+      response.appendResponseLine(ResponseFormatter.error(`页面${action}失败: ${errorMessage}`));
       throw error;
     }
   },
@@ -127,7 +136,7 @@ export const navigateBackTool = defineTool({
   schema: z.object({
     delta: z.number().optional().default(1).describe('返回层数，默认1'),
     waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
-    timeout: z.number().optional().default(5000).describe('等待超时时间(毫秒)，默认5000ms'),
+    timeout: z.number().optional().default(DEFAULT_WAIT_TIMEOUT).describe(`等待超时时间(毫秒)，默认${DEFAULT_WAIT_TIMEOUT}ms`),
   }),
   annotations: {
     category: ToolCategory.CORE,
@@ -147,15 +156,15 @@ export const navigateBackTool = defineTool({
 
       await navigateBack(context.miniProgram, options);
 
-      response.appendResponseLine(`页面返回成功`);
+      response.appendResponseLine(ResponseFormatter.success('页面返回成功'));
       response.appendResponseLine(`返回层数: ${delta}`);
 
       // 页面返回后，更新当前页面信息
       await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`页面返回失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`页面返回失败: ${errorMessage}`));
       throw error;
     }
   },
@@ -170,7 +179,7 @@ export const switchTabTool = defineTool({
   schema: z.object({
     url: z.string().describe('Tab页路径'),
     waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
-    timeout: z.number().optional().default(5000).describe('等待超时时间(毫秒)，默认5000ms'),
+    timeout: z.number().optional().default(DEFAULT_WAIT_TIMEOUT).describe(`等待超时时间(毫秒)，默认${DEFAULT_WAIT_TIMEOUT}ms`),
   }),
   annotations: {
     category: ToolCategory.CORE,
@@ -190,15 +199,15 @@ export const switchTabTool = defineTool({
 
       await switchTab(context.miniProgram, options);
 
-      response.appendResponseLine(`Tab切换成功`);
+      response.appendResponseLine(ResponseFormatter.success('Tab切换成功'));
       response.appendResponseLine(`目标Tab: ${url}`);
 
       // Tab切换后，更新当前页面信息
       await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`Tab切换失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`Tab切换失败: ${errorMessage}`));
       throw error;
     }
   },
@@ -212,9 +221,9 @@ export const reLaunchTool = defineTool({
   description: '重新启动小程序并跳转到指定页面',
   schema: z.object({
     url: z.string().describe('目标页面路径'),
-    params: z.record(z.string(), z.any()).optional().describe('页面参数（查询参数）'),
+    params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe('页面参数（查询参数）'),
     waitForLoad: z.boolean().optional().default(true).describe('是否等待页面加载完成，默认true'),
-    timeout: z.number().optional().default(10000).describe('等待超时时间(毫秒)，默认10000ms'),
+    timeout: z.number().optional().default(DEFAULT_NAVIGATION_TIMEOUT).describe(`等待超时时间(毫秒)，默认${DEFAULT_NAVIGATION_TIMEOUT}ms`),
   }),
   annotations: {
     category: ToolCategory.CORE,
@@ -235,7 +244,7 @@ export const reLaunchTool = defineTool({
 
       await reLaunch(context.miniProgram, options);
 
-      response.appendResponseLine(`重新启动成功`);
+      response.appendResponseLine(ResponseFormatter.success('重新启动成功'));
       response.appendResponseLine(`目标页面: ${url}`);
       if (params && Object.keys(params).length > 0) {
         response.appendResponseLine(`参数: ${JSON.stringify(params)}`);
@@ -245,8 +254,8 @@ export const reLaunchTool = defineTool({
       await refreshPageAfterNavigation(context, response);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`重新启动失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`重新启动失败: ${errorMessage}`));
       throw error;
     }
   },

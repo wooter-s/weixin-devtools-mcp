@@ -45,7 +45,12 @@ describe('navigate.ts 工具测试', () => {
   const mockContext = {
     miniProgram: mockMiniProgram,
     currentPage: mockCurrentPage,
-    elementMap: new Map()
+    elementMap: new Map(),
+    refreshCurrentPage: vi.fn(),
+    clearElementMap: vi.fn(),
+    invalidateSnapshotCache: vi.fn(),
+    splitConsoleAfterNavigation: vi.fn(),
+    splitNetworkAfterNavigation: vi.fn(),
   } as any
 
   // 创建测试用的请求和响应对象
@@ -66,6 +71,11 @@ describe('navigate.ts 工具测试', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockMiniProgram.currentPage.mockResolvedValue(mockCurrentPage)
+    mockContext.refreshCurrentPage.mockImplementation(async () => {
+      const page = await mockMiniProgram.currentPage()
+      mockContext.currentPage = page
+      return page
+    })
   })
 
   afterEach(() => {
@@ -92,7 +102,7 @@ describe('navigate.ts 工具测试', () => {
         timeout: 10000
       })
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面跳转成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 页面跳转成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('目标页面: /pages/profile/profile')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
     })
@@ -150,9 +160,13 @@ describe('navigate.ts 工具测试', () => {
 
       await navigateToTool.handler(request, response, mockContext)
 
-      expect(mockMiniProgram.currentPage).toHaveBeenCalled()
+      expect(mockContext.refreshCurrentPage).toHaveBeenCalled()
+      expect(mockContext.invalidateSnapshotCache).toHaveBeenCalledTimes(1)
+      expect(mockContext.clearElementMap).toHaveBeenCalledTimes(1)
+      expect(mockContext.splitConsoleAfterNavigation).toHaveBeenCalledTimes(1)
+      expect(mockContext.splitNetworkAfterNavigation).toHaveBeenCalledTimes(1)
       expect(mockContext.currentPage).toBe(newPage)
-      expect(response.appendResponseLine).toHaveBeenCalledWith('当前页面已更新')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 当前页面已更新')
     })
 
     it('应该处理页面更新失败的情况', async () => {
@@ -162,11 +176,15 @@ describe('navigate.ts 工具测试', () => {
       const response = createMockResponse()
 
       vi.mocked(navigateToPage).mockResolvedValue(undefined)
-      mockMiniProgram.currentPage.mockRejectedValue(new Error('获取页面失败'))
+      mockContext.refreshCurrentPage.mockRejectedValue(new Error('获取页面失败'))
 
       await navigateToTool.handler(request, response, mockContext)
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('警告: 无法更新当前页面信息')
+      expect(mockContext.invalidateSnapshotCache).toHaveBeenCalledTimes(1)
+      expect(mockContext.clearElementMap).toHaveBeenCalledTimes(1)
+      expect(mockContext.splitConsoleAfterNavigation).toHaveBeenCalledTimes(1)
+      expect(mockContext.splitNetworkAfterNavigation).toHaveBeenCalledTimes(1)
+      expect(response.appendResponseLine).toHaveBeenCalledWith('⚠️ 无法更新当前页面信息')
     })
 
     it('应该要求miniProgram存在', async () => {
@@ -177,7 +195,7 @@ describe('navigate.ts 工具测试', () => {
       const contextWithoutMiniProgram = { ...mockContext, miniProgram: null }
 
       await expect(navigateToTool.handler(request, response, contextWithoutMiniProgram))
-        .rejects.toThrow('请先连接到微信开发者工具')
+        .rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。')
     })
 
     it('应该处理导航失败', async () => {
@@ -191,7 +209,7 @@ describe('navigate.ts 工具测试', () => {
       await expect(navigateToTool.handler(request, response, mockContext))
         .rejects.toThrow('页面不存在')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面跳转失败: 页面不存在')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 页面跳转失败: 页面不存在')
     })
   })
 
@@ -214,7 +232,7 @@ describe('navigate.ts 工具测试', () => {
         timeout: 5000
       })
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面返回成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 页面返回成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('返回层数: 1')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
     })
@@ -266,7 +284,7 @@ describe('navigate.ts 工具测试', () => {
       await expect(navigateBackTool.handler(request, response, mockContext))
         .rejects.toThrow('无法返回')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面返回失败: 无法返回')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 页面返回失败: 无法返回')
     })
   })
 
@@ -289,7 +307,7 @@ describe('navigate.ts 工具测试', () => {
         timeout: 5000
       })
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('Tab切换成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ Tab切换成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('目标Tab: /pages/index/index')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
     })
@@ -322,7 +340,7 @@ describe('navigate.ts 工具测试', () => {
       await expect(switchTabTool.handler(request, response, mockContext))
         .rejects.toThrow('Tab页不存在')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('Tab切换失败: Tab页不存在')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ Tab切换失败: Tab页不存在')
     })
   })
 
@@ -347,7 +365,7 @@ describe('navigate.ts 工具测试', () => {
         timeout: 10000
       })
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('重新启动成功')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 重新启动成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('目标页面: /pages/splash/splash')
       expect(response.appendResponseLine).toHaveBeenCalledWith('参数: {"from":"restart"}')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
@@ -364,7 +382,7 @@ describe('navigate.ts 工具测试', () => {
       await expect(reLaunchTool.handler(request, response, mockContext))
         .rejects.toThrow('启动失败')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('重新启动失败: 启动失败')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 重新启动失败: 启动失败')
     })
   })
 
@@ -383,7 +401,7 @@ describe('navigate.ts 工具测试', () => {
       for (const { tool, params } of tools) {
         const request = createMockRequest(params)
         await expect(tool.handler(request, response, contextWithoutMiniProgram))
-          .rejects.toThrow('请先连接到微信开发者工具')
+          .rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。')
       }
     })
 
@@ -398,7 +416,7 @@ describe('navigate.ts 工具测试', () => {
       await expect(navigateToTool.handler(request, response, mockContext))
         .rejects.toThrow('字符串错误')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('页面跳转失败: 字符串错误')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 页面跳转失败: 字符串错误')
     })
   })
 
@@ -439,6 +457,51 @@ describe('navigate.ts 工具测试', () => {
           expect.objectContaining(expectedDefaults)
         )
       }
+    })
+  })
+
+  describe('导航超时和异常路径测试', () => {
+    it('navigateToPage 超时应抛出超时错误', async () => {
+      const request = createMockRequest({
+        url: '/pages/slow/slow',
+        timeout: 1000
+      })
+      const response = createMockResponse()
+
+      vi.mocked(navigateToPage).mockRejectedValue(new Error('导航超时: 1000ms'))
+
+      await expect(navigateToTool.handler(request, response, mockContext))
+        .rejects.toThrow('导航超时')
+
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 页面跳转失败: 导航超时: 1000ms')
+    })
+
+    it('switchTab 切换到非 Tab 页应抛出错误', async () => {
+      const request = createMockRequest({
+        url: '/pages/not-a-tab/index'
+      })
+      const response = createMockResponse()
+
+      vi.mocked(switchTab).mockRejectedValue(new Error('该页面不是 Tab 页'))
+
+      await expect(switchTabTool.handler(request, response, mockContext))
+        .rejects.toThrow('该页面不是 Tab 页')
+
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ Tab切换失败: 该页面不是 Tab 页')
+    })
+
+    it('reLaunch 重启失败应抛出错误', async () => {
+      const request = createMockRequest({
+        url: '/pages/broken/broken'
+      })
+      const response = createMockResponse()
+
+      vi.mocked(reLaunch).mockRejectedValue(new Error('小程序重启失败'))
+
+      await expect(reLaunchTool.handler(request, response, mockContext))
+        .rejects.toThrow('小程序重启失败')
+
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 重新启动失败: 小程序重启失败')
     })
   })
 })

@@ -27,7 +27,8 @@ import {
   allTools,
   SimpleToolResponse
 } from './tools/index.js';
-import { VERSION } from './version.js';
+import { extractErrorMessage } from './utils/error.js';
+import { PACKAGE_NAME, VERSION } from './version.js';
 
 /**
  * 全局上下文状态 - 使用 MiniProgramContext 类管理
@@ -39,7 +40,7 @@ const globalContext = MiniProgramContext.create();
  */
 const server = new Server(
   {
-    name: "weixin-devtools-mcp",
+    name: PACKAGE_NAME,
     version: VERSION,
   },
   {
@@ -184,7 +185,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         }]
       };
     } catch (error) {
-      throw new Error(`获取页面快照失败: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`获取页面快照失败: ${extractErrorMessage(error)}`);
     }
   }
 
@@ -279,7 +280,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     return {
       content: [{
         type: "text",

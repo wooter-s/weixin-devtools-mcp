@@ -8,9 +8,8 @@ import { writeFile } from 'fs/promises';
 import { z } from 'zod';
 
 import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
-import { getPageSnapshot } from '../tools.js';
 
-import { defineTool, ToolCategory, ensureCurrentPage } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 
 /**
@@ -50,17 +49,22 @@ minimal格式：
     const { format, includePosition, includeAttributes, maxElements, filePath } = request.params;
 
     try {
-      // 清空之前的元素映射
-      context.elementMap.clear();
+      const getSnapshot = context.getPageSnapshotCached?.bind(context);
+      if (!getSnapshot) {
+        throw new Error('当前上下文不支持页面快照缓存接口');
+      }
 
-      // 获取页面快照
-      const { snapshot, elementMap } = await getPageSnapshot(context.currentPage);
+      // 获取页面快照（由上下文统一维护缓存和 UID 映射）
+      const { snapshot, elementMap } = await getSnapshot({ forceRefresh: true });
 
       // 应用 maxElements 限制（用于显示和token估算）
       const limitedElements = maxElements
         ? snapshot.elements.slice(0, maxElements)
         : snapshot.elements;
       const limitedSnapshot = { ...snapshot, elements: limitedElements };
+
+      // 工具输出只保留本次快照可见 UID，避免旧页面元素残留。
+      context.elementMap.clear();
 
       // 更新上下文中的元素映射（应用 maxElements 限制）
       if (maxElements) {
@@ -89,7 +93,7 @@ minimal格式：
       // 如果指定了文件路径，保存到文件
       if (filePath) {
         await writeFile(filePath, formattedSnapshot, 'utf-8');
-        response.appendResponseLine(`✅ 页面快照已保存到: ${filePath}`);
+        response.appendResponseLine(ResponseFormatter.success(`页面快照已保存到: ${filePath}`));
       }
 
       // Token估算信息（仅在非文件输出模式下显示）
@@ -114,8 +118,9 @@ minimal格式：
       response.setIncludeSnapshot(true);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`❌ 获取页面快照失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`获取页面快照失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },

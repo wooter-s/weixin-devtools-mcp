@@ -6,6 +6,8 @@ import type {
   HealthLevel,
 } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 async function runCheck(
   name: HealthCheckItem['name'],
   execute: () => Promise<{ passed: boolean; message: string }>,
@@ -20,7 +22,7 @@ async function runCheck(
       durationMs: Date.now() - start,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = extractErrorMessage(error);
     return {
       name,
       status: 'fail',

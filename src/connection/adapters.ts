@@ -3,8 +3,8 @@ import automator from 'miniprogram-automator';
 import {
   connectDevtoolsEnhanced,
   detectIDEPort,
-  type EnhancedConnectOptions,
-} from '../tools.js';
+} from '../core/connection.js';
+import type { EnhancedConnectOptions } from '../core/types.js';
 
 import {
   EnvironmentConnectionError,

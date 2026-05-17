@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 
-import { defineTool, ToolCategory, ensureMiniProgram } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 export const evaluateScript = defineTool({
   name: 'evaluate_script',
@@ -56,6 +56,7 @@ export const evaluateScript = defineTool({
   return currentPage.data;
 }\``
     ),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- evaluate 参数需要接受任意 JSON 可序列化类型
     args: z.array(z.any()).optional().describe(
       `可选的参数数组，传递给函数执行。
 参数必须是 JSON 可序列化的类型（字符串、数字、布尔值、对象、数组等）。
@@ -85,16 +86,16 @@ export const evaluateScript = defineTool({
       const serialized = JSON.stringify(result, null, 2);
 
       // 返回响应
-      response.appendResponseLine('脚本在小程序 AppService 上下文中执行成功');
+      response.appendResponseLine(ResponseFormatter.success('脚本在小程序 AppService 上下文中执行成功'));
       response.appendResponseLine('');
       response.appendResponseLine('返回结果：');
       response.appendResponseLine('```json');
       response.appendResponseLine(serialized);
       response.appendResponseLine('```');
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 错误处理
-      const errorMessage = error.message || String(error);
+      const errorMessage = extractErrorMessage(error);
       throw new Error(`脚本执行失败: ${errorMessage}`);
     }
   }

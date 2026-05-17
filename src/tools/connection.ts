@@ -20,7 +20,7 @@ import type {
   ToolContext,
   ToolResponse
 } from './ToolDefinition.js';
-import { defineTool, ToolCategory, ensureMiniProgram } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 const strategyEnum = z.enum(['auto', 'launch', 'connect', 'wsEndpoint', 'browserUrl', 'discover']);
 
@@ -122,6 +122,11 @@ async function startAutomaticMonitoring(
         source: 'miniprogram',
       };
 
+      if (typeof context.addConsoleMessage === 'function') {
+        context.addConsoleMessage(consoleMessage);
+        return;
+      }
+
       updateConsoleStorage(context, storage => {
         const currentSession = storage.navigations[0];
         if (!currentSession) {
@@ -144,6 +149,11 @@ async function startAutomaticMonitoring(
         timestamp: new Date().toISOString(),
         source: 'miniprogram',
       };
+
+      if (typeof context.addExceptionMessage === 'function') {
+        context.addExceptionMessage(exceptionMessage);
+        return;
+      }
 
       updateConsoleStorage(context, storage => {
         const currentSession = storage.navigations[0];
@@ -187,22 +197,24 @@ async function startAutomaticMonitoring(
       storage.startTime = new Date().toISOString();
     });
 
-    response.appendResponseLine('Console监听已自动启动');
+    response.appendResponseLine(ResponseFormatter.success('Console监听已自动启动'));
   } catch (error) {
-    response.appendResponseLine(`警告: Console监听启动失败 - ${error instanceof Error ? error.message : String(error)}`);
+    response.appendResponseLine(ResponseFormatter.warning(`Console监听启动失败 - ${extractErrorMessage(error)}`));
   }
 
   try {
     if (!context.networkStorage.isMonitoring) {
       await miniProgram.evaluate(function() {
         // @ts-ignore
-        if (typeof wx === 'undefined' || wx.__networkInterceptorsInstalled) return;
+        if (typeof wx === 'undefined') return;
+        // @ts-ignore
+        wx.__networkInterceptorsDisabled = false;
+        // @ts-ignore
+        if (wx.__networkInterceptorsInstalled) return;
         // @ts-ignore
         wx.__networkLogs = wx.__networkLogs || [];
         // @ts-ignore
         wx.__networkLogsLimit = 1000;
-        // @ts-ignore
-        wx.__networkInterceptorsDisabled = false;
         // @ts-ignore
         wx.__pushNetworkLog = function(log: any) {
           // @ts-ignore
@@ -324,9 +336,9 @@ async function startAutomaticMonitoring(
         storage.startTime = new Date().toISOString();
       });
     }
-    response.appendResponseLine('网络监听已自动启动（增强型拦截）');
+    response.appendResponseLine(ResponseFormatter.success('网络监听已自动启动（增强型拦截）'));
   } catch (error) {
-    response.appendResponseLine(`警告: 网络监听启动失败 - ${error instanceof Error ? error.message : String(error)}`);
+    response.appendResponseLine(ResponseFormatter.warning(`网络监听启动失败 - ${extractErrorMessage(error)}`));
   }
 }
 
@@ -342,7 +354,7 @@ export const connectDevtoolsTool = defineTool({
     const result = await context.connectDevtools(toConnectionRequest(request.params));
     await startAutomaticMonitoring(result.miniProgram, context, response);
 
-    response.appendResponseLine('✅ 连接成功');
+    response.appendResponseLine(ResponseFormatter.success('连接成功'));
     response.appendResponseLine(`连接ID: ${result.connectionId}`);
     response.appendResponseLine(`策略: ${result.strategyUsed}`);
     response.appendResponseLine(`连接状态: ${result.status}`);
@@ -376,7 +388,7 @@ export const reconnectDevtoolsTool = defineTool({
       : await context.reconnectDevtools();
     await startAutomaticMonitoring(result.miniProgram, context, response);
 
-    response.appendResponseLine('✅ 重连成功');
+    response.appendResponseLine(ResponseFormatter.success('重连成功'));
     response.appendResponseLine(`连接ID: ${result.connectionId}`);
     response.appendResponseLine(`策略: ${result.strategyUsed}`);
     response.appendResponseLine(`连接状态: ${result.status}`);
@@ -395,7 +407,7 @@ export const disconnectDevtoolsTool = defineTool({
   },
   handler: async (_request, response, context) => {
     const status = await context.disconnectDevtools();
-    response.appendResponseLine('✅ 已断开连接');
+    response.appendResponseLine(ResponseFormatter.success('已断开连接'));
     response.appendResponseLine(`当前状态: ${status.state}`);
   },
 });
@@ -444,8 +456,9 @@ export const getCurrentPageTool = defineTool({
       const pagePath = await context.currentPage.path;
       response.appendResponseLine(`当前页面: ${pagePath}`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`获取当前页面失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`获取当前页面失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 connect_devtools 工具建立连接'));
       throw error;
     }
   },

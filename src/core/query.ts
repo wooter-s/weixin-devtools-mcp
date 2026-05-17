@@ -6,6 +6,8 @@
 import type { ElementMapInfo, QueryResult, QueryOptions, WaitForOptions } from './types.js';
 import { generateElementUid } from './snapshot.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 /**
  * 通过选择器查询页面元素
  */
@@ -105,7 +107,7 @@ export async function queryElements(
 
     return results;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`查询元素失败: ${errorMessage}`);
   }
 }
@@ -213,7 +215,7 @@ export async function waitForCondition(
     throw new Error(errorMsg);
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     throw new Error(`等待条件失败: ${errorMessage}`);
   }
 }

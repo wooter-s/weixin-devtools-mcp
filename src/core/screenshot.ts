@@ -7,6 +7,8 @@ import fs from "fs";
 
 import type { ScreenshotOptions } from './types.js';
 
+import { extractErrorMessage } from '../utils/error.js';
+
 /**
  * 页面截图
  */
@@ -92,7 +94,7 @@ export async function takeScreenshot(
 
     return result
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
     if (errorMessage.includes('故障排除建议')) {
       throw error;
     }

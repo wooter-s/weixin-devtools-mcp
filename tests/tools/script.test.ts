@@ -302,7 +302,7 @@ describe('Script Tool Unit Tests', () => {
           response,
           context
         )
-      ).rejects.toThrow('请先连接到微信开发者工具');
+      ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
     });
 
     it('应该处理执行错误', async () => {
