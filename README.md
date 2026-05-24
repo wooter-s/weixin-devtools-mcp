@@ -90,13 +90,14 @@ npm run build
 
 ### 配置方式三：开发者本地路径
 
-如果从源码安装，使用绝对路径：
+如果从源码安装，推荐通过 Node.js 启动构建产物（跨平台）：
 
 ```json
 {
   "mcpServers": {
     "weixin-devtools-mcp": {
-      "command": "/path/to/weixin-devtools-mcp/build/server.js"
+      "command": "node",
+      "args": ["/path/to/weixin-devtools-mcp/build/server.js"]
     }
   }
 }
@@ -128,14 +129,17 @@ npm run build
 }
 ```
 
-本地二进制示例（在 core 基础上启用 network + debug）：
+本地构建产物示例（在 core 基础上启用 network + debug）：
 
 ```json
 {
   "mcpServers": {
     "weixin-devtools-mcp": {
-      "command": "/path/to/weixin-devtools-mcp/build/server.js",
-      "args": ["--enable-categories=network,debug"]
+      "command": "node",
+      "args": [
+        "/path/to/weixin-devtools-mcp/build/server.js",
+        "--enable-categories=network,debug"
+      ]
     }
   }
 }
@@ -298,27 +302,12 @@ npm run test:coverage
 
 # 使用 MCP Inspector 调试
 npm run inspector
-
-# 连接诊断（本地环境）
-npm run diagnose:devtools-connection
-
-# MCP 配置诊断
-npm run diagnose:mcp-config
-
-# debug_connection_flow 参数示例生成
-npm run diagnose:connection-flow
-
-# 手工验证脚本
-npm run test:manual:mpx-runtime
-npm run test:manual:network-interception
-npm run test:manual:screenshot
-npm run test:manual:screenshot-diagnostic
 ```
 
-### 手工验证与诊断脚本组织
+### 手工验证与诊断
 
-- 诊断类脚本统一放在 `scripts/diagnostics/`
-- 手工验证脚本统一放在 `tests/manual/`（按能力拆分子目录）
+- 连接诊断能力通过 MCP 工具提供：启用 `debug` 类别后调用 `diagnose_connection`、`check_environment`、`debug_connection_flow`
+- 截图调试通过 MCP 工具提供：启用 `debug` 类别后调用 `screenshot`
 - 集成测试夹具项目固定为 `playground/wx/`，请勿移动或删除目录
 - 夹具关键文件白名单：`playground/wx/app.json`、`playground/wx/project.config.json`
 
