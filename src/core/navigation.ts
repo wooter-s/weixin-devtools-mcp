@@ -9,6 +9,28 @@ import { extractErrorMessage } from '../utils/error.js';
 import { DEFAULT_NAVIGATION_TIMEOUT, DEFAULT_WAIT_TIMEOUT } from '../tools/ToolDefinition.js';
 
 /**
+ * 归一化为绝对页面路径。
+ * SDK 的 navigateTo/reLaunch/switchTab/redirectTo 要求绝对路径（以 "/" 开头）；
+ * 对 app.json 风格的相对路径（如 "pages/home/index"）SDK 会按当前页面解析，
+ * 拼出 "pages/home/pages/home/index" 之类的错误路径。这里对既非绝对（"/"）
+ * 也非显式相对（"."）的路径补全前导 "/"。
+ */
+export function toAbsolutePagePath(url: string): string {
+  if (!url) {
+    return url;
+  }
+  return url.startsWith('/') || url.startsWith('.') ? url : `/${url}`;
+}
+
+/**
+ * 去除前导斜杠，用于与 SDK 返回的 currentPage.path（无前导 "/"）做包含比较，
+ * 使绝对/相对两种输入都能正确命中。
+ */
+function stripLeadingSlash(path: string): string {
+  return path.replace(/^\/+/, '');
+}
+
+/**
  * 跳转到指定页面
  */
 export async function navigateToPage(
@@ -26,24 +48,25 @@ export async function navigateToPage(
   }
 
   try {
-    let fullUrl = url;
+    let fullUrl = toAbsolutePagePath(url);
     if (params && Object.keys(params).length > 0) {
       const queryString = Object.entries(params)
         .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
         .join('&');
-      fullUrl += (url.includes('?') ? '&' : '?') + queryString;
+      fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
     }
 
     await miniProgram.navigateTo(fullUrl);
 
     if (waitForLoad) {
+      const target = stripLeadingSlash(url.split('?')[0]);
       const startTime = Date.now();
       while (Date.now() - startTime < timeout) {
         try {
           const currentPage = await miniProgram.currentPage();
           if (currentPage) {
             const currentPath = await currentPage.path;
-            if (currentPath.includes(url.split('?')[0])) {
+            if (stripLeadingSlash(currentPath).includes(target)) {
               break;
             }
           }
@@ -126,16 +149,17 @@ export async function switchTab(
   }
 
   try {
-    await miniProgram.switchTab(url);
+    await miniProgram.switchTab(toAbsolutePagePath(url));
 
     if (waitForLoad) {
+      const target = stripLeadingSlash(url.split('?')[0]);
       const startTime = Date.now();
       while (Date.now() - startTime < timeout) {
         try {
           const currentPage = await miniProgram.currentPage();
           if (currentPage) {
             const currentPath = await currentPage.path;
-            if (currentPath.includes(url.split('?')[0])) {
+            if (stripLeadingSlash(currentPath).includes(target)) {
               break;
             }
           }
@@ -213,24 +237,25 @@ export async function reLaunch(
   }
 
   try {
-    let fullUrl = url;
+    let fullUrl = toAbsolutePagePath(url);
     if (params && Object.keys(params).length > 0) {
       const queryString = Object.entries(params)
         .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
         .join('&');
-      fullUrl += (url.includes('?') ? '&' : '?') + queryString;
+      fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
     }
 
     await miniProgram.reLaunch(fullUrl);
 
     if (waitForLoad) {
+      const target = stripLeadingSlash(url.split('?')[0]);
       const startTime = Date.now();
       while (Date.now() - startTime < timeout) {
         try {
           const currentPage = await miniProgram.currentPage();
           if (currentPage) {
             const currentPath = await currentPage.path;
-            if (currentPath.includes(url.split('?')[0])) {
+            if (stripLeadingSlash(currentPath).includes(target)) {
               break;
             }
           }

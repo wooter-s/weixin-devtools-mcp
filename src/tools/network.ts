@@ -145,12 +145,14 @@ export const listNetworkRequestsTool = defineTool({
       }
     }
 
+    // 状态过滤统一走 toRequestStatus，避免 success 字段在运行时为 undefined（仅判失败语义）
+    // 而 `=== false` 漏匹配，导致 failedOnly 过滤结果与列表展示的 status 不一致。
     if (successOnly) {
-      filteredRequests = filteredRequests.filter(req => req.success === true);
+      filteredRequests = filteredRequests.filter(req => toRequestStatus(req) === 'success');
     }
 
     if (failedOnly) {
-      filteredRequests = filteredRequests.filter(req => req.success === false);
+      filteredRequests = filteredRequests.filter(req => toRequestStatus(req) === 'failed');
     }
 
     if (since) {

@@ -72,6 +72,7 @@ export {
   switchTab,
   getCurrentPageInfo,
   reLaunch,
+  toAbsolutePagePath,
 } from './navigation.js';
 
 // 页面查询

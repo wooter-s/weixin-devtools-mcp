@@ -6,11 +6,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock tools.js 中的导航函数
+// toAbsolutePagePath 为纯函数，提供与真实实现一致的轻量实现，
+// 以便 redirect 分支正常归一化路径。
 vi.mock('../../src/tools.js', () => ({
   navigateToPage: vi.fn(),
   navigateBack: vi.fn(),
   switchTab: vi.fn(),
-  reLaunch: vi.fn()
+  reLaunch: vi.fn(),
+  toAbsolutePagePath: (url: string) =>
+    !url || url.startsWith('/') || url.startsWith('.') ? url : `/${url}`
 }))
 
 // 导入被测试的工具
@@ -105,6 +109,23 @@ describe('navigate.ts 工具测试', () => {
       expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 页面跳转成功')
       expect(response.appendResponseLine).toHaveBeenCalledWith('目标页面: /pages/profile/profile')
       expect(response.setIncludeSnapshot).toHaveBeenCalledWith(true)
+    })
+
+    it('redirect 模式应将相对路径归一化为绝对路径再调用 redirectTo', async () => {
+      // 传入不带前导 "/" 的 app.json 风格路径，应被补全为 "/..." 再交给 SDK，
+      // 避免 SDK 按当前页面相对解析拼出错误路径。
+      const request = createMockRequest({
+        url: 'pages/profile/profile',
+        redirect: true,
+        waitForLoad: false,
+        timeout: 5000
+      })
+      const response = createMockResponse()
+
+      await navigateToTool.handler(request, response, mockContext)
+
+      expect(mockMiniProgram.redirectTo).toHaveBeenCalledWith('/pages/profile/profile')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 页面重定向成功')
     })
 
     it('应该成功跳转到带参数的页面', async () => {

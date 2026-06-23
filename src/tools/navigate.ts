@@ -10,6 +10,7 @@ import {
   navigateBack,
   switchTab,
   reLaunch,
+  toAbsolutePagePath,
   type NavigateOptions,
   type NavigateBackOptions,
   type SwitchTabOptions
@@ -63,26 +64,27 @@ export const navigateToTool = defineTool({
 
     try {
       if (redirect) {
-        // 重定向模式：关闭当前页面并跳转
-        let fullUrl = url;
+        // 重定向模式：关闭当前页面并跳转（统一补全绝对路径前导 "/"）
+        let fullUrl = toAbsolutePagePath(url);
         if (params && Object.keys(params).length > 0) {
           const queryString = Object.entries(params)
             .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
             .join('&');
-          fullUrl += (url.includes('?') ? '&' : '?') + queryString;
+          fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
         }
 
         await context.miniProgram.redirectTo(fullUrl);
 
-        // 等待页面加载完成
+        // 等待页面加载完成（path 比较去除前导 "/" 以兼容绝对/相对输入）
         if (waitForLoad) {
+          const target = url.split('?')[0].replace(/^\/+/, '');
           const startTime = Date.now();
           while (Date.now() - startTime < timeout) {
             try {
               const currentPage = await context.miniProgram.currentPage();
               if (currentPage) {
                 const currentPath = await currentPage.path;
-                if (currentPath.includes(url.split('?')[0])) {
+                if (currentPath.replace(/^\/+/, '').includes(target)) {
                   break;
                 }
               }

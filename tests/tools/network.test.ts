@@ -133,6 +133,39 @@ describe('network tools', () => {
     expect(text).not.toContain('reqid=req_1');
   });
 
+  it('list_network_requests failedOnly 能匹配 success 字段缺失（undefined）的失败请求', async () => {
+    // 回归用例：真实运行时失败请求的 success 常为 undefined 而非 false，
+    // 旧实现用 `=== false` 过滤会漏掉这类请求，导致 failedOnly 返回空。
+    const response = createMockResponse();
+    context.__requests.push({
+      id: 'req_3',
+      type: 'request' as const,
+      method: 'POST',
+      url: 'https://api.example.com/fail-undefined',
+      timestamp: '2026-01-01T00:00:03.000Z',
+      // 注意：故意不设置 success（运行时数据可能缺失该字段）
+    } as never);
+
+    await listNetworkRequestsTool.handler(
+      {
+        params: {
+          pageSize: 10,
+          pageIdx: 0,
+          failedOnly: true,
+          includePreservedRequests: false,
+          successOnly: false,
+        },
+      },
+      response as any,
+      context as any
+    );
+
+    const text = response.getResponseText();
+    expect(text).toContain('reqid=req_3');
+    expect(text).toContain('reqid=req_2');
+    expect(text).not.toContain('reqid=req_1');
+  });
+
   it('list_network_requests 在 successOnly 和 failedOnly 同时为 true 时抛错', async () => {
     const response = createMockResponse();
 
