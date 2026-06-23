@@ -156,6 +156,9 @@ declare module 'miniprogram-automator' {
      */
     removeAllListeners(event: string): void;
 
+    /** 获取某事件监听器数量（用于测试/诊断） */
+    listenerCount?(event: string): number;
+
     /**
      * 移除指定事件监听器
      * @param event 事件名称
@@ -165,6 +168,9 @@ declare module 'miniprogram-automator' {
     off(event: 'exception', handler: (err: ExceptionInfo) => void): void;
     off(event: 'pageNavigate', handler: (data: PageNavigateInfo) => void): void;
     off(event: string, handler: (...args: unknown[]) => void): void;
+
+    /** Node EventEmitter alias */
+    removeListener?(event: string, handler: (...args: unknown[]) => void): void;
 
     /**
      * 断开与开发者工具的连接

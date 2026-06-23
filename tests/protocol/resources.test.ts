@@ -85,7 +85,7 @@ describe('MCP Resources Tests', () => {
         expect(result.contents[0].mimeType).toBe('application/json');
 
         // 验证状态内容
-        const status = JSON.parse(result.contents[0].text);
+        const status = JSON.parse(result.contents[0].text as string);
         expect(status).toHaveProperty('connected');
         expect(status).toHaveProperty('hasCurrentPage');
       });
@@ -112,7 +112,7 @@ describe('MCP Resources Tests', () => {
           uri: 'weixin://connection/status'
         });
 
-        const status = JSON.parse(result.contents[0].text);
+        const status = JSON.parse(result.contents[0].text as string);
 
         // 验证必需字段
         expect(typeof status.connected).toBe('boolean');

@@ -32,7 +32,7 @@ function nowStamp(): string {
 async function verifyScreenshot(): Promise<void> {
   let miniProgram: {
     currentPage: () => Promise<{ path: string } | null>;
-    screenshot: (options: { path: string }) => Promise<void>;
+    screenshot: (options: { path: string }) => Promise<string | Buffer>;
     close: () => Promise<void>;
   } | null = null;
 
@@ -51,11 +51,16 @@ async function verifyScreenshot(): Promise<void> {
       timeout: LAUNCH_TIMEOUT_MS,
     });
 
-    const currentPage = await miniProgram.currentPage();
+    const app = miniProgram;
+    if (!app) {
+      throw new Error('无法启动微信开发者工具');
+    }
+
+    const currentPage = await app.currentPage();
     const pagePath = currentPage?.path ?? '<unknown>';
     console.log(`[INFO] 连接成功，当前页面: ${pagePath}`);
 
-    await miniProgram.screenshot({ path: screenshotPath });
+    await app.screenshot({ path: screenshotPath });
 
     const stats = await fs.stat(screenshotPath);
     if (stats.size <= 0) {

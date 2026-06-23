@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { takeScreenshot, type ScreenshotOptions } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureMiniProgram, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 /**
  * 页面截图
@@ -23,9 +23,7 @@ export const screenshotTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    if (!context.miniProgram) {
-      throw new Error('请先连接到微信开发者工具');
-    }
+    ensureMiniProgram(context);
 
     const { path } = request.params;
 
@@ -36,9 +34,9 @@ export const screenshotTool = defineTool({
       const result = await takeScreenshot(context.miniProgram, options);
 
       if (path) {
-        response.appendResponseLine(`截图已保存到: ${path}`);
+        response.appendResponseLine(ResponseFormatter.success(`截图已保存到: ${path}`));
       } else if (result) {
-        response.appendResponseLine(`截图获取成功`);
+        response.appendResponseLine(ResponseFormatter.success('截图获取成功'));
         response.appendResponseLine(`Base64数据长度: ${result.length} 字符`);
         response.appendResponseLine(`格式: ${result.startsWith('data:image') ? 'data URL' : 'base64'}`);
 
@@ -47,8 +45,9 @@ export const screenshotTool = defineTool({
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`截图失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`截图失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 connect_devtools 工具建立连接'));
       throw error;
     }
   },

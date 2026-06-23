@@ -25,13 +25,15 @@ import { createIdGenerator } from '../utils/idGenerator.js';
 import {
   defineTool,
   ToolCategory,
+  ResponseFormatter,
   type ConsoleMessage,
+  type ToolContext,
 } from './ToolDefinition.js';
 
 /**
  * 初始化 ConsoleStorage（新结构）
  */
-function initializeConsoleStorage(context: any): void {
+function initializeConsoleStorage(context: ToolContext): void {
   if (!context.consoleStorage.navigations) {
     context.consoleStorage = {
       navigations: [{ messages: [], exceptions: [], timestamp: new Date().toISOString() }],
@@ -152,7 +154,7 @@ export const listConsoleMessagesTool = defineTool({
     const pagedMessages = allMessages.slice(start, end);
 
     // 格式化输出
-    response.appendResponseLine('## Console Messages (List View)');
+    response.appendResponseLine(ResponseFormatter.section('Console Messages (List View)'));
     response.appendResponseLine(`监听状态: ${context.consoleStorage.isMonitoring ? '运行中' : '已停止'}`);
     response.appendResponseLine(`监听开始时间: ${context.consoleStorage.startTime || '未设置'}`);
     response.appendResponseLine('');
@@ -174,7 +176,7 @@ export const listConsoleMessagesTool = defineTool({
     }
 
     response.appendResponseLine('');
-    response.appendResponseLine('💡 提示: 使用 get_console_message 工具按 msgid 查看详细信息');
+    response.appendResponseLine(ResponseFormatter.hint('使用 get_console_message 工具按 msgid 查看详细信息'));
   },
 });
 
@@ -234,7 +236,7 @@ export const getConsoleMessageTool = defineTool({
     }
 
     // 格式化输出
-    response.appendResponseLine('## Console Message (Detail View)');
+    response.appendResponseLine(ResponseFormatter.section('Console Message (Detail View)'));
     response.appendResponseLine('');
     response.appendResponseLine(formatConsoleEventVerbose(detailData));
   },

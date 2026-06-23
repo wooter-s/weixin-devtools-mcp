@@ -22,15 +22,15 @@ interface ExceptionEvent {
 }
 
 type ConsoleMiniProgram = MiniProgram & {
-  on: (event: 'console', listener: (event: ConsoleEvent) => void) => void;
-  on: (event: 'exception', listener: (event: ExceptionEvent) => void) => void;
-  removeListener: (
+  on(event: 'console', listener: (event: ConsoleEvent) => void): void;
+  on(event: 'exception', listener: (event: ExceptionEvent) => void): void;
+  removeListener(
     event: 'console' | 'exception',
     listener: ((event: ConsoleEvent) => void) | ((event: ExceptionEvent) => void)
-  ) => void;
-  removeAllListeners: (event?: 'console' | 'exception') => void;
-  listenerCount: (event: 'console' | 'exception') => number;
-  evaluate: <TResult>(fn: () => TResult | Promise<TResult>) => Promise<TResult>;
+  ): void;
+  removeAllListeners(event?: 'console' | 'exception'): void;
+  listenerCount(event: 'console' | 'exception'): number;
+  evaluate<TResult>(fn: () => TResult | Promise<TResult>): Promise<TResult>;
 };
 
 describe.skipIf(!shouldRun)('Console Integration Tests', () => {

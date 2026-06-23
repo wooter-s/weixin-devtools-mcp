@@ -11,6 +11,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { describe, it, expect } from 'vitest';
 
+import packageJson from '../../package.json' assert { type: 'json' };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface WithClientOptions {
@@ -80,10 +82,13 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('应该返回正确的服务器信息', async () => {
+    it('应该返回与 package.json 一致的服务器信息', async () => {
       await withClient(async (client) => {
-        const { tools } = await client.listTools();
-        expect(tools).toBeDefined();
+        const serverInfo = client.getServerVersion();
+
+        expect(serverInfo).toBeDefined();
+        expect(serverInfo?.name).toBe(packageJson.name);
+        expect(serverInfo?.version).toBe(packageJson.version);
       });
     });
   });
@@ -160,7 +165,7 @@ describe('MCP Protocol Tests', () => {
           expect(tool.name).toBeDefined();
           expect(tool.description).toBeDefined();
           expect(tool.inputSchema).toBeDefined();
-          expect(tool.description.length).toBeGreaterThan(0);
+          expect((tool.description ?? '').length).toBeGreaterThan(0);
           expect(tool.inputSchema.type).toBe('object');
           expect(tool.inputSchema.properties).toBeDefined();
         });
@@ -175,12 +180,18 @@ describe('MCP Protocol Tests', () => {
         const tool = tools.find(t => t.name === 'connect_devtools');
 
         expect(tool).toBeDefined();
-        expect(tool!.inputSchema.properties.strategy).toBeDefined();
-        expect(tool!.inputSchema.properties.projectPath).toBeDefined();
-        const required = tool!.inputSchema.required || [];
+        if (!tool) {
+          throw new Error('connect_devtools tool not found');
+        }
+
+        const props = tool.inputSchema.properties ?? {};
+        expect(props.strategy).toBeDefined();
+        expect(props.projectPath).toBeDefined();
+
+        const required = tool.inputSchema.required || [];
         expect(required).not.toContain('projectPath');
 
-        const strategySchema = tool!.inputSchema.properties.strategy;
+        const strategySchema = props.strategy as { enum?: unknown };
         expect(strategySchema.enum).toEqual(['auto', 'launch', 'connect', 'wsEndpoint', 'browserUrl', 'discover']);
       });
     });
@@ -191,8 +202,13 @@ describe('MCP Protocol Tests', () => {
         const tool = tools.find(t => t.name === 'query_selector');
 
         expect(tool).toBeDefined();
-        expect(tool!.inputSchema.properties.selector).toBeDefined();
-        expect(tool!.inputSchema.required).toContain('selector');
+        if (!tool) {
+          throw new Error('query_selector tool not found');
+        }
+
+        const props = tool.inputSchema.properties ?? {};
+        expect(props.selector).toBeDefined();
+        expect(tool.inputSchema.required).toContain('selector');
       });
     });
 
@@ -202,8 +218,11 @@ describe('MCP Protocol Tests', () => {
         const tool = tools.find(t => t.name === 'wait_for');
 
         expect(tool).toBeDefined();
-        const props = tool!.inputSchema.properties;
+        if (!tool) {
+          throw new Error('wait_for tool not found');
+        }
 
+        const props = tool.inputSchema.properties ?? {};
         expect(props.selector).toBeDefined();
         expect(props.delay).toBeDefined();
         expect(props.timeout).toBeDefined();
@@ -224,9 +243,11 @@ describe('MCP Protocol Tests', () => {
           }
         });
 
-        expect(result.content).toBeDefined();
-        expect(result.content.length).toBeGreaterThan(0);
-        expect(result.content[0].type).toBe('text');
+        const content = result.content as Array<{ type: string; text?: string }>;
+
+        expect(content).toBeDefined();
+        expect(content.length).toBeGreaterThan(0);
+        expect(content[0].type).toBe('text');
       }, {
         serverArgs: ['--tools-profile=full'],
       });
@@ -239,9 +260,11 @@ describe('MCP Protocol Tests', () => {
           arguments: {}
         });
 
-        expect(result.content).toBeDefined();
-        expect(result.content[0].type).toBe('text');
-        expect(result.content[0].text).toContain('环境检查');
+        const content = result.content as Array<{ type: string; text?: string }>;
+
+        expect(content).toBeDefined();
+        expect(content[0].type).toBe('text');
+        expect(content[0].text).toContain('环境检查');
       }, {
         serverArgs: ['--tools-profile=full'],
       });
@@ -258,9 +281,10 @@ describe('MCP Protocol Tests', () => {
 
         expect(result.isError).toBe(true);
 
-        const text = result.content
-          .filter(item => item.type === 'text')
-          .map(item => item.text)
+        const content = result.content as Array<{ type: string; text?: string }>;
+        const text = content
+          .filter((item: { type: string }) => item.type === 'text')
+          .map((item: { text?: string }) => item.text ?? '')
           .join('\n');
         expect(text).toContain('当前未启用');
         expect(text).toContain('enable-categories=debug');

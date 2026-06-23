@@ -11,8 +11,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import automator from 'miniprogram-automator';
 import { vi } from 'vitest';
 
-import type { ToolContext} from '../src/tools/ToolDefinition.js';
-import { SimpleToolResponse } from '../src/tools/ToolDefinition.js';
+import { createDisconnectedStatus } from '../../src/connection/types.js';
+import type { ToolContext } from '../../src/tools/ToolDefinition.js';
+import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 
 // ============================================================================
 // MCP Protocol Testing Helpers
@@ -68,17 +69,43 @@ export function createMockContext(): ToolContext {
     currentPage: null,
     elementMap: new Map(),
     consoleStorage: {
-      consoleMessages: [],
-      exceptionMessages: [],
+      navigations: [
+        {
+          messages: [],
+          exceptions: [],
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      messageIdMap: new Map(),
       isMonitoring: false,
-      startTime: null
+      startTime: null,
+      maxNavigations: 3,
     },
     networkStorage: {
       requests: [],
       isMonitoring: false,
       startTime: null,
-      originalMethods: {}
-    }
+      originalMethods: {},
+    },
+    connectionStatus: createDisconnectedStatus(),
+    getNetworkCollector: vi.fn(() => ({
+      syncFromRemote: vi.fn(async () => 0),
+      getRequests: vi.fn(() => []),
+      getCurrentCount: vi.fn(() => 0),
+    })),
+    clearNetworkRequests: vi.fn(),
+    getElementByUid: vi.fn(async () => {
+      throw new Error('getElementByUid not implemented in mock context');
+    }),
+    connectDevtools: vi.fn(async () => {
+      throw new Error('connectDevtools not implemented in mock context');
+    }),
+    reconnectDevtools: vi.fn(async () => {
+      throw new Error('reconnectDevtools not implemented in mock context');
+    }),
+    disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+    getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
+    bindConsoleAndExceptionListeners: vi.fn(),
   };
 }
 
@@ -179,17 +206,42 @@ export async function withMiniProgram(
       currentPage,
       elementMap: new Map(),
       consoleStorage: {
-        consoleMessages: [],
-        exceptionMessages: [],
+        navigations: [
+          {
+            messages: [],
+            exceptions: [],
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        messageIdMap: new Map(),
         isMonitoring: false,
-        startTime: null
+        startTime: null,
+        maxNavigations: 3,
       },
       networkStorage: {
         requests: [],
         isMonitoring: false,
         startTime: null,
-        originalMethods: {}
-      }
+        originalMethods: {},
+      },
+      connectionStatus: createDisconnectedStatus(),
+      getNetworkCollector: vi.fn(() => ({
+        syncFromRemote: vi.fn(async () => 0),
+        getRequests: vi.fn(() => []),
+        getCurrentCount: vi.fn(() => 0),
+      })),
+      clearNetworkRequests: vi.fn(),
+      getElementByUid: vi.fn(async () => {
+        throw new Error('getElementByUid not implemented in withMiniProgram helper');
+      }),
+      connectDevtools: vi.fn(async () => {
+        throw new Error('connectDevtools not implemented in withMiniProgram helper');
+      }),
+      reconnectDevtools: vi.fn(async () => {
+        throw new Error('reconnectDevtools not implemented in withMiniProgram helper');
+      }),
+      disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+      getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
     };
 
     const response = new SimpleToolResponse();

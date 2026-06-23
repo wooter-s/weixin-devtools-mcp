@@ -12,7 +12,7 @@ import {
   type WaitForOptions
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, DEFAULT_WAIT_TIMEOUT, ResponseFormatter } from './ToolDefinition.js';
 
 /**
  * $ 选择器工具 - 通过CSS选择器查找页面元素
@@ -35,9 +35,7 @@ export const querySelectorTool = defineTool({
       throw new Error('选择器不能为空');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: QueryOptions = { selector };
@@ -78,8 +76,9 @@ export const querySelectorTool = defineTool({
       response.setIncludeSnapshot(true);
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`查询元素失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`查询元素失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },
@@ -98,7 +97,7 @@ export const waitForTool = defineTool({
     // 3. 复杂条件: { selector: ".button", text: "提交", timeout: 5000 }
     delay: z.number().optional().describe('等待指定毫秒数（时间等待模式）'),
     selector: z.string().optional().describe('等待元素选择器（选择器等待模式）'),
-    timeout: z.number().optional().default(5000).describe('超时时间(毫秒)，默认5000ms'),
+    timeout: z.number().optional().default(DEFAULT_WAIT_TIMEOUT).describe(`超时时间(毫秒)，默认${DEFAULT_WAIT_TIMEOUT}ms`),
     text: z.string().optional().describe('等待元素包含指定文本'),
     visible: z.boolean().optional().describe('等待元素可见状态，true为可见，false为隐藏'),
     disappear: z.boolean().optional().default(false).describe('等待元素消失，默认false'),
@@ -113,9 +112,7 @@ export const waitForTool = defineTool({
   handler: async (request, response, context) => {
     const options = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const startTime = Date.now();
@@ -163,17 +160,17 @@ export const waitForTool = defineTool({
       const duration = endTime - startTime;
 
       if (result) {
-        response.appendResponseLine(`等待成功，耗时 ${duration}ms`);
+        response.appendResponseLine(ResponseFormatter.success(`等待成功，耗时 ${duration}ms`));
 
         // 等待完成后，页面可能发生变化
         response.setIncludeSnapshot(true);
       } else {
-        response.appendResponseLine(`等待失败，耗时 ${duration}ms`);
+        response.appendResponseLine(ResponseFormatter.error(`等待失败，耗时 ${duration}ms`));
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`等待失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`等待失败: ${errorMessage}`));
       throw error;
     }
   },

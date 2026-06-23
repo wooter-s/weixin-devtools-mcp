@@ -13,7 +13,7 @@ import {
   type AssertResult,
 } from '../tools.js';
 
-import { defineTool, ToolCategory } from './ToolDefinition.js';
+import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
 
 // 注意: assert_exists 和 assert_visible 已合并到 assert_state
 // 使用 assert_state 工具即可验证元素的存在性和可见性
@@ -71,9 +71,7 @@ export const assertTextTool = defineTool({
       throw new Error('必须指定text、textContains或textMatches参数之一');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: ContentAssertOptions = {
@@ -89,7 +87,7 @@ export const assertTextTool = defineTool({
         options
       );
 
-      response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
+      response.appendResponseLine(result.passed ? ResponseFormatter.success('断言通过') : ResponseFormatter.error('断言失败'));
       response.appendResponseLine(`消息: ${result.message}`);
       response.appendResponseLine(`期望: ${result.expected}`);
       response.appendResponseLine(`实际: ${result.actual}`);
@@ -100,8 +98,9 @@ export const assertTextTool = defineTool({
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`断言执行失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`断言执行失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },
@@ -125,9 +124,7 @@ export const assertAttributeTool = defineTool({
   handler: async (request, response, context) => {
     const { uid, attributeKey, attributeValue } = request.params;
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const options: ContentAssertOptions = {
@@ -144,7 +141,7 @@ export const assertAttributeTool = defineTool({
         options
       );
 
-      response.appendResponseLine(`断言结果: ${result.passed ? '通过' : '失败'}`);
+      response.appendResponseLine(result.passed ? ResponseFormatter.success('断言通过') : ResponseFormatter.error('断言失败'));
       response.appendResponseLine(`消息: ${result.message}`);
       response.appendResponseLine(`期望: ${result.expected}`);
       response.appendResponseLine(`实际: ${result.actual}`);
@@ -155,8 +152,9 @@ export const assertAttributeTool = defineTool({
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`断言执行失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`断言执行失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },
@@ -186,9 +184,7 @@ export const assertStateTool = defineTool({
       throw new Error('必须指定至少一个状态参数');
     }
 
-    if (!context.currentPage) {
-      throw new Error('请先获取当前页面');
-    }
+    ensureCurrentPage(context);
 
     try {
       const results: AssertResult[] = [];
@@ -231,7 +227,7 @@ export const assertStateTool = defineTool({
       const allPassed = results.every(result => result.passed);
       const failedResults = results.filter(result => !result.passed);
 
-      response.appendResponseLine(`断言结果: ${allPassed ? '全部通过' : '部分失败'}`);
+      response.appendResponseLine(allPassed ? ResponseFormatter.success('全部通过') : ResponseFormatter.error('部分失败'));
       response.appendResponseLine(`检查项数: ${results.length}`);
       response.appendResponseLine(`通过项数: ${results.filter(result => result.passed).length}`);
       response.appendResponseLine(`失败项数: ${failedResults.length}`);
@@ -249,8 +245,9 @@ export const assertStateTool = defineTool({
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      response.appendResponseLine(`断言执行失败: ${errorMessage}`);
+      const errorMessage = extractErrorMessage(error);
+      response.appendResponseLine(ResponseFormatter.error(`断言执行失败: ${errorMessage}`));
+      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
       throw error;
     }
   },

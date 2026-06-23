@@ -9,7 +9,7 @@ import { queryElements, waitForCondition } from '../../src/tools.js';
 describe('页面查询工具测试', () => {
   describe('queryElements 函数测试', () => {
     let mockPage: any;
-    let mockElementMap: Map<string, string>;
+    let mockElementMap: Map<string, { selector: string; index: number }>;
     let mockElement: any;
 
     beforeEach(() => {
@@ -29,7 +29,7 @@ describe('页面查询工具测试', () => {
         $$: vi.fn().mockResolvedValue([mockElement])
       };
 
-      mockElementMap = new Map<string, string>();
+      mockElementMap = new Map<string, { selector: string; index: number }>();
     });
 
     it('应该验证选择器不能为空字符串', async () => {

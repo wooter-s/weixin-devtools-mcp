@@ -77,10 +77,17 @@ async function runTests() {
       currentPage,
       elementMap: new Map(),
       consoleStorage: {
-        consoleMessages: [],
-        exceptionMessages: [],
+        navigations: [
+          {
+            messages: [],
+            exceptions: [],
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        messageIdMap: new Map(),
         isMonitoring: false,
         startTime: null,
+        maxNavigations: 3,
       },
       networkStorage: {
         requests: [],

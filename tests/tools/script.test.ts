@@ -3,9 +3,10 @@
  * 验证 evaluate_script 工具的功能
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
-import type { ToolContext} from '../../src/tools/ToolDefinition.js';
+import { createDisconnectedStatus } from '../../src/connection/types.js';
+import type { ToolContext } from '../../src/tools/ToolDefinition.js';
 import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import { evaluateScript } from '../../src/tools/script.js';
 
@@ -18,14 +19,21 @@ describe('Script Tool Unit Tests', () => {
       evaluate: vi.fn().mockResolvedValue(
         evaluateResult === DEFAULT_RESULT ? { success: true } : evaluateResult
       ),
-    },
+    } as any,
     currentPage: null,
     elementMap: new Map(),
     consoleStorage: {
-      consoleMessages: [],
-      exceptionMessages: [],
+      navigations: [
+        {
+          messages: [],
+          exceptions: [],
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      messageIdMap: new Map(),
       isMonitoring: false,
       startTime: null,
+      maxNavigations: 3,
     },
     networkStorage: {
       requests: [],
@@ -33,6 +41,25 @@ describe('Script Tool Unit Tests', () => {
       startTime: null,
       originalMethods: {},
     },
+    connectionStatus: createDisconnectedStatus(),
+    getNetworkCollector: vi.fn(() => ({
+      syncFromRemote: vi.fn(async () => 0),
+      getRequests: vi.fn(() => []),
+      getCurrentCount: vi.fn(() => 0),
+    })),
+    clearNetworkRequests: vi.fn(),
+    getElementByUid: vi.fn(async () => {
+      throw new Error('getElementByUid not implemented in mock context');
+    }),
+    connectDevtools: vi.fn(async () => {
+      throw new Error('connectDevtools not implemented in mock context');
+    }),
+    reconnectDevtools: vi.fn(async () => {
+      throw new Error('reconnectDevtools not implemented in mock context');
+    }),
+    disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+    getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
+    bindConsoleAndExceptionListeners: vi.fn(),
   });
 
   const createMockResponse = () => new SimpleToolResponse();
@@ -67,7 +94,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith('() => 42');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => 42');
       const responseText = response.getResponseText();
       expect(responseText).toContain('执行成功');
       expect(responseText).toContain('42');
@@ -83,7 +110,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith('() => "hello world"');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => "hello world"');
       const responseText = response.getResponseText();
       expect(responseText).toContain('hello world');
     });
@@ -137,7 +164,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith(
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
         '(key) => key',
         'test-key'
       );
@@ -160,7 +187,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith(
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
         '(key, value) => ({ key, value })',
         'test',
         123
@@ -183,7 +210,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith(
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
         '(obj) => obj',
         complexArg
       );
@@ -204,7 +231,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith('() => true');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => true');
     });
 
     it('应该处理未提供参数的情况', async () => {
@@ -221,7 +248,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram.evaluate).toHaveBeenCalledWith('() => false');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => false');
     });
   });
 
@@ -275,12 +302,12 @@ describe('Script Tool Unit Tests', () => {
           response,
           context
         )
-      ).rejects.toThrow('未连接到微信开发者工具');
+      ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
     });
 
     it('应该处理执行错误', async () => {
       const context = createMockContext();
-      context.miniProgram.evaluate = vi.fn().mockRejectedValue(
+      context.miniProgram!.evaluate = vi.fn().mockRejectedValue(
         new Error('脚本语法错误')
       );
       const response = createMockResponse();

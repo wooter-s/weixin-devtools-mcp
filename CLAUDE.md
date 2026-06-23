@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-微信开发者工具自动化 MCP 服务器，提供31个工具用于微信小程序的自动化测试。基于 TypeScript 和 `miniprogram-automator` SDK 实现。
+微信开发者工具自动化 MCP 服务器，共实现 31 个工具用于微信小程序的自动化测试。基于 TypeScript 和 `miniprogram-automator` SDK 实现。
+
+> **工具暴露按 profile 裁剪**（见 `src/config/tool-profile.ts`）：默认 `core` profile 仅暴露 20 个核心工具；`minimal` 暴露 10 个；通过 `--tools-profile=full`（或环境变量 `WEIXIN_MCP_TOOLS_PROFILE=full`）可启用全部 31 个工具（含 console / network / screenshot / diagnose 类）。也可用 `--enable-categories` / `--disable-categories` 按类别精细控制。
 
 ## Common Commands
 
@@ -116,7 +118,7 @@ npm run test:manual:screenshot-diagnostic
 - 源文件：`src/server.ts`
 - 特点：完全模块化的工具系统，代码简洁
 - 代码量：~245行
-- 工具处理：所有31个工具统一通过 `allTools` 数组和 `ToolDefinition` 框架处理
+- 工具处理：全部工具（共 31 个，运行时按 profile 裁剪暴露，默认 20 个）统一通过 `allTools` 数组和 `ToolDefinition` 框架处理
 - 配置：`npm install -g weixin-devtools-mcp` 默认使用此入口（package.json bin配置）
 
 ### 模块化工具系统
@@ -131,7 +133,7 @@ src/tools/
 │   ├── ToolHandler      # 工具处理器类型
 │   └── ToolResponse     # 响应构建接口
 │
-├── index.ts             # 统一导出 allTools[] (31个工具)
+├── index.ts             # 统一导出 allTools[]（31个工具，运行时按 profile 裁剪暴露）
 │
 └── [8个功能模块]
     ├── connection.ts    # 连接管理（3工具）
@@ -291,10 +293,9 @@ UID生成规则：优先使用 id > class > nth-child 构建稳定的CSS选择�
 
 ### 版本说明
 
-**代码版本**：v0.3.3（src/server.ts）
-**package.json版本**：v0.0.1（发布版本号）
+对外版本（MCP 握手 `server.version`）以 `package.json.version` 为准（由 `src/version.ts` 读取并在 `src/server.ts` 上报）。
 
-这个差异是正常的：代码版本用于跟踪功能迭代，package.json版本在发布时更新。
+为避免出现“代码版本/发布版本”双轨语义导致的回退或误判，请保持 `package.json.version` 单调递增，并将文档/CHANGELOG 与其对齐。
 
 ## Prerequisites
 

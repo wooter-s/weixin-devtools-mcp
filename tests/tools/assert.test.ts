@@ -28,7 +28,7 @@ import {
 
 describe('assert.ts 工具测试', () => {
   const mockElement = {
-    attribute: vi.fn(async (_name: string) => null),
+    attribute: vi.fn(async (_name: string): Promise<string | null> => null),
   };
 
   // 创建测试用的上下文对象
@@ -51,6 +51,10 @@ describe('assert.ts 工具测试', () => {
     return {
       appendResponseLine: vi.fn((line: string) => lines.push(line)),
       setIncludeSnapshot: vi.fn(),
+      attachImage: vi.fn(),
+      shouldIncludeSnapshot: vi.fn(() => false),
+      mergeStructuredContent: vi.fn(),
+      getStructuredContent: vi.fn(() => ({})),
       getLines: () => lines,
       getResponseText: () => lines.join('\n'),
     }
@@ -222,7 +226,7 @@ describe('assert.ts 工具测试', () => {
         { uid: 'button-1', visible: true }
       )
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言结果: 全部通过')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('✅ 全部通过')
       expect(response.appendResponseLine).toHaveBeenCalledWith('检查项数: 1')
       expect(response.appendResponseLine).toHaveBeenCalledWith('通过项数: 1')
       expect(response.appendResponseLine).toHaveBeenCalledWith('失败项数: 0')
@@ -242,7 +246,7 @@ describe('assert.ts 工具测试', () => {
 
       expect(mockContext.getElementByUid).toHaveBeenCalledWith('button-1')
       expect(mockElement.attribute).toHaveBeenCalledWith('disabled')
-      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+      expect(response.getResponseText()).toContain('✅ 全部通过')
     })
 
     it('应该支持 checked 状态断言', async () => {
@@ -258,7 +262,7 @@ describe('assert.ts 工具测试', () => {
       await assertStateTool.handler(request, response, mockContext)
 
       expect(mockElement.attribute).toHaveBeenCalledWith('checked')
-      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+      expect(response.getResponseText()).toContain('✅ 全部通过')
     })
 
     it('应该支持 focused 状态断言（focus）', async () => {
@@ -274,7 +278,7 @@ describe('assert.ts 工具测试', () => {
       await assertStateTool.handler(request, response, mockContext)
 
       expect(mockElement.attribute).toHaveBeenCalledWith('focus')
-      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+      expect(response.getResponseText()).toContain('✅ 全部通过')
     })
 
     it('应该支持 focused 状态断言（focused 回退）', async () => {
@@ -294,7 +298,7 @@ describe('assert.ts 工具测试', () => {
 
       expect(mockElement.attribute).toHaveBeenCalledWith('focus')
       expect(mockElement.attribute).toHaveBeenCalledWith('focused')
-      expect(response.getResponseText()).toContain('断言结果: 全部通过')
+      expect(response.getResponseText()).toContain('✅ 全部通过')
     })
 
     it('应该处理部分断言失败', async () => {
@@ -309,7 +313,7 @@ describe('assert.ts 工具测试', () => {
       await expect(assertStateTool.handler(request, response, mockContext))
         .rejects.toThrow('状态断言失败: 1/1 项失败')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言结果: 部分失败')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 部分失败')
       expect(response.appendResponseLine).toHaveBeenCalledWith('失败详情:')
       expect(response.appendResponseLine).toHaveBeenCalledWith('1. [visible] 断言失败')
     })
@@ -359,7 +363,7 @@ describe('assert.ts 工具测试', () => {
       await expect(assertTextTool.handler(request, response, mockContext))
         .rejects.toThrow('字符串错误')
 
-      expect(response.appendResponseLine).toHaveBeenCalledWith('断言执行失败: 字符串错误')
+      expect(response.appendResponseLine).toHaveBeenCalledWith('❌ 断言执行失败: 字符串错误')
     })
 
     it('应该在所有工具中验证currentPage存在', async () => {
@@ -375,7 +379,7 @@ describe('assert.ts 工具测试', () => {
       for (const { tool, params } of tools) {
         const request = createMockRequest(params)
         await expect(tool.handler(request, response, contextWithoutPage))
-          .rejects.toThrow('请先获取当前页面')
+          .rejects.toThrow('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。')
       }
     })
   })

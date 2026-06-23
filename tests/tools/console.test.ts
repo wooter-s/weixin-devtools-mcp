@@ -18,6 +18,7 @@ import {
   getConsoleMessageTool
 } from '../../src/tools/console.js';
 import { createIdGenerator } from '../../src/utils/idGenerator.js';
+import { createDisconnectedStatus } from '../../src/connection/types.js';
 
 describe('Console Tools Unit Tests', () => {
   // 创建模拟的工具上下文（使用新的 navigations 结构）
@@ -27,7 +28,7 @@ describe('Console Tools Unit Tests', () => {
       removeAllListeners: vi.fn(),
       listenerCount: vi.fn(() => 0),
       removeListener: vi.fn(),
-    },
+    } as any,
     currentPage: null,
     elementMap: new Map(),
     consoleStorage: {
@@ -38,7 +39,40 @@ describe('Console Tools Unit Tests', () => {
       maxNavigations: 3,
       idGenerator: createIdGenerator(),
     },
+    networkStorage: {
+      requests: [],
+      isMonitoring: false,
+      startTime: null,
+      originalMethods: {},
+    },
+    connectionStatus: {
+      connectionId: null,
+      state: 'disconnected',
+      strategyUsed: null,
+      endpoint: null,
+      connected: false,
+      hasCurrentPage: false,
+      pagePath: null,
+      health: null,
+      lastError: null,
+      lastConnectedAt: null,
+      lastHealthCheckAt: null,
+    },
+    getNetworkCollector: vi.fn(() => ({
+      syncFromRemote: vi.fn(async () => 0),
+      getRequests: vi.fn(() => []),
+      getCurrentCount: vi.fn(() => 0),
+    })),
+    clearNetworkRequests: vi.fn(),
     getElementByUid: vi.fn(),
+    connectDevtools: vi.fn(async () => {
+      throw new Error('connectDevtools not implemented in mock console context');
+    }),
+    reconnectDevtools: vi.fn(async () => {
+      throw new Error('reconnectDevtools not implemented in mock console context');
+    }),
+    disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+    getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
   });
 
   it('应该正确定义所有console工具', () => {
@@ -191,7 +225,40 @@ describe('New Console Tools - list_console_messages', () => {
         maxNavigations: 3,
         idGenerator: createIdGenerator(),
       },
+      networkStorage: {
+        requests: [],
+        isMonitoring: false,
+        startTime: null,
+        originalMethods: {},
+      },
+      connectionStatus: {
+        connectionId: null,
+        state: 'disconnected',
+        strategyUsed: null,
+        endpoint: null,
+        connected: false,
+        hasCurrentPage: false,
+        pagePath: null,
+        health: null,
+        lastError: null,
+        lastConnectedAt: null,
+        lastHealthCheckAt: null,
+      },
+      getNetworkCollector: vi.fn(() => ({
+        syncFromRemote: vi.fn(async () => 0),
+        getRequests: vi.fn(() => []),
+        getCurrentCount: vi.fn(() => 0),
+      })),
+      clearNetworkRequests: vi.fn(),
       getElementByUid: vi.fn(),
+      connectDevtools: vi.fn(async () => {
+        throw new Error('connectDevtools not implemented in console test');
+      }),
+      reconnectDevtools: vi.fn(async () => {
+        throw new Error('reconnectDevtools not implemented in console test');
+      }),
+      disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+      getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
     };
   });
 
@@ -348,7 +415,40 @@ describe('New Console Tools - get_console_message', () => {
         maxNavigations: 3,
         idGenerator: createIdGenerator(),
       },
+      networkStorage: {
+        requests: [],
+        isMonitoring: false,
+        startTime: null,
+        originalMethods: {},
+      },
+      connectionStatus: {
+        connectionId: null,
+        state: 'disconnected',
+        strategyUsed: null,
+        endpoint: null,
+        connected: false,
+        hasCurrentPage: false,
+        pagePath: null,
+        health: null,
+        lastError: null,
+        lastConnectedAt: null,
+        lastHealthCheckAt: null,
+      },
+      getNetworkCollector: vi.fn(() => ({
+        syncFromRemote: vi.fn(async () => 0),
+        getRequests: vi.fn(() => []),
+        getCurrentCount: vi.fn(() => 0),
+      })),
+      clearNetworkRequests: vi.fn(),
       getElementByUid: vi.fn(),
+      connectDevtools: vi.fn(async () => {
+        throw new Error('connectDevtools not implemented in console test');
+      }),
+      reconnectDevtools: vi.fn(async () => {
+        throw new Error('reconnectDevtools not implemented in console test');
+      }),
+      disconnectDevtools: vi.fn(async () => createDisconnectedStatus()),
+      getConnectionStatus: vi.fn(async () => createDisconnectedStatus()),
     };
   });
 

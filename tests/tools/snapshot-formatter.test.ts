@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest';
 import {
   formatSnapshot,
   estimateTokens,
-  type FormatOptions,
 } from '../../src/formatters/snapshotFormatter.js';
 import type { PageSnapshot } from '../../src/tools.js';
 
