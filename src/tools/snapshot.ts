@@ -63,6 +63,10 @@ minimal格式：
         : snapshot.elements;
       const limitedSnapshot = { ...snapshot, elements: limitedElements };
 
+      // getPageSnapshotCached 返回的 elementMap 与 context.elementMap 可能是同一引用，
+      // 因此必须先快照当前条目，再 clear()，否则会清空正在迭代的同一个 Map，导致 UID 全部丢失。
+      const snapshotEntries = [...elementMap.entries()];
+
       // 工具输出只保留本次快照可见 UID，避免旧页面元素残留。
       context.elementMap.clear();
 
@@ -70,16 +74,16 @@ minimal格式：
       if (maxElements) {
         // 只保留前 maxElements 个元素的映射
         const limitedUids = new Set(limitedElements.map(el => el.uid));
-        elementMap.forEach((value, key) => {
+        for (const [key, value] of snapshotEntries) {
           if (limitedUids.has(key)) {
             context.elementMap.set(key, value);
           }
-        });
+        }
       } else {
         // 没有限制时，添加所有元素映射
-        elementMap.forEach((value, key) => {
+        for (const [key, value] of snapshotEntries) {
           context.elementMap.set(key, value);
-        });
+        }
       }
 
       // 格式化快照（使用限制后的快照）

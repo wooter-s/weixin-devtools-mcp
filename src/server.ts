@@ -18,7 +18,6 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MiniProgramContext } from './MiniProgramContext.js';
 import { parseToolProfileConfig, resolveToolsByProfile } from './config/tool-profile.js';
 import type {
-  StructuredSnapshotMeta,
   ToolCategory,
   ToolRequest,
   ToolDefinition
@@ -78,15 +77,6 @@ function getDisabledToolHint(category: ToolCategory): string {
     `1. --tools-profile=full (启用全部工具)`,
     `2. --enable-categories=${category} (按类别启用)`
   ].join('\n');
-}
-
-function buildSnapshotMeta(): StructuredSnapshotMeta {
-  return {
-    requested: true,
-    pagePath: globalContext.currentPage?.path ?? null,
-    elementCount: globalContext.elementMap.size,
-    generatedAt: new Date().toISOString(),
-  };
 }
 
 /**
@@ -246,12 +236,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // 执行工具处理器
     await tool.handler(toolRequest, toolResponse, globalContext);
 
-    if (toolResponse.shouldIncludeSnapshot()) {
-      toolResponse.mergeStructuredContent({
-        snapshot: buildSnapshotMeta(),
-      });
-    }
-
     // 构建响应内容
     const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [];
 
@@ -274,9 +258,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
     }
 
+    // 仅在确有结构化内容时才附带 structuredContent 字段。
+    // 否则空对象 {} 会被部分 MCP 客户端优先渲染，从而吞掉 content 中的文本响应。
+    const structuredContent = toolResponse.getStructuredContent();
+    const hasStructuredContent = Object.keys(structuredContent).length > 0;
+
     return {
       content,
-      structuredContent: toolResponse.getStructuredContent(),
+      ...(hasStructuredContent ? { structuredContent } : {}),
     };
 
   } catch (error) {

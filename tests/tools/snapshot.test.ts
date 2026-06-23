@@ -381,6 +381,34 @@ describe('getPageSnapshotTool', () => {
       expect(context.elementMap.size).toBe(2);
     });
 
+    it('当 getPageSnapshotCached 返回与 context.elementMap 同一引用时仍应正确填充（回归：clear 别名 bug）', async () => {
+      // 复现真实场景：MiniProgramContext.getPageSnapshotCached 内部执行
+      // this.#elementMap = elementMap，使返回的 elementMap 与 context.elementMap 指向同一个 Map 实例。
+      // 修复前 handler 先 clear() 再 forEach 同一引用，会把正在遍历的集合清空，导致 UID 全部丢失。
+      vi.mocked(context.getPageSnapshotCached).mockImplementationOnce(async () => {
+        const sharedMap = new Map([
+          ['view.container', { selector: 'view.container', index: 0 }],
+          ['button.submit', { selector: 'button.submit', index: 0 }],
+        ]);
+        // 关键：context.elementMap 与返回值共享同一引用
+        context.elementMap = sharedMap;
+        return {
+          snapshot: {
+            ...baseSnapshotResult.snapshot,
+            elements: [...baseSnapshotResult.snapshot.elements],
+          },
+          elementMap: sharedMap,
+        };
+      });
+
+      await getPageSnapshotTool.handler({ params: {} }, response, context);
+
+      // 修复前此处 size 为 0（别名 Map 被 clear 清空）
+      expect(context.elementMap.size).toBe(2);
+      expect(context.elementMap.has('view.container')).toBe(true);
+      expect(context.elementMap.has('button.submit')).toBe(true);
+    });
+
     it('应该正确同步 elementMap', async () => {
       await getPageSnapshotTool.handler(
         { params: {} },
