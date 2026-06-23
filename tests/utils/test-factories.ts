@@ -9,6 +9,7 @@ import type { MiniProgram, Page } from 'miniprogram-automator';
 
 import type {
   ConnectionStatusSnapshot,
+  ConnectionConnectResult,
 } from '../../src/connection/types.js';
 import type {
   ConsoleStorage,
@@ -108,6 +109,36 @@ export function createDefaultConnectionStatus(): ConnectionStatusSnapshot {
   };
 }
 
+// ─── ConnectionConnectResult 默认值 ──────────────────────────────────
+
+/**
+ * 创建默认的成功连接结果。
+ * miniProgram / currentPage 使用空对象断言（与既有 mock 约定一致，无需经过 unknown），
+ * 因为消费方仅读取 pagePath / strategyUsed / status 等标量字段。
+ * 通过 overrides 可覆盖任意字段以定制测试场景。
+ */
+export function createMockConnectResult(
+  overrides?: Partial<ConnectionConnectResult>,
+): ConnectionConnectResult {
+  return {
+    connectionId: 'mock_conn',
+    strategyUsed: 'auto',
+    endpoint: 'ws://127.0.0.1:9420',
+    miniProgram: {} as MiniProgram,
+    currentPage: {} as Page,
+    pagePath: '/pages/index/index',
+    health: {
+      level: 'healthy',
+      checks: [],
+      checkedAt: new Date().toISOString(),
+    },
+    status: 'connected',
+    timing: { totalMs: 100, connectMs: 80, healthMs: 20 },
+    warnings: [],
+    ...overrides,
+  };
+}
+
 // ─── ToolContext Mock ─────────────────────────────────────────────────
 
 /**
@@ -133,38 +164,8 @@ export function createMockContext(
     getElementByUid: vi.fn(async () => {
       throw new Error('Element not found');
     }),
-    connectDevtools: vi.fn(async () => ({
-      connectionId: 'mock_conn',
-      strategyUsed: 'auto' as const,
-      endpoint: 'ws://127.0.0.1:9420',
-      miniProgram: {} as MiniProgram,
-      currentPage: {} as Page,
-      pagePath: '/pages/index/index',
-      health: {
-        level: 'healthy' as const,
-        checks: [],
-        checkedAt: new Date().toISOString(),
-      },
-      status: 'connected' as const,
-      timing: { totalMs: 100, connectMs: 80, healthMs: 20 },
-      warnings: [],
-    })),
-    reconnectDevtools: vi.fn(async () => ({
-      connectionId: 'mock_reconn',
-      strategyUsed: 'auto' as const,
-      endpoint: 'ws://127.0.0.1:9420',
-      miniProgram: {} as MiniProgram,
-      currentPage: {} as Page,
-      pagePath: '/pages/index/index',
-      health: {
-        level: 'healthy' as const,
-        checks: [],
-        checkedAt: new Date().toISOString(),
-      },
-      status: 'connected' as const,
-      timing: { totalMs: 100, connectMs: 80, healthMs: 20 },
-      warnings: [],
-    })),
+    connectDevtools: vi.fn(async () => createMockConnectResult({ connectionId: 'mock_conn' })),
+    reconnectDevtools: vi.fn(async () => createMockConnectResult({ connectionId: 'mock_reconn' })),
     disconnectDevtools: vi.fn(async () => createDefaultConnectionStatus()),
     getConnectionStatus: vi.fn(async () => createDefaultConnectionStatus()),
     ...overrides,

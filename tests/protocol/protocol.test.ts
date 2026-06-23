@@ -4,6 +4,7 @@
  * 测试目标：验证 MCP 服务器协议实现与工具 profile 过滤机制。
  */
 
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -11,7 +12,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { describe, it, expect } from 'vitest';
 
-import packageJson from '../../package.json' assert { type: 'json' };
+// 通过 createRequire 读取 package.json，避免 import attributes（Node16 module 不支持）
+const require = createRequire(import.meta.url);
+const packageJson = require('../../package.json') as { name: string; version: string };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

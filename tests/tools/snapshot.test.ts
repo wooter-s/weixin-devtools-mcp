@@ -225,7 +225,7 @@ describe('getPageSnapshotTool', () => {
 
     it('应该支持包含属性信息', async () => {
       // 修改 mock 数据包含属性
-      vi.mocked(context.getPageSnapshotCached).mockResolvedValueOnce({
+      vi.mocked(context.getPageSnapshotCached!).mockResolvedValueOnce({
         snapshot: {
           path: 'pages/test/test',
           elements: [
@@ -339,7 +339,7 @@ describe('getPageSnapshotTool', () => {
 
   describe('错误处理', () => {
     it('应该处理快照获取失败', async () => {
-      vi.mocked(context.getPageSnapshotCached).mockRejectedValueOnce(
+      vi.mocked(context.getPageSnapshotCached!).mockRejectedValueOnce(
         new Error('模拟快照获取失败')
       );
 
@@ -385,7 +385,7 @@ describe('getPageSnapshotTool', () => {
       // 复现真实场景：MiniProgramContext.getPageSnapshotCached 内部执行
       // this.#elementMap = elementMap，使返回的 elementMap 与 context.elementMap 指向同一个 Map 实例。
       // 修复前 handler 先 clear() 再 forEach 同一引用，会把正在遍历的集合清空，导致 UID 全部丢失。
-      vi.mocked(context.getPageSnapshotCached).mockImplementationOnce(async () => {
+      vi.mocked(context.getPageSnapshotCached!).mockImplementationOnce(async () => {
         const sharedMap = new Map([
           ['view.container', { selector: 'view.container', index: 0 }],
           ['button.submit', { selector: 'button.submit', index: 0 }],
@@ -430,7 +430,7 @@ describe('getPageSnapshotTool', () => {
 
   describe('边界条件', () => {
     it('应该处理空页面（无元素）', async () => {
-      vi.mocked(context.getPageSnapshotCached).mockResolvedValueOnce({
+      vi.mocked(context.getPageSnapshotCached!).mockResolvedValueOnce({
         snapshot: {
           path: 'pages/empty/empty',
           elements: []

@@ -13,7 +13,7 @@ import {
   debugPageElementsTool,
   debugConnectionFlowTool,
 } from '../../src/tools/diagnose.js';
-import { createMockContext, createMockResponse, createMockPage } from '../utils/test-factories.js';
+import { createMockContext, createMockResponse, createMockPage, createMockConnectResult } from '../utils/test-factories.js';
 
 describe('diagnose_connection tool', () => {
   const projectPath = path.resolve(process.cwd(), 'playground/wx');
@@ -239,23 +239,14 @@ describe('debug_connection_flow tool', () => {
 
   it('应通过 context.connectDevtools 建立连接', async () => {
     const response = createMockResponse();
-    const connectedMiniProgram = {
-      removeAllListeners: vi.fn(),
-    };
-
     const context = createMockContext({
-      connectDevtools: vi.fn(async () => ({
-        connectionId: 'conn_debug',
-        strategyUsed: 'auto' as const,
-        endpoint: 'ws://127.0.0.1:9420',
-        miniProgram: connectedMiniProgram,
-        currentPage: { path: '/pages/home/index' },
-        pagePath: '/pages/home/index',
-        health: { level: 'healthy' as const, checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
-        status: 'connected' as const,
-        timing: { totalMs: 1200, connectMs: 900, healthMs: 300 },
-        warnings: [],
-      })),
+      connectDevtools: vi.fn(async () =>
+        createMockConnectResult({
+          connectionId: 'conn_debug',
+          pagePath: '/pages/home/index',
+          timing: { totalMs: 1200, connectMs: 900, healthMs: 300 },
+        }),
+      ),
     });
 
     await debugConnectionFlowTool.handler(
@@ -364,18 +355,12 @@ describe('debug_connection_flow tool', () => {
   it('captureSnapshot 启用时应记录状态快照', async () => {
     const response = createMockResponse();
     const context = createMockContext({
-      connectDevtools: vi.fn(async () => ({
-        connectionId: 'conn_snap',
-        strategyUsed: 'auto' as const,
-        endpoint: 'ws://127.0.0.1:9420',
-        miniProgram: { removeAllListeners: vi.fn() },
-        currentPage: { path: '/pages/index/index' },
-        pagePath: '/pages/index/index',
-        health: { level: 'healthy' as const, checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
-        status: 'connected' as const,
-        timing: { totalMs: 500, connectMs: 400, healthMs: 100 },
-        warnings: [],
-      })),
+      connectDevtools: vi.fn(async () =>
+        createMockConnectResult({
+          connectionId: 'conn_snap',
+          timing: { totalMs: 500, connectMs: 400, healthMs: 100 },
+        }),
+      ),
     });
 
     await debugConnectionFlowTool.handler(
@@ -400,18 +385,12 @@ describe('debug_connection_flow tool', () => {
   it('verbose 模式应输出详细连接参数', async () => {
     const response = createMockResponse();
     const context = createMockContext({
-      connectDevtools: vi.fn(async () => ({
-        connectionId: 'conn_verbose',
-        strategyUsed: 'auto' as const,
-        endpoint: 'ws://127.0.0.1:9420',
-        miniProgram: { removeAllListeners: vi.fn() },
-        currentPage: { path: '/pages/index/index' },
-        pagePath: '/pages/index/index',
-        health: { level: 'healthy' as const, checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
-        status: 'connected' as const,
-        timing: { totalMs: 300, connectMs: 200, healthMs: 100 },
-        warnings: [],
-      })),
+      connectDevtools: vi.fn(async () =>
+        createMockConnectResult({
+          connectionId: 'conn_verbose',
+          timing: { totalMs: 300, connectMs: 200, healthMs: 100 },
+        }),
+      ),
     });
 
     await debugConnectionFlowTool.handler(
