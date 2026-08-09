@@ -92,10 +92,19 @@ export function createMockContext(): ToolContext {
       syncFromRemote: vi.fn(async () => 0),
       getRequests: vi.fn(() => []),
       getCurrentCount: vi.fn(() => 0),
+      stopRemoteMonitoring: vi.fn(async () => 0),
     })),
     clearNetworkRequests: vi.fn(),
     getElementByUid: vi.fn(async () => {
       throw new Error('getElementByUid not implemented in mock context');
+    }),
+    getElementByTarget: vi.fn(async () => {
+      throw new Error('getElementByTarget not implemented in mock context');
+    }),
+    getPageRevision: vi.fn(() => 0),
+    markPageMutation: vi.fn(),
+    syncCurrentPage: vi.fn(async () => {
+      throw new Error('syncCurrentPage not implemented in mock context');
     }),
     connectDevtools: vi.fn(async () => {
       throw new Error('connectDevtools not implemented in mock context');
@@ -229,11 +238,18 @@ export async function withMiniProgram(
         syncFromRemote: vi.fn(async () => 0),
         getRequests: vi.fn(() => []),
         getCurrentCount: vi.fn(() => 0),
+        stopRemoteMonitoring: vi.fn(async () => 0),
       })),
       clearNetworkRequests: vi.fn(),
       getElementByUid: vi.fn(async () => {
         throw new Error('getElementByUid not implemented in withMiniProgram helper');
       }),
+      getElementByTarget: vi.fn(async () => {
+        throw new Error('getElementByTarget not implemented in withMiniProgram helper');
+      }),
+      getPageRevision: vi.fn(() => 0),
+      markPageMutation: vi.fn(),
+      syncCurrentPage: vi.fn(async () => currentPage),
       connectDevtools: vi.fn(async () => {
         throw new Error('connectDevtools not implemented in withMiniProgram helper');
       }),

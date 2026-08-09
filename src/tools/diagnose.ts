@@ -556,8 +556,7 @@ export const debugConnectionFlowTool = defineTool({
           trackStep('连接状态检查', 'warning', { connectionInvalid: true });
           response.appendResponseLine(`   ${ResponseFormatter.warning('已有连接但已失效')}`);
           response.appendResponseLine(`      操作: 清除并准备新建连接`);
-          context.miniProgram = null;
-          context.currentPage = null;
+          await context.disconnectDevtools();
         }
       } else {
         trackStep('连接状态检查', 'success', { noExistingConnection: true });

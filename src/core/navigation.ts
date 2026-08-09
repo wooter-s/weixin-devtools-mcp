@@ -3,10 +3,12 @@
  * 从 src/tools.ts 提取
  */
 
-import type { NavigateOptions, NavigateBackOptions, SwitchTabOptions, PageInfo } from './types.js';
+import type { Page } from 'miniprogram-automator';
 
-import { extractErrorMessage } from '../utils/error.js';
 import { DEFAULT_NAVIGATION_TIMEOUT, DEFAULT_WAIT_TIMEOUT } from '../tools/ToolDefinition.js';
+import { extractErrorMessage } from '../utils/error.js';
+
+import type { NavigateOptions, NavigateBackOptions, SwitchTabOptions, PageInfo } from './types.js';
 
 /**
  * 归一化为绝对页面路径。
@@ -22,12 +24,35 @@ export function toAbsolutePagePath(url: string): string {
   return url.startsWith('/') || url.startsWith('.') ? url : `/${url}`;
 }
 
-/**
- * 去除前导斜杠，用于与 SDK 返回的 currentPage.path（无前导 "/"）做包含比较，
- * 使绝对/相对两种输入都能正确命中。
- */
-function stripLeadingSlash(path: string): string {
-  return path.replace(/^\/+/, '');
+/** 去除 query/hash，并统一为单个前导斜杠，避免相似路径被误判为目标页。 */
+function normalizeNavigationPath(path: string): string {
+  const pathEnd = path.search(/[?#]/);
+  const pathname = pathEnd === -1 ? path : path.slice(0, pathEnd);
+  return `/${pathname.replace(/^\/+/, '')}`;
+}
+
+async function waitForNavigationConvergence(
+  operation: string,
+  timeout: number,
+  isConverged: () => Promise<boolean>,
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      if (await isConverged()) {
+        return;
+      }
+    } catch {
+      // 页面对象可能在导航过程中短暂不可用，继续等待至 deadline。
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(100, remaining)));
+    }
+  }
+
+  throw new Error(`${operation}超时 (TIMEOUT): ${timeout}ms 内页面未收敛`);
 }
 
 /**
@@ -59,22 +84,13 @@ export async function navigateToPage(
     await miniProgram.navigateTo(fullUrl);
 
     if (waitForLoad) {
-      const target = stripLeadingSlash(url.split('?')[0]);
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout) {
-        try {
-          const currentPage = await miniProgram.currentPage();
-          if (currentPage) {
-            const currentPath = await currentPage.path;
-            if (stripLeadingSlash(currentPath).includes(target)) {
-              break;
-            }
-          }
-        } catch (error) {
-          // 继续等待
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      const target = normalizeNavigationPath(url);
+      await waitForNavigationConvergence('页面跳转', timeout, async () => {
+        const currentPage = await miniProgram.currentPage();
+        if (!currentPage) return false;
+        const currentPath = await currentPage.path;
+        return normalizeNavigationPath(currentPath) === target;
+      });
     }
 
   } catch (error) {
@@ -96,33 +112,32 @@ export async function navigateBack(
     throw new Error("MiniProgram对象是必需的");
   }
 
+  if (delta !== 1) {
+    throw new Error('当前 miniprogram-automator 版本仅支持返回上一页（delta=1）');
+  }
+
   try {
-    let currentPath = '';
+    let previousPage: Page | undefined;
+    let previousPath: string | undefined;
     try {
-      const currentPage = await miniProgram.currentPage();
-      currentPath = await currentPage.path;
-    } catch (error) {
-      // 忽略获取当前路径的错误
+      previousPage = await miniProgram.currentPage();
+      if (previousPage) {
+        previousPath = await previousPage.path;
+      }
+    } catch {
+      // 忽略获取当前页面的错误，导航后仍可通过新 Page 实例判断收敛。
     }
 
-    await miniProgram.navigateBack(delta);
+    await miniProgram.navigateBack();
 
     if (waitForLoad) {
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout) {
-        try {
-          const newPage = await miniProgram.currentPage();
-          if (newPage) {
-            const newPath = await newPage.path;
-            if (newPath !== currentPath) {
-              break;
-            }
-          }
-        } catch (error) {
-          // 继续等待
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      await waitForNavigationConvergence('页面返回', timeout, async () => {
+        const newPage = await miniProgram.currentPage();
+        if (!newPage) return false;
+        if (newPage !== previousPage) return true;
+        const newPath = await newPage.path;
+        return newPath !== previousPath;
+      });
     }
 
   } catch (error) {
@@ -152,22 +167,13 @@ export async function switchTab(
     await miniProgram.switchTab(toAbsolutePagePath(url));
 
     if (waitForLoad) {
-      const target = stripLeadingSlash(url.split('?')[0]);
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout) {
-        try {
-          const currentPage = await miniProgram.currentPage();
-          if (currentPage) {
-            const currentPath = await currentPage.path;
-            if (stripLeadingSlash(currentPath).includes(target)) {
-              break;
-            }
-          }
-        } catch (error) {
-          // 继续等待
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      const target = normalizeNavigationPath(url);
+      await waitForNavigationConvergence('Tab 页面加载', timeout, async () => {
+        const currentPage = await miniProgram.currentPage();
+        if (!currentPage) return false;
+        const currentPath = await currentPage.path;
+        return normalizeNavigationPath(currentPath) === target;
+      });
     }
 
   } catch (error) {
@@ -248,22 +254,13 @@ export async function reLaunch(
     await miniProgram.reLaunch(fullUrl);
 
     if (waitForLoad) {
-      const target = stripLeadingSlash(url.split('?')[0]);
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout) {
-        try {
-          const currentPage = await miniProgram.currentPage();
-          if (currentPage) {
-            const currentPath = await currentPage.path;
-            if (stripLeadingSlash(currentPath).includes(target)) {
-              break;
-            }
-          }
-        } catch (error) {
-          // 继续等待
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      const target = normalizeNavigationPath(url);
+      await waitForNavigationConvergence('重新启动页面加载', timeout, async () => {
+        const currentPage = await miniProgram.currentPage();
+        if (!currentPage) return false;
+        const currentPath = await currentPage.path;
+        return normalizeNavigationPath(currentPath) === target;
+      });
     }
 
   } catch (error) {

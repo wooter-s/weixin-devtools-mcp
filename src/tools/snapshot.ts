@@ -1,90 +1,99 @@
 /**
  * 页面快照工具
- * 负责获取页面元素快照和UID映射
+ * 负责获取页面元素快照和 opaque ref 映射
  */
 
 import { writeFile } from 'fs/promises';
 
 import { z } from 'zod';
 
-import { formatSnapshot, estimateTokens, type SnapshotFormat } from '../formatters/snapshotFormatter.js';
+import {
+  formatSnapshot,
+  estimateTokens,
+  type SnapshotFormat,
+} from '../formatters/snapshotFormatter.js';
 
-import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
-
+import {
+  defineTool,
+  ToolCategory,
+  ensureCurrentPage,
+  extractErrorMessage,
+  ResponseFormatter,
+} from './ToolDefinition.js';
+import { jsonValueSchema, toJsonValue } from './result.js';
 
 /**
  * 获取页面快照
  */
 export const getPageSnapshotTool = defineTool({
   name: 'get_page_snapshot',
-  description: `获取当前页面的元素快照，包含所有元素的uid信息
+  description: `获取当前页面的元素快照，包含所有元素的 opaque ref
 
 输出格式选项：
 - compact: 紧凑文本格式（推荐，token使用减少60-70%）
-- minimal: 最小化格式（只包含uid、tagName、text）
-- json: 完整JSON格式（保持向后兼容）
+- minimal: 最小化格式（只包含ref、tagName、text）
+- json: 完整结构化JSON格式
 
 示例：
 compact格式：
-  uid=view.container view "Welcome" pos=[0,64] size=[375x667]
-  uid=button.submit button "Submit" pos=[100,400] size=[175x44]
+  ref=ref_a1b2_0 view "Welcome" pos=[0,64] size=[375x667]
+  ref=ref_a1b2_1 button "Submit" pos=[100,400] size=[175x44]
 
 minimal格式：
-  view.container view "Welcome"
-  button.submit button "Submit"`,
+  ref_a1b2_0 view "Welcome"
+  ref_a1b2_1 button "Submit"`,
   schema: z.object({
     format: z.enum(['compact', 'minimal', 'json']).default('compact').describe('输出格式'),
-    includePosition: z.boolean().default(true).describe('是否包含位置信息（compact和json格式有效）'),
-    includeAttributes: z.boolean().default(false).describe('是否包含属性信息（compact和json格式有效）'),
+    includePosition: z
+      .boolean()
+      .default(true)
+      .describe('是否包含位置信息（compact和json格式有效）'),
+    includeAttributes: z
+      .boolean()
+      .default(false)
+      .describe('是否包含属性信息（compact和json格式有效）'),
     maxElements: z.number().positive().optional().describe('限制返回的元素数量'),
     filePath: z.string().optional().describe('保存快照到文件的路径（可选）'),
+  }),
+  outputSchema: z.object({
+    snapshotId: z.string(),
+    pageRevision: z.number().int().nonnegative(),
+    path: z.string(),
+    count: z.number().int().nonnegative(),
+    format: z.enum(['compact', 'minimal', 'json']),
+    tokenEstimate: z.number().int().nonnegative(),
+    filePath: z.string().nullable(),
+    elements: z.array(jsonValueSchema),
   }),
   annotations: {
     category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    ensureCurrentPage(context);
-
     const { format, includePosition, includeAttributes, maxElements, filePath } = request.params;
 
     try {
+      if (!context.synchronizePageState) {
+        await context.syncCurrentPage();
+        ensureCurrentPage(context);
+      }
+      const commit = context.synchronizePageState
+        ? await context.synchronizePageState({ mode: 'snapshot', forceRefresh: true })
+        : undefined;
       const getSnapshot = context.getPageSnapshotCached?.bind(context);
-      if (!getSnapshot) {
+      if (!commit && !getSnapshot) {
         throw new Error('当前上下文不支持页面快照缓存接口');
       }
 
-      // 获取页面快照（由上下文统一维护缓存和 UID 映射）
-      const { snapshot, elementMap } = await getSnapshot({ forceRefresh: true });
+      // 生产上下文原子提交 snapshot/ref；旧式测试上下文保留缓存接口兼容。
+      const { snapshot } = commit ?? (await getSnapshot!({ forceRefresh: true }));
+      if (commit) response.setPageStateCommit?.(commit);
 
       // 应用 maxElements 限制（用于显示和token估算）
       const limitedElements = maxElements
         ? snapshot.elements.slice(0, maxElements)
         : snapshot.elements;
       const limitedSnapshot = { ...snapshot, elements: limitedElements };
-
-      // getPageSnapshotCached 返回的 elementMap 与 context.elementMap 可能是同一引用，
-      // 因此必须先快照当前条目，再 clear()，否则会清空正在迭代的同一个 Map，导致 UID 全部丢失。
-      const snapshotEntries = [...elementMap.entries()];
-
-      // 工具输出只保留本次快照可见 UID，避免旧页面元素残留。
-      context.elementMap.clear();
-
-      // 更新上下文中的元素映射（应用 maxElements 限制）
-      if (maxElements) {
-        // 只保留前 maxElements 个元素的映射
-        const limitedUids = new Set(limitedElements.map(el => el.uid));
-        for (const [key, value] of snapshotEntries) {
-          if (limitedUids.has(key)) {
-            context.elementMap.set(key, value);
-          }
-        }
-      } else {
-        // 没有限制时，添加所有元素映射
-        for (const [key, value] of snapshotEntries) {
-          context.elementMap.set(key, value);
-        }
-      }
 
       // 格式化快照（使用限制后的快照）
       const formattedSnapshot = formatSnapshot(limitedSnapshot, {
@@ -112,15 +121,35 @@ minimal格式：
 
         // 输出格式化的快照
         response.appendResponseLine(formattedSnapshot);
+        response.mergeStructuredContent({
+          snapshotId: snapshot.snapshotId,
+          pageRevision: snapshot.pageRevision,
+          path: snapshot.path,
+          count: limitedElements.length,
+          format,
+          tokenEstimate: estimates[format as SnapshotFormat],
+          filePath: null,
+          elements: toJsonValue(limitedElements),
+        });
       } else {
         response.appendResponseLine(`   页面路径: ${snapshot.path}`);
         response.appendResponseLine(`   元素数量: ${limitedElements.length}`);
         response.appendResponseLine(`   输出格式: ${format}`);
+        const estimates = estimateTokens(limitedSnapshot);
+        response.mergeStructuredContent({
+          snapshotId: snapshot.snapshotId,
+          pageRevision: snapshot.pageRevision,
+          path: snapshot.path,
+          count: limitedElements.length,
+          format,
+          tokenEstimate: estimates[format as SnapshotFormat],
+          filePath,
+          elements: toJsonValue(limitedElements),
+        });
       }
 
       // 设置包含快照信息
       response.setIncludeSnapshot(true);
-
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
       response.appendResponseLine(ResponseFormatter.error(`获取页面快照失败: ${errorMessage}`));

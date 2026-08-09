@@ -68,6 +68,12 @@ describe('connection tools', () => {
     reconnectDevtools: vi.fn(),
     disconnectDevtools: vi.fn(),
     getConnectionStatus: vi.fn(),
+    getPageRevision: vi.fn(() => 1),
+    startAutomaticMonitoring: vi.fn(async () => ({
+      consoleStarted: true,
+      networkStarted: true,
+      warnings: [],
+    })),
     bindConsoleAndExceptionListeners: vi.fn(),
     addConsoleMessage: vi.fn(() => 1),
     addExceptionMessage: vi.fn(() => 2),
@@ -75,6 +81,8 @@ describe('connection tools', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    delete mockContext.withPageStateOperation;
+    delete mockContext.syncCurrentPage;
     mockContext.miniProgram = null;
     mockContext.currentPage = null;
     mockContext.elementMap.clear();
@@ -94,6 +102,12 @@ describe('connection tools', () => {
     mockContext.addConsoleMessage.mockReturnValue(1);
     mockContext.addExceptionMessage.mockReset();
     mockContext.addExceptionMessage.mockReturnValue(2);
+    mockContext.startAutomaticMonitoring.mockReset();
+    mockContext.startAutomaticMonitoring.mockResolvedValue({
+      consoleStarted: true,
+      networkStarted: true,
+      warnings: [],
+    });
   });
 
   it('connect_devtools 应该调用 context.connectDevtools 并输出摘要', async () => {
@@ -111,12 +125,16 @@ describe('connection tools', () => {
       warnings: [],
     });
 
-    await connectDevtoolsTool.handler({
-      params: {
-        strategy: 'launch',
-        projectPath: '/tmp/demo',
+    await connectDevtoolsTool.handler(
+      {
+        params: {
+          strategy: 'launch',
+          projectPath: '/tmp/demo',
+        },
       },
-    }, response as any, mockContext);
+      response as any,
+      mockContext
+    );
 
     expect(mockContext.connectDevtools).toHaveBeenCalledWith({
       strategy: 'launch',
@@ -136,13 +154,10 @@ describe('connection tools', () => {
     expect(response.getLines().join('\n')).toContain('✅ 连接成功');
     expect(response.getLines().join('\n')).toContain('连接ID: conn_1');
     expect(response.getLines().join('\n')).toContain('策略: launch');
-    expect(mockContext.bindConsoleAndExceptionListeners).toHaveBeenCalledWith({
-      consoleHandler: expect.any(Function),
-      exceptionHandler: expect.any(Function),
-    });
+    expect(mockContext.startAutomaticMonitoring).toHaveBeenCalledOnce();
   });
 
-  it('connect_devtools 应优先通过 addConsoleMessage/addExceptionMessage 写入监听数据', async () => {
+  it('connect_devtools 应只委托 Context 启动统一监听', async () => {
     const response = createMockResponse();
     mockContext.connectDevtools.mockResolvedValue({
       connectionId: 'conn_3',
@@ -157,30 +172,28 @@ describe('connection tools', () => {
       warnings: [],
     });
 
-    await connectDevtoolsTool.handler({
-      params: {
-        strategy: 'launch',
-        projectPath: '/tmp/demo',
+    await connectDevtoolsTool.handler(
+      {
+        params: {
+          strategy: 'launch',
+          projectPath: '/tmp/demo',
+        },
       },
-    }, response as any, mockContext);
+      response as any,
+      mockContext
+    );
 
-    const handlers = mockContext.bindConsoleAndExceptionListeners.mock.calls[0]?.[0];
-    expect(handlers).toBeDefined();
-
-    handlers.consoleHandler({ type: 'info', args: ['hello'] });
-    handlers.exceptionHandler({ message: 'boom' });
-
-    expect(mockContext.addConsoleMessage).toHaveBeenCalledTimes(1);
-    expect(mockContext.addExceptionMessage).toHaveBeenCalledTimes(1);
+    expect(mockContext.startAutomaticMonitoring).toHaveBeenCalledOnce();
+    expect(mockMiniProgram.evaluate).not.toHaveBeenCalled();
   });
 
-  it('重连时若拦截器已安装也应复位 disabled 状态', async () => {
+  it('统一监听启动降级时应输出明确告警', async () => {
     const response = createMockResponse();
-    const wxRuntime = {
-      __networkInterceptorsInstalled: true,
-      __networkInterceptorsDisabled: true,
-    };
-    (globalThis as typeof globalThis & { wx?: unknown }).wx = wxRuntime;
+    mockContext.startAutomaticMonitoring.mockResolvedValueOnce({
+      consoleStarted: true,
+      networkStarted: false,
+      warnings: ['网络监听启动失败 - mock failure'],
+    });
 
     mockContext.connectDevtools.mockResolvedValue({
       connectionId: 'conn_4',
@@ -195,18 +208,18 @@ describe('connection tools', () => {
       warnings: [],
     });
 
-    try {
-      await connectDevtoolsTool.handler({
+    await connectDevtoolsTool.handler(
+      {
         params: {
           strategy: 'discover',
           projectPath: '/tmp/demo',
         },
-      }, response as any, mockContext);
-    } finally {
-      delete (globalThis as typeof globalThis & { wx?: unknown }).wx;
-    }
+      },
+      response as any,
+      mockContext
+    );
 
-    expect(wxRuntime.__networkInterceptorsDisabled).toBe(false);
+    expect(response.getLines().join('\n')).toContain('网络监听启动失败 - mock failure');
   });
 
   it('reconnect_devtools 应支持无参数重连', async () => {
@@ -249,15 +262,23 @@ describe('connection tools', () => {
       connected: true,
       strategyUsed: 'wsEndpoint',
       pagePath: '/pages/home/index',
-      health: { level: 'degraded', checks: [{ name: 'page', status: 'fail' }], checkedAt: '2026-01-01T00:00:00.000Z' },
+      health: {
+        level: 'degraded',
+        checks: [{ name: 'page', status: 'fail' }],
+        checkedAt: '2026-01-01T00:00:00.000Z',
+      },
       lastError: null,
     });
 
-    await getConnectionStatusTool.handler({
-      params: {
-        refreshHealth: true,
+    await getConnectionStatusTool.handler(
+      {
+        params: {
+          refreshHealth: true,
+        },
       },
-    }, response as any, mockContext);
+      response as any,
+      mockContext
+    );
 
     expect(mockContext.getConnectionStatus).toHaveBeenCalledWith({ refreshHealth: true });
     expect(response.getLines().join('\n')).toContain('连接状态: degraded');
@@ -266,8 +287,27 @@ describe('connection tools', () => {
 
   it('get_current_page 在未连接时应报错', async () => {
     const response = createMockResponse();
-    await expect(getCurrentPageTool.handler({ params: {} }, response as any, mockContext))
-      .rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+    await expect(
+      getCurrentPageTool.handler({ params: {} }, response as any, mockContext)
+    ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
+  });
+
+  it('get_current_page 通过 page-state 事务同步活动页面', async () => {
+    const response = createMockResponse();
+    mockContext.miniProgram = mockMiniProgram;
+    mockContext.syncCurrentPage = vi.fn(async () => mockCurrentPage);
+    mockContext.withPageStateOperation = vi.fn(async (operation: () => Promise<unknown>) =>
+      operation()
+    );
+
+    await getCurrentPageTool.handler({ params: {} }, response as any, mockContext);
+
+    expect(mockContext.withPageStateOperation).toHaveBeenCalledOnce();
+    expect(mockContext.syncCurrentPage).toHaveBeenCalledOnce();
+    expect(response.mergeStructuredContent).toHaveBeenCalledWith({
+      pagePath: '/pages/home/index',
+      pageRevision: 1,
+    });
   });
 
   it('connect_devtools 应透传 wsHeaders 契约错误信息', async () => {
@@ -275,20 +315,26 @@ describe('connection tools', () => {
     const contractError = new ValidationConnectionError(
       '当前连接链路不支持 wsHeaders 参数',
       ['请移除 wsHeaders 参数后重试'],
-      { strategy: 'wsEndpoint' },
+      { strategy: 'wsEndpoint' }
     );
 
     mockContext.connectDevtools.mockRejectedValue(contractError);
 
-    await expect(connectDevtoolsTool.handler({
-      params: {
-        strategy: 'wsEndpoint',
-        wsEndpoint: 'ws://127.0.0.1:9420',
-        wsHeaders: {
-          authorization: 'Bearer token',
+    await expect(
+      connectDevtoolsTool.handler(
+        {
+          params: {
+            strategy: 'wsEndpoint',
+            wsEndpoint: 'ws://127.0.0.1:9420',
+            wsHeaders: {
+              authorization: 'Bearer token',
+            },
+          },
         },
-      },
-    }, response as any, mockContext)).rejects.toThrow('当前连接链路不支持 wsHeaders 参数');
+        response as any,
+        mockContext
+      )
+    ).rejects.toThrow('当前连接链路不支持 wsHeaders 参数');
 
     expect(mockContext.connectDevtools).toHaveBeenCalledWith({
       strategy: 'wsEndpoint',
@@ -314,43 +360,51 @@ describe('connection tools', () => {
       const response = createMockResponse();
       mockContext.connectDevtools.mockRejectedValue(new Error('连接超时'));
 
-      await expect(connectDevtoolsTool.handler({
-        params: {
-          strategy: 'launch',
-          projectPath: '/tmp/demo',
-        },
-      }, response as any, mockContext)).rejects.toThrow('连接超时');
+      await expect(
+        connectDevtoolsTool.handler(
+          {
+            params: {
+              strategy: 'launch',
+              projectPath: '/tmp/demo',
+            },
+          },
+          response as any,
+          mockContext
+        )
+      ).rejects.toThrow('连接超时');
     });
 
     it('reconnect_devtools 重连失败时应抛出错误', async () => {
       const response = createMockResponse();
       mockContext.reconnectDevtools.mockRejectedValue(new Error('重连失败: 无可用端点'));
 
-      await expect(reconnectDevtoolsTool.handler(
-        { params: {} },
-        response as any,
-        mockContext,
-      )).rejects.toThrow('重连失败');
+      await expect(
+        reconnectDevtoolsTool.handler({ params: {} }, response as any, mockContext)
+      ).rejects.toThrow('重连失败');
     });
 
     it('disconnect_devtools 断开失败时应抛出错误', async () => {
       const response = createMockResponse();
       mockContext.disconnectDevtools.mockRejectedValue(new Error('断开连接失败'));
 
-      await expect(disconnectDevtoolsTool.handler(
-        { params: {} },
-        response as any,
-        mockContext,
-      )).rejects.toThrow('断开连接失败');
+      await expect(
+        disconnectDevtoolsTool.handler({ params: {} }, response as any, mockContext)
+      ).rejects.toThrow('断开连接失败');
     });
 
     it('get_connection_status 获取状态失败时应抛出错误', async () => {
       const response = createMockResponse();
       mockContext.getConnectionStatus.mockRejectedValue(new Error('状态查询失败'));
 
-      await expect(getConnectionStatusTool.handler({
-        params: { refreshHealth: true },
-      }, response as any, mockContext)).rejects.toThrow('状态查询失败');
+      await expect(
+        getConnectionStatusTool.handler(
+          {
+            params: { refreshHealth: true },
+          },
+          response as any,
+          mockContext
+        )
+      ).rejects.toThrow('状态查询失败');
     });
   });
 });

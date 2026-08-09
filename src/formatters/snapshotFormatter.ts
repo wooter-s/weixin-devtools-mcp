@@ -63,8 +63,8 @@ export function formatSnapshot(
  * # Page: pages/index/index
  * # Elements: 5
  *
- * uid=view.container view "Welcome" pos=[0,64] size=[375x667]
- * uid=button.submit button "Submit" pos=[100,400] size=[175x44]
+ * ref=ref_a1b2_0 view "Welcome" pos=[0,64] size=[375x667]
+ * ref=ref_a1b2_1 button "Submit" pos=[100,400] size=[175x44]
  */
 function formatCompact(
   snapshot: PageSnapshot,
@@ -75,6 +75,8 @@ function formatCompact(
 
   // 头部信息
   lines.push(`# Page: ${snapshot.path}`);
+  lines.push(`# Snapshot: ${snapshot.snapshotId}`);
+  lines.push(`# Revision: ${snapshot.pageRevision}`);
   lines.push(`# Elements: ${snapshot.elements.length}`);
   lines.push('');
 
@@ -82,8 +84,8 @@ function formatCompact(
   for (const element of snapshot.elements) {
     const parts: string[] = [];
 
-    // 必需字段：uid tagName
-    parts.push(`uid=${element.uid}`);
+    // 必需字段：opaque ref 与 tagName
+    parts.push(`ref=${element.ref}`);
     parts.push(element.tagName);
 
     // 文本内容（引号包裹，转义特殊字符）
@@ -122,21 +124,23 @@ function formatCompact(
  * # Page: pages/index/index
  * # Elements: 5
  *
- * view.container view
- * button.submit button "Submit"
- * input#username input
+ * ref_a1b2_0 view
+ * ref_a1b2_1 button "Submit"
+ * ref_a1b2_2 input
  */
 function formatMinimal(snapshot: PageSnapshot): string {
   const lines: string[] = [];
 
   // 头部信息
   lines.push(`# Page: ${snapshot.path}`);
+  lines.push(`# Snapshot: ${snapshot.snapshotId}`);
+  lines.push(`# Revision: ${snapshot.pageRevision}`);
   lines.push(`# Elements: ${snapshot.elements.length}`);
   lines.push('');
 
-  // 元素信息（只有uid、tagName、text）
+  // 元素信息（只有 ref、tagName、text）
   for (const element of snapshot.elements) {
-    const parts = [element.uid, element.tagName];
+    const parts = [element.ref, element.tagName];
     if (element.text) {
       const escapedText = escapeText(element.text);
       parts.push(`"${escapedText}"`);
@@ -150,7 +154,7 @@ function formatMinimal(snapshot: PageSnapshot): string {
 /**
  * JSON格式（保留完整信息）
  *
- * 保持向后兼容性，输出完整的JSON结构
+ * 输出完整的结构化 JSON
  */
 function formatJSON(
   snapshot: PageSnapshot,
@@ -161,7 +165,7 @@ function formatJSON(
   // 根据选项过滤字段
   const filteredElements = snapshot.elements.map(element => {
     const filtered: Partial<ElementSnapshot> = {
-      uid: element.uid,
+      ref: element.ref,
       tagName: element.tagName,
     };
 
@@ -173,7 +177,12 @@ function formatJSON(
   });
 
   return JSON.stringify(
-    { path: snapshot.path, elements: filteredElements },
+    {
+      snapshotId: snapshot.snapshotId,
+      pageRevision: snapshot.pageRevision,
+      path: snapshot.path,
+      elements: filteredElements,
+    },
     null,
     2
   );

@@ -5,11 +5,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { createDisconnectedStatus } from '../../src/connection/types.js';
 import type {
   ToolContext,
   ConsoleMessage,
   ExceptionMessage,
-  ConsoleStorage} from '../../src/tools/ToolDefinition.js';
+  ConsoleStorage,
+} from '../../src/tools/ToolDefinition.js';
 import {
   SimpleToolResponse
 } from '../../src/tools/ToolDefinition.js';
@@ -18,7 +20,6 @@ import {
   getConsoleMessageTool
 } from '../../src/tools/console.js';
 import { createIdGenerator } from '../../src/utils/idGenerator.js';
-import { createDisconnectedStatus } from '../../src/connection/types.js';
 
 describe('Console Tools Unit Tests', () => {
   // 创建模拟的工具上下文（使用新的 navigations 结构）
@@ -62,9 +63,14 @@ describe('Console Tools Unit Tests', () => {
       syncFromRemote: vi.fn(async () => 0),
       getRequests: vi.fn(() => []),
       getCurrentCount: vi.fn(() => 0),
+      stopRemoteMonitoring: vi.fn(async () => 0),
     })),
     clearNetworkRequests: vi.fn(),
     getElementByUid: vi.fn(),
+    getElementByTarget: vi.fn(),
+    getPageRevision: vi.fn(() => 0),
+    markPageMutation: vi.fn(),
+    syncCurrentPage: vi.fn(),
     connectDevtools: vi.fn(async () => {
       throw new Error('connectDevtools not implemented in mock console context');
     }),
@@ -248,9 +254,14 @@ describe('New Console Tools - list_console_messages', () => {
         syncFromRemote: vi.fn(async () => 0),
         getRequests: vi.fn(() => []),
         getCurrentCount: vi.fn(() => 0),
+        stopRemoteMonitoring: vi.fn(async () => 0),
       })),
       clearNetworkRequests: vi.fn(),
       getElementByUid: vi.fn(),
+      getElementByTarget: vi.fn(),
+      getPageRevision: vi.fn(() => 0),
+      markPageMutation: vi.fn(),
+      syncCurrentPage: vi.fn(),
       connectDevtools: vi.fn(async () => {
         throw new Error('connectDevtools not implemented in console test');
       }),
@@ -438,9 +449,14 @@ describe('New Console Tools - get_console_message', () => {
         syncFromRemote: vi.fn(async () => 0),
         getRequests: vi.fn(() => []),
         getCurrentCount: vi.fn(() => 0),
+        stopRemoteMonitoring: vi.fn(async () => 0),
       })),
       clearNetworkRequests: vi.fn(),
       getElementByUid: vi.fn(),
+      getElementByTarget: vi.fn(),
+      getPageRevision: vi.fn(() => 0),
+      markPageMutation: vi.fn(),
+      syncCurrentPage: vi.fn(),
       connectDevtools: vi.fn(async () => {
         throw new Error('connectDevtools not implemented in console test');
       }),

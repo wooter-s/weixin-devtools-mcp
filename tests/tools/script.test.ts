@@ -3,10 +3,12 @@
  * 验证 evaluate_script 工具的功能
  */
 
+import type { Element } from 'miniprogram-automator';
 import { describe, it, expect, vi } from 'vitest';
 
 import { createDisconnectedStatus } from '../../src/connection/types.js';
-import type { ToolContext } from '../../src/tools/ToolDefinition.js';
+import type { ElementTarget } from '../../src/elements/index.js';
+import type { PageStateOperation, ToolContext } from '../../src/tools/ToolDefinition.js';
 import { SimpleToolResponse } from '../../src/tools/ToolDefinition.js';
 import { evaluateScript } from '../../src/tools/script.js';
 
@@ -16,9 +18,9 @@ describe('Script Tool Unit Tests', () => {
   const DEFAULT_RESULT = Symbol('default');
   const createMockContext = (evaluateResult: any = DEFAULT_RESULT): ToolContext => ({
     miniProgram: {
-      evaluate: vi.fn().mockResolvedValue(
-        evaluateResult === DEFAULT_RESULT ? { success: true } : evaluateResult
-      ),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue(evaluateResult === DEFAULT_RESULT ? { success: true } : evaluateResult),
     } as any,
     currentPage: null,
     elementMap: new Map(),
@@ -46,10 +48,19 @@ describe('Script Tool Unit Tests', () => {
       syncFromRemote: vi.fn(async () => 0),
       getRequests: vi.fn(() => []),
       getCurrentCount: vi.fn(() => 0),
+      stopRemoteMonitoring: vi.fn(async () => 0),
     })),
     clearNetworkRequests: vi.fn(),
     getElementByUid: vi.fn(async () => {
       throw new Error('getElementByUid not implemented in mock context');
+    }),
+    getElementByTarget: vi.fn(async () => {
+      throw new Error('getElementByTarget not implemented in mock context');
+    }),
+    getPageRevision: vi.fn(() => 0),
+    markPageMutation: vi.fn(),
+    syncCurrentPage: vi.fn(async () => {
+      throw new Error('syncCurrentPage not implemented in mock context');
     }),
     connectDevtools: vi.fn(async () => {
       throw new Error('connectDevtools not implemented in mock context');
@@ -88,16 +99,44 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext(42);
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => 42' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => 42' } }, response, context);
 
       expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => 42');
       const responseText = response.getResponseText();
       expect(responseText).toContain('执行成功');
       expect(responseText).toContain('42');
+    });
+
+    it('应在页面状态事务内执行脚本，避免插入元素读写临界区', async () => {
+      const context = createMockContext(42);
+      const pageState: PageStateOperation = {
+        synchronizePageState: vi.fn(async () => {
+          throw new Error('script transaction does not synchronize page state');
+        }),
+        registerElementMap: vi.fn(),
+        withElementByTargetOperation: async <T>(
+          _target: ElementTarget,
+          _operation: (element: Element) => Promise<T>
+        ): Promise<T> => {
+          throw new Error('script transaction does not resolve element targets');
+        },
+      };
+      let pageStateOperationCalls = 0;
+      context.withPageStateOperation = async <T>(
+        operation: (activePageState: PageStateOperation) => Promise<T>
+      ): Promise<T> => {
+        pageStateOperationCalls += 1;
+        return operation(pageState);
+      };
+
+      await evaluateScript.handler(
+        { params: { function: '() => 42' } },
+        createMockResponse(),
+        context
+      );
+
+      expect(pageStateOperationCalls).toBe(1);
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => 42');
     });
 
     it('应该执行返回字符串的函数', async () => {
@@ -157,17 +196,14 @@ describe('Script Tool Unit Tests', () => {
         {
           params: {
             function: '(key) => key',
-            args: ['test-key']
-          }
+            args: ['test-key'],
+          },
         },
         response,
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
-        '(key) => key',
-        'test-key'
-      );
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('(key) => key', 'test-key');
       const responseText = response.getResponseText();
       expect(responseText).toContain('test-key');
     });
@@ -180,8 +216,8 @@ describe('Script Tool Unit Tests', () => {
         {
           params: {
             function: '(key, value) => ({ key, value })',
-            args: ['test', 123]
-          }
+            args: ['test', 123],
+          },
         },
         response,
         context
@@ -203,17 +239,14 @@ describe('Script Tool Unit Tests', () => {
         {
           params: {
             function: '(obj) => obj',
-            args: [complexArg]
-          }
+            args: [complexArg],
+          },
         },
         response,
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
-        '(obj) => obj',
-        complexArg
-      );
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('(obj) => obj', complexArg);
     });
 
     it('应该处理空参数数组', async () => {
@@ -224,8 +257,8 @@ describe('Script Tool Unit Tests', () => {
         {
           params: {
             function: '() => true',
-            args: []
-          }
+            args: [],
+          },
         },
         response,
         context
@@ -241,8 +274,8 @@ describe('Script Tool Unit Tests', () => {
       await evaluateScript.handler(
         {
           params: {
-            function: '() => false'
-          }
+            function: '() => false',
+          },
         },
         response,
         context
@@ -260,8 +293,8 @@ describe('Script Tool Unit Tests', () => {
       await evaluateScript.handler(
         {
           params: {
-            function: 'async () => "async result"'
-          }
+            function: 'async () => "async result"',
+          },
         },
         response,
         context
@@ -278,8 +311,8 @@ describe('Script Tool Unit Tests', () => {
       await evaluateScript.handler(
         {
           params: {
-            function: '() => Promise.resolve({ status: "success" })'
-          }
+            function: '() => Promise.resolve({ status: "success" })',
+          },
         },
         response,
         context
@@ -297,27 +330,17 @@ describe('Script Tool Unit Tests', () => {
       const response = createMockResponse();
 
       await expect(
-        evaluateScript.handler(
-          { params: { function: '() => true' } },
-          response,
-          context
-        )
+        evaluateScript.handler({ params: { function: '() => true' } }, response, context)
       ).rejects.toThrow('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
     });
 
     it('应该处理执行错误', async () => {
       const context = createMockContext();
-      context.miniProgram!.evaluate = vi.fn().mockRejectedValue(
-        new Error('脚本语法错误')
-      );
+      context.miniProgram!.evaluate = vi.fn().mockRejectedValue(new Error('脚本语法错误'));
       const response = createMockResponse();
 
       await expect(
-        evaluateScript.handler(
-          { params: { function: '() => {' } },
-          response,
-          context
-        )
+        evaluateScript.handler({ params: { function: '() => {' } }, response, context)
       ).rejects.toThrow('脚本执行失败');
     });
 
@@ -331,11 +354,7 @@ describe('Script Tool Unit Tests', () => {
 
       // JSON.stringify会抛出错误
       await expect(
-        evaluateScript.handler(
-          { params: { function: '() => circularObject' } },
-          response,
-          context
-        )
+        evaluateScript.handler({ params: { function: '() => circularObject' } }, response, context)
       ).rejects.toThrow();
     });
   });
@@ -363,11 +382,7 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext(null);
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => null' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => null' } }, response, context);
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('AppService');
@@ -380,11 +395,7 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext(null);
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => null' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => null' } }, response, context);
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('null');
@@ -396,11 +407,7 @@ describe('Script Tool Unit Tests', () => {
 
       // undefined 应该能正常处理，不抛出错误
       await expect(
-        evaluateScript.handler(
-          { params: { function: '() => undefined' } },
-          response,
-          context
-        )
+        evaluateScript.handler({ params: { function: '() => undefined' } }, response, context)
       ).resolves.toBeUndefined();
 
       // 验证响应中包含执行成功的消息
@@ -412,11 +419,7 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext(true);
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => true' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => true' } }, response, context);
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('true');
@@ -426,11 +429,7 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext({});
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => ({})' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => ({})' } }, response, context);
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('{}');
@@ -440,11 +439,7 @@ describe('Script Tool Unit Tests', () => {
       const context = createMockContext([]);
       const response = createMockResponse();
 
-      await evaluateScript.handler(
-        { params: { function: '() => []' } },
-        response,
-        context
-      );
+      await evaluateScript.handler({ params: { function: '() => []' } }, response, context);
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('[]');

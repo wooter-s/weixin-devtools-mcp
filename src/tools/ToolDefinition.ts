@@ -3,26 +3,21 @@
  * 参考 chrome-devtools-mcp 的设计模式
  */
 
-import type { MiniProgram, Page, Element } from 'miniprogram-automator'
-import type { z } from 'zod'
+import type { MiniProgram, Page, Element } from 'miniprogram-automator';
+import type { z } from 'zod';
 
+import type { ToolCategory } from '../config/tool-category.js';
 import type {
   ConnectionConnectResult,
   ConnectionRequest,
-  ConnectionStatusSnapshot
+  ConnectionStatusSnapshot,
 } from '../connection/index.js';
-import type { ElementMapInfo, PageSnapshot } from '../tools.js'
+import type { ElementTarget } from '../elements/index.js';
+import type { ElementMapInfo, PageSnapshot, PageStateCommit } from '../tools.js';
 
-/**
- * 工具分类枚举
- * 参考 chrome-devtools-mcp 的按类别暴露机制
- */
-export enum ToolCategory {
-  CORE = 'core',
-  CONSOLE = 'console',
-  NETWORK = 'network',
-  DEBUG = 'debug',
-}
+import { createToolResultSchema, jsonObjectSchema, type JsonObject } from './result.js';
+
+export { ToolCategory } from '../config/tool-category.js';
 
 /**
  * 工具注解接口
@@ -31,6 +26,11 @@ export interface ToolAnnotations {
   category: ToolCategory;
   audience?: string[];
   experimental?: boolean;
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
 }
 
 /**
@@ -59,10 +59,10 @@ export type ConsoleMessageType =
  * Console消息接口（带 Stable ID）
  */
 export interface ConsoleMessage {
-  msgid?: number;  // Stable ID，用于两阶段查询
+  msgid?: number; // Stable ID，用于两阶段查询
   type: ConsoleMessageType;
-  message?: string;  // 格式化的消息文本
-  args: unknown[];  // console.log 参数可以是任意类型
+  message?: string; // 格式化的消息文本
+  args: unknown[]; // console.log 参数可以是任意类型
   timestamp: string;
   source?: string;
 }
@@ -71,7 +71,7 @@ export interface ConsoleMessage {
  * Exception异常信息（带 Stable ID）
  */
 export interface ExceptionMessage {
-  msgid?: number;  // Stable ID，用于两阶段查询
+  msgid?: number; // Stable ID，用于两阶段查询
   message: string;
   stack?: string;
   timestamp: string;
@@ -102,7 +102,7 @@ export interface ConsoleStorage {
   startTime: string | null;
 
   // 配置
-  maxNavigations: number;  // 最多保留的导航会话数，默认3
+  maxNavigations: number; // 最多保留的导航会话数，默认3
 
   // ID 生成器
   idGenerator?: () => number;
@@ -122,18 +122,18 @@ export interface NetworkRequest {
   url: string;
   method?: string;
   headers?: Record<string, string>;
-  data?: unknown;  // 请求体数据，可以是任意类型
-  params?: Record<string, unknown>;  // Mpx框架的查询参数
+  data?: unknown; // 请求体数据，可以是任意类型
+  params?: Record<string, unknown>; // Mpx框架的查询参数
   statusCode?: number;
-  response?: unknown;  // 响应数据，可以是任意类型
-  responseHeaders?: Record<string, string>;  // 响应头
+  response?: unknown; // 响应数据，可以是任意类型
+  responseHeaders?: Record<string, string>; // 响应头
   error?: string;
   duration?: number;
   timestamp: string;
-  completedAt?: string;  // 完成时间
+  completedAt?: string; // 完成时间
   success: boolean;
-  pending?: boolean;  // 是否等待响应中
-  source?: string;  // 请求来源（wx.request, getApp().$xfetch等）
+  pending?: boolean; // 是否等待响应中
+  source?: string; // 请求来源（wx.request, getApp().$xfetch等）
 }
 
 /**
@@ -161,6 +161,7 @@ export interface NetworkStorage {
  */
 export interface NetworkCollectorContext {
   syncFromRemote(includePreserved: boolean): Promise<number>;
+  stopRemoteMonitoring(options?: { clearLogs?: boolean }): Promise<number>;
   getRequests(options?: {
     includePreserved?: boolean;
     types?: NetworkRequestType[];
@@ -170,6 +171,26 @@ export interface NetworkCollectorContext {
     since?: string;
   }): NetworkRequest[];
   getCurrentCount(): number;
+}
+
+export interface PageStateOperation {
+  /** 在已持有页面状态队列时同步 DOM epoch，避免再次入队造成自锁。 */
+  synchronizePageState(options?: {
+    mode?: 'guard' | 'snapshot';
+    forceRefresh?: boolean;
+  }): Promise<PageStateCommit>;
+
+  /** 在当前页面状态事务内注册查询产生的 ref generation。 */
+  registerElementMap(
+    elementMap: Map<string, ElementMapInfo>,
+    expectations?: { expectedRevision?: number; expectedPath?: string }
+  ): void;
+
+  /** 在当前页面状态事务内完成 target guard、解析与读取/动作。 */
+  withElementByTargetOperation<T>(
+    target: ElementTarget,
+    operation: (element: Element) => Promise<T>
+  ): Promise<T>;
 }
 
 export interface ToolContext {
@@ -229,6 +250,39 @@ export interface ToolContext {
    * @throws 如果页面未连接、UID 不存在、元素未找到等
    */
   getElementByUid(uid: string): Promise<Element>;
+
+  /** 使用统一 target 解析器定位元素，并执行 pageRevision/fingerprint 校验。 */
+  getElementByTarget(target: ElementTarget): Promise<Element>;
+
+  /** 在同一页面状态临界区内完成 target 解析与动作；测试上下文可省略并回退。 */
+  withElementByTargetOperation?<T>(
+    target: ElementTarget,
+    operation: (element: Element) => Promise<T>
+  ): Promise<T>;
+
+  /** 将查询、ref 注册和最终 observation 作为一个页面状态事务执行。 */
+  withPageStateOperation?<T>(operation: (pageState: PageStateOperation) => Promise<T>): Promise<T>;
+
+  /** 注册一次查询产生的 ref generation，并淘汰更旧 generation。 */
+  registerElementMap?(
+    elementMap: Map<string, ElementMapInfo>,
+    expectations?: { expectedRevision?: number; expectedPath?: string }
+  ): void;
+
+  /** 当前页面引用版本。 */
+  getPageRevision(): number;
+
+  /** 已知页面变更后递增 revision 并失效旧引用。 */
+  markPageMutation(): void;
+
+  /** 从运行时同步真实活动页面。 */
+  syncCurrentPage(): Promise<Page>;
+
+  /** 原子同步 DOM epoch、快照与元素引用；生产上下文必须实现。 */
+  synchronizePageState?(options?: {
+    mode?: 'guard' | 'snapshot';
+    forceRefresh?: boolean;
+  }): Promise<PageStateCommit>;
 
   /**
    * 建立连接
@@ -301,10 +355,9 @@ export interface StructuredSnapshotMeta {
   generatedAt: string;
 }
 
-export interface StructuredContent {
-  snapshot?: StructuredSnapshotMeta;
-  [key: string]: unknown;
-}
+export type StructuredContent = JsonObject & {
+  snapshot?: StructuredSnapshotMeta & JsonObject;
+};
 
 export interface ToolResponse {
   appendResponseLine(text: string): void;
@@ -313,6 +366,55 @@ export interface ToolResponse {
   shouldIncludeSnapshot(): boolean;
   mergeStructuredContent(content: StructuredContent): void;
   getStructuredContent(): StructuredContent;
+  /** 仅供协议层复用 handler 已提交的页面状态，避免事后推进 revision。 */
+  setPageStateCommit?(commit: PageStateCommit): void;
+  getPageStateCommit?(): PageStateCommit | undefined;
+}
+
+/**
+ * 在 handler 内完成页面状态提交，并让协议层复用同一份快照。
+ * 测试/旧式 ToolContext 没有原子接口时保留 includeSnapshot 语义，由协议层兜底。
+ */
+export async function attachPageStateObservation(
+  context: ToolContext,
+  response: ToolResponse,
+  options: { mode?: 'guard' | 'snapshot'; forceRefresh?: boolean } = {},
+  pageState: Pick<PageStateOperation, 'synchronizePageState'> | ToolContext = context
+): Promise<PageStateCommit | undefined> {
+  response.setIncludeSnapshot(true);
+  if (!pageState.synchronizePageState) {
+    return undefined;
+  }
+
+  const commit = await pageState.synchronizePageState({
+    mode: options.mode ?? 'snapshot',
+    forceRefresh: options.forceRefresh ?? true,
+  });
+  response.setPageStateCommit?.(commit);
+  return commit;
+}
+
+/** 兼容测试上下文，并保证生产环境的 target 解析与后续 I/O 位于同一临界区。 */
+export function runElementTargetOperation<T>(
+  context: ToolContext,
+  target: ElementTarget,
+  operation: (element: Element) => Promise<T>
+): Promise<T> {
+  if (context.withElementByTargetOperation) {
+    return context.withElementByTargetOperation(target, operation);
+  }
+  return context.getElementByTarget(target).then(operation);
+}
+
+/** 兼容测试上下文，并让会改变/观察页面的完整业务链共享同一状态队列。 */
+export function runPageStateOperation<T>(
+  context: ToolContext,
+  operation: (pageState?: PageStateOperation) => Promise<T>
+): Promise<T> {
+  if (context.withPageStateOperation) {
+    return context.withPageStateOperation(operation);
+  }
+  return operation();
 }
 
 /**
@@ -331,6 +433,8 @@ export interface ToolDefinition {
   name: string;
   description: string;
   schema: z.ZodTypeAny;
+  dataSchema: z.ZodTypeAny;
+  outputSchema: z.ZodTypeAny;
   annotations?: ToolAnnotations;
   handler: ToolHandler<unknown>;
 }
@@ -338,17 +442,24 @@ export interface ToolDefinition {
 /**
  * 定义工具的辅助函数
  */
-export function defineTool<TSchema extends z.ZodTypeAny>(definition: {
+export function defineTool<
+  TSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny = typeof jsonObjectSchema,
+>(definition: {
   name: string;
   description: string;
   schema: TSchema;
+  outputSchema?: TOutputSchema;
   annotations?: ToolAnnotations;
   handler: ToolHandler<z.infer<TSchema>>;
 }): ToolDefinition {
+  const dataSchema = definition.outputSchema ?? jsonObjectSchema;
   return {
     name: definition.name,
     description: definition.description,
     schema: definition.schema,
+    dataSchema,
+    outputSchema: createToolResultSchema(dataSchema),
     annotations: definition.annotations,
     handler: definition.handler,
   };
@@ -358,7 +469,9 @@ export function defineTool<TSchema extends z.ZodTypeAny>(definition: {
  * 连接状态检查辅助函数
  * 替代工具模块中重复的 `if (!context.miniProgram) throw ...` 模式
  */
-export function ensureMiniProgram(context: ToolContext): asserts context is ToolContext & { miniProgram: MiniProgram } {
+export function ensureMiniProgram(
+  context: ToolContext
+): asserts context is ToolContext & { miniProgram: MiniProgram } {
   if (!context.miniProgram) {
     throw new Error('请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。');
   }
@@ -368,7 +481,9 @@ export function ensureMiniProgram(context: ToolContext): asserts context is Tool
  * 页面状态检查辅助函数
  * 替代工具模块中重复的 `if (!context.currentPage) throw ...` 模式
  */
-export function ensureCurrentPage(context: ToolContext): asserts context is ToolContext & { currentPage: Page } {
+export function ensureCurrentPage(
+  context: ToolContext
+): asserts context is ToolContext & { currentPage: Page } {
   if (!context.currentPage) {
     throw new Error('请先获取当前页面。使用 get_current_page 或 get_page_snapshot 工具。');
   }
@@ -433,6 +548,7 @@ export class SimpleToolResponse implements ToolResponse {
   private includeSnapshot = false;
   private attachedImages: Array<{ data: string; mimeType: string }> = [];
   private structuredContent: StructuredContent = {};
+  private pageStateCommit: PageStateCommit | undefined;
 
   appendResponseLine(text: string): void {
     this.responseLines.push(text);
@@ -452,6 +568,14 @@ export class SimpleToolResponse implements ToolResponse {
 
   getStructuredContent(): StructuredContent {
     return { ...this.structuredContent };
+  }
+
+  setPageStateCommit(commit: PageStateCommit): void {
+    this.pageStateCommit = commit;
+  }
+
+  getPageStateCommit(): PageStateCommit | undefined {
+    return this.pageStateCommit;
   }
 
   getResponseText(): string {

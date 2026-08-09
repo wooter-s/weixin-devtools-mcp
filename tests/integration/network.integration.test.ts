@@ -8,8 +8,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MiniProgramContext } from '../../src/MiniProgramContext.js';
 
 import { IntegrationHarness } from './helpers/integration-harness.js';
+import {
+  handleIntegrationUnavailable,
+  shouldRunIntegrationTests,
+} from './helpers/integration-mode.js';
 
-const shouldRun = process.env.RUN_INTEGRATION_TESTS === 'true';
+const shouldRun = shouldRunIntegrationTests();
 
 interface NetworkLog {
   id: string;
@@ -41,6 +45,7 @@ describe.skipIf(!shouldRun)('Network Monitoring Integration Tests', () => {
 
   async function ensureMiniProgram(): Promise<NetworkMiniProgram | null> {
     if (!runtimeReady || !context) {
+      handleIntegrationUnavailable('Network 运行时不可用', '初始连接未建立');
       return null;
     }
 
@@ -48,8 +53,9 @@ describe.skipIf(!shouldRun)('Network Monitoring Integration Tests', () => {
     if (!status.connected) {
       try {
         await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
-      } catch {
+      } catch (error) {
         runtimeReady = false;
+        handleIntegrationUnavailable('Network 重连失败', error);
         return null;
       }
     }
@@ -96,11 +102,7 @@ describe.skipIf(!shouldRun)('Network Monitoring Integration Tests', () => {
       runtimeReady = miniProgram !== null;
     } catch (error) {
       runtimeReady = false;
-      console.warn(
-        `[integration] Network 初始连接失败，后续用例将跳过: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      handleIntegrationUnavailable('Network 初始连接失败', error);
     }
   }, 180_000);
 

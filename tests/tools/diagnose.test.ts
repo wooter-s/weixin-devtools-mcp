@@ -300,6 +300,34 @@ describe('debug_connection_flow tool', () => {
     expect(response.getResponseText()).toContain('复用现有连接');
   });
 
+  it('已有连接失效时通过异步生命周期清理后再连接', async () => {
+    const response = createMockResponse();
+    const context = createMockContext({
+      miniProgram: {
+        currentPage: vi.fn(async () => {
+          throw new Error('session closed');
+        }),
+      } as any,
+    });
+
+    await debugConnectionFlowTool.handler(
+      {
+        params: {
+          projectPath,
+          mode: 'auto',
+          dryRun: false,
+          captureSnapshot: false,
+          verbose: false,
+        },
+      },
+      response as any,
+      context,
+    );
+
+    expect(context.disconnectDevtools).toHaveBeenCalledOnce();
+    expect(context.connectDevtools).toHaveBeenCalledOnce();
+  });
+
   it('连接失败时应输出错误信息并抛出异常', async () => {
     const response = createMockResponse();
     const context = createMockContext({

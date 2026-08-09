@@ -118,7 +118,7 @@ describe('MCP Protocol Tests', () => {
         expect(toolNames).toContain('disconnect_devtools');
         expect(toolNames).toContain('get_connection_status');
         expect(toolNames).toContain('get_current_page');
-        expect(toolNames).toContain('query_selector');
+        expect(toolNames).toContain('find_elements');
         expect(toolNames).toContain('wait_for');
         expect(toolNames).toContain('get_page_snapshot');
         expect(toolNames).toContain('click');
@@ -199,19 +199,19 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('query_selector 工具应该有正确的 schema', async () => {
+    it('find_elements 工具应该有正确的 locator schema', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
-        const tool = tools.find(t => t.name === 'query_selector');
+        const tool = tools.find(t => t.name === 'find_elements');
 
         expect(tool).toBeDefined();
         if (!tool) {
-          throw new Error('query_selector tool not found');
+          throw new Error('find_elements tool not found');
         }
 
         const props = tool.inputSchema.properties ?? {};
-        expect(props.selector).toBeDefined();
-        expect(tool.inputSchema.required).toContain('selector');
+        expect(props.locator).toBeDefined();
+        expect(tool.inputSchema.required).toContain('locator');
       });
     });
 
@@ -226,7 +226,7 @@ describe('MCP Protocol Tests', () => {
         }
 
         const props = tool.inputSchema.properties ?? {};
-        expect(props.selector).toBeDefined();
+        expect(props.target).toBeDefined();
         expect(props.delay).toBeDefined();
         expect(props.timeout).toBeDefined();
         expect(props.disappear).toBeDefined();
@@ -310,6 +310,24 @@ describe('MCP Protocol Tests', () => {
   });
 
   describe('Error Handling', () => {
+    it('官方 SDK 客户端缓存 outputSchema 后仍能读取结构化工具错误', async () => {
+      await withClient(async (client) => {
+        await client.listTools();
+        const result = await client.callTool({
+          name: 'get_current_page',
+          arguments: {},
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          schemaVersion: '1.0',
+          ok: false,
+          code: 'NOT_CONNECTED',
+          data: null,
+        });
+      });
+    });
+
     it('调用不存在的工具应该返回错误', async () => {
       await withClient(async (client) => {
         try {
@@ -326,18 +344,39 @@ describe('MCP Protocol Tests', () => {
 
     it('传递错误的参数类型应该返回错误', async () => {
       await withClient(async (client) => {
-        try {
-          await client.callTool({
-            name: 'connect_devtools',
-            arguments: {
-              projectPath: 123,
-              strategy: 'auto'
-            }
-          });
-          expect.fail('应该抛出错误');
-        } catch (error) {
-          expect(error).toBeDefined();
-        }
+        const result = await client.callTool({
+          name: 'connect_devtools',
+          arguments: {
+            projectPath: 123,
+            strategy: 'auto'
+          }
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          ok: false,
+          code: 'INVALID_ARGUMENT',
+          data: null,
+        });
+      });
+    });
+
+    it('input_text 的 replace 模式缺少 text 时返回 INVALID_ARGUMENT', async () => {
+      await withClient(async (client) => {
+        const result = await client.callTool({
+          name: 'input_text',
+          arguments: {
+            target: { kind: 'selector', value: 'input' },
+            mode: 'replace',
+          },
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          ok: false,
+          code: 'INVALID_ARGUMENT',
+          data: null,
+        });
       });
     });
 

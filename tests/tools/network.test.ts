@@ -59,6 +59,7 @@ function createBaseContext() {
     syncFromRemote: vi.fn(async () => 2),
     getRequests: vi.fn(() => requests),
     getCurrentCount: vi.fn(() => requests.length),
+    stopRemoteMonitoring: vi.fn(async () => 0),
   };
 
   return {
@@ -186,6 +187,27 @@ describe('network tools', () => {
     ).rejects.toThrow('successOnly 与 failedOnly 不能同时为 true');
   });
 
+  it('list_network_requests 远程同步失败时不返回空列表假成功', async () => {
+    const syncError = new Error('connection lost');
+    context.__collector.syncFromRemote.mockRejectedValueOnce(syncError);
+
+    await expect(listNetworkRequestsTool.handler(
+      {
+        params: {
+          pageSize: 10,
+          pageIdx: 0,
+          includePreservedRequests: false,
+          successOnly: false,
+          failedOnly: false,
+        },
+      },
+      createMockResponse() as any,
+      context as any,
+    )).rejects.toBe(syncError);
+
+    expect(context.__collector.getRequests).not.toHaveBeenCalled();
+  });
+
   it('get_network_request 返回指定 reqid 的详情', async () => {
     const response = createMockResponse();
 
@@ -222,7 +244,20 @@ describe('network tools', () => {
     ).rejects.toThrow('未找到 reqid=missing-id 的请求');
   });
 
-  it('stop_network_monitoring 会禁用拦截并更新状态', async () => {
+  it('get_network_request 远程同步失败时不返回本地旧详情', async () => {
+    const syncError = new Error('connection lost');
+    context.__collector.syncFromRemote.mockRejectedValueOnce(syncError);
+
+    await expect(getNetworkRequestTool.handler(
+      { params: { reqid: 'req_1' } },
+      createMockResponse() as any,
+      context as any,
+    )).rejects.toBe(syncError);
+
+    expect(context.__collector.getRequests).not.toHaveBeenCalled();
+  });
+
+  it('stop_network_monitoring 会委托 collector 禁用远程监听', async () => {
     const response = createMockResponse();
 
     await stopNetworkMonitoringTool.handler(
@@ -235,8 +270,7 @@ describe('network tools', () => {
       context as any
     );
 
-    expect(context.networkStorage.isMonitoring).toBe(false);
-    expect(context.miniProgram.evaluate).toHaveBeenCalled();
+    expect(context.__collector.stopRemoteMonitoring).toHaveBeenCalledWith({ clearLogs: false });
     expect(response.getResponseText()).toContain('网络监听已停止');
   });
 

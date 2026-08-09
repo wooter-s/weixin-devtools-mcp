@@ -12,10 +12,12 @@ import type { PageSnapshot } from '../../src/tools.js';
 
 // 测试数据
 const mockSnapshot: PageSnapshot = {
+  snapshotId: 'snap_test',
+  pageRevision: 1,
   path: 'pages/index/index',
   elements: [
     {
-      uid: 'view.container',
+      ref: 'view.container',
       tagName: 'view',
       text: 'Welcome to our app',
       attributes: {
@@ -30,7 +32,7 @@ const mockSnapshot: PageSnapshot = {
       },
     },
     {
-      uid: 'button.submit',
+      ref: 'button.submit',
       tagName: 'button',
       text: 'Submit',
       attributes: {
@@ -45,7 +47,7 @@ const mockSnapshot: PageSnapshot = {
       },
     },
     {
-      uid: 'input#username',
+      ref: 'input#username',
       tagName: 'input',
       attributes: {
         id: 'username',
@@ -71,15 +73,15 @@ describe('formatSnapshot', () => {
       expect(result).toContain('# Elements: 3');
 
       // 验证元素信息
-      expect(result).toContain('uid=view.container view');
+      expect(result).toContain('ref=view.container view');
       expect(result).toContain('"Welcome to our app"');
       expect(result).toContain('pos=[0,64]');
       expect(result).toContain('size=[375x667]');
 
-      expect(result).toContain('uid=button.submit button');
+      expect(result).toContain('ref=button.submit button');
       expect(result).toContain('"Submit"');
 
-      expect(result).toContain('uid=input#username input');
+      expect(result).toContain('ref=input#username input');
     });
 
     it('应该支持不包含位置信息', () => {
@@ -90,7 +92,7 @@ describe('formatSnapshot', () => {
 
       expect(result).not.toContain('pos=[');
       expect(result).not.toContain('size=[');
-      expect(result).toContain('uid=view.container');
+      expect(result).toContain('ref=view.container');
     });
 
     it('应该支持包含属性信息', () => {
@@ -106,10 +108,12 @@ describe('formatSnapshot', () => {
 
     it('应该正确转义特殊字符', () => {
       const snapshotWithSpecialChars: PageSnapshot = {
+        snapshotId: 'snap_special',
+        pageRevision: 1,
         path: 'pages/test/test',
         elements: [
           {
-            uid: 'text.special',
+            ref: 'text.special',
             tagName: 'text',
             text: 'Line 1\nLine 2\tTab"Quote\\Backslash',
           },
@@ -129,10 +133,12 @@ describe('formatSnapshot', () => {
     it('应该限制超长文本', () => {
       const longText = 'a'.repeat(200);
       const snapshotWithLongText: PageSnapshot = {
+        snapshotId: 'snap_long',
+        pageRevision: 1,
         path: 'pages/test/test',
         elements: [
           {
-            uid: 'text.long',
+            ref: 'text.long',
             tagName: 'text',
             text: longText,
           },
@@ -159,7 +165,7 @@ describe('formatSnapshot', () => {
       expect(result).toContain('# Page: pages/index/index');
       expect(result).toContain('# Elements: 3');
 
-      // 验证元素信息（只有uid、tagName、text）
+      // 验证元素信息（只有 ref、tagName、text）
       expect(result).toContain('view.container view "Welcome to our app"');
       expect(result).toContain('button.submit button "Submit"');
       expect(result).toContain('input#username input');
@@ -172,10 +178,12 @@ describe('formatSnapshot', () => {
 
     it('应该处理没有文本的元素', () => {
       const snapshotWithoutText: PageSnapshot = {
+        snapshotId: 'snap_empty_text',
+        pageRevision: 1,
         path: 'pages/test/test',
         elements: [
           {
-            uid: 'view.empty',
+            ref: 'view.empty',
             tagName: 'view',
           },
         ],
@@ -207,7 +215,7 @@ describe('formatSnapshot', () => {
 
       const parsed = JSON.parse(result);
       expect(parsed.elements[0]).not.toHaveProperty('position');
-      expect(parsed.elements[0]).toHaveProperty('uid');
+      expect(parsed.elements[0]).toHaveProperty('ref');
       expect(parsed.elements[0]).toHaveProperty('tagName');
     });
 
@@ -267,7 +275,7 @@ describe('formatSnapshot', () => {
       const result = formatSnapshot(mockSnapshot);
 
       expect(result).toContain('# Page: pages/index/index');
-      expect(result).toContain('uid=view.container');
+      expect(result).toContain('ref=view.container');
       expect(result).toContain('pos=[0,64]');
     });
   });
@@ -297,9 +305,11 @@ describe('estimateTokens', () => {
 
   it('应该处理大量元素', () => {
     const largeSnapshot: PageSnapshot = {
+      snapshotId: 'snap_large',
+      pageRevision: 1,
       path: 'pages/large/large',
       elements: Array.from({ length: 100 }, (_, i) => ({
-        uid: `element${i}`,
+        ref: `element${i}`,
         tagName: 'view',
         text: `Element ${i}`,
         position: { left: 0, top: i * 50, width: 375, height: 50 },
@@ -317,6 +327,8 @@ describe('estimateTokens', () => {
 describe('edge cases', () => {
   it('应该处理空快照', () => {
     const emptySnapshot: PageSnapshot = {
+      snapshotId: 'snap_empty',
+      pageRevision: 1,
       path: 'pages/empty/empty',
       elements: [],
     };
@@ -331,10 +343,12 @@ describe('edge cases', () => {
 
   it('应该处理只有必需字段的元素', () => {
     const minimalSnapshot: PageSnapshot = {
+      snapshotId: 'snap_minimal',
+      pageRevision: 1,
       path: 'pages/minimal/minimal',
       elements: [
         {
-          uid: 'view.simple',
+          ref: 'view.simple',
           tagName: 'view',
         },
       ],
@@ -342,17 +356,19 @@ describe('edge cases', () => {
 
     const result = formatSnapshot(minimalSnapshot, { format: 'compact' });
 
-    expect(result).toContain('uid=view.simple view');
+    expect(result).toContain('ref=view.simple view');
     expect(result).not.toContain('pos=[');
     expect(result).not.toContain('"'); // 无文本内容
   });
 
   it('应该处理特殊页面路径', () => {
     const specialPathSnapshot: PageSnapshot = {
+      snapshotId: 'snap_special_path',
+      pageRevision: 1,
       path: 'pages/nested/sub/deep/index',
       elements: [
         {
-          uid: 'view.test',
+          ref: 'view.test',
           tagName: 'view',
         },
       ],

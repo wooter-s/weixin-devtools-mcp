@@ -97,11 +97,8 @@ declare module 'miniprogram-automator' {
      */
     navigateTo(url: string): Promise<void>;
 
-    /**
-     * 返回上一页
-     * @param delta 返回的页面层数，默认 1
-     */
-    navigateBack(delta?: number): Promise<void>;
+    /** 返回上一页。当前 SDK 公共方法不接收 delta 参数。 */
+    navigateBack(): Promise<void>;
 
     /**
      * 切换到指定 tab 页面
@@ -299,8 +296,8 @@ declare module 'miniprogram-automator' {
     /** 元素标签名 */
     tagName: string;
 
-    /** 元素值（用于表单元素） */
-    value?: string;
+    /** 获取元素值（用于表单元素）。 */
+    value(): Promise<unknown>;
 
     /**
      * 获取元素的文本内容
@@ -312,6 +309,12 @@ declare module 'miniprogram-automator' {
      * @param name 属性名
      */
     attribute(name: string): Promise<string | null>;
+
+    /** 获取元素尺寸。 */
+    size(): Promise<{ width: number | string; height: number | string }>;
+
+    /** 获取元素相对页面偏移。 */
+    offset(): Promise<{ left: number | string; top: number | string }>;
 
     /**
      * 获取元素的 WXML

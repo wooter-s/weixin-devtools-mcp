@@ -20,16 +20,18 @@ describe('getPageSnapshotTool', () => {
 
   const baseSnapshotResult = {
     snapshot: {
+      snapshotId: 'snap_test',
+      pageRevision: 1,
       path: 'pages/test/test',
       elements: [
         {
-          uid: 'view.container',
+          ref: 'view.container',
           tagName: 'view',
           text: 'Test View',
           position: { left: 0, top: 0, width: 375, height: 667 }
         },
         {
-          uid: 'button.submit',
+          ref: 'button.submit',
           tagName: 'button',
           text: 'Submit',
           position: { left: 100, top: 400, width: 175, height: 44 }
@@ -80,18 +82,30 @@ describe('getPageSnapshotTool', () => {
         syncFromRemote: vi.fn(async () => 0),
         getRequests: vi.fn(() => []),
         getCurrentCount: vi.fn(() => 0),
+        stopRemoteMonitoring: vi.fn(async () => 0),
       })),
       clearNetworkRequests: vi.fn(),
-      getPageSnapshotCached: vi.fn(async () => ({
-        snapshot: {
-          ...baseSnapshotResult.snapshot,
-          elements: [...baseSnapshotResult.snapshot.elements],
-        },
-        elementMap: new Map(baseSnapshotResult.elementMap),
-      })),
+      getPageSnapshotCached: vi.fn(async () => {
+        const result = {
+          snapshot: {
+            ...baseSnapshotResult.snapshot,
+            elements: [...baseSnapshotResult.snapshot.elements],
+          },
+          elementMap: new Map(baseSnapshotResult.elementMap),
+        };
+        // 真实 MiniProgramContext 在生成快照时统一替换 ref 映射。
+        context.elementMap = result.elementMap;
+        return result;
+      }),
       getElementByUid: vi.fn(async () => {
         throw new Error('getElementByUid not implemented in snapshot test');
       }),
+      getElementByTarget: vi.fn(async () => {
+        throw new Error('getElementByTarget not implemented in snapshot test');
+      }),
+      getPageRevision: vi.fn(() => 1),
+      markPageMutation: vi.fn(),
+      syncCurrentPage: vi.fn(async () => context.currentPage!),
       connectDevtools: vi.fn(async () => {
         throw new Error('connectDevtools not implemented in snapshot test');
       }),
@@ -142,14 +156,15 @@ describe('getPageSnapshotTool', () => {
       expect(responseText).toContain('pages/test/test');
       expect(responseText).toContain('元素数量: 2');
       expect(responseText).toContain('输出格式: compact');
-      expect(responseText).toMatch(/uid=view\.container/);
-      expect(responseText).toMatch(/uid=button\.submit/);
+      expect(responseText).toMatch(/ref=view\.container/);
+      expect(responseText).toMatch(/ref=button\.submit/);
 
       // 验证 elementMap 已更新
       expect(context.getPageSnapshotCached).toHaveBeenCalledWith({ forceRefresh: true });
       expect(context.elementMap.size).toBe(2);
       expect(context.elementMap.has('view.container')).toBe(true);
       expect(context.elementMap.has('button.submit')).toBe(true);
+      expect(context.syncCurrentPage).toHaveBeenCalledOnce();
     });
 
     it('应该在没有当前页面时抛出错误', async () => {
@@ -171,7 +186,7 @@ describe('getPageSnapshotTool', () => {
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('输出格式: compact');
-      expect(responseText).toMatch(/uid=\w+/);
+      expect(responseText).toMatch(/ref=\w+/);
       expect(responseText).toMatch(/pos=\[/); // 默认包含位置信息
     });
 
@@ -227,10 +242,12 @@ describe('getPageSnapshotTool', () => {
       // 修改 mock 数据包含属性
       vi.mocked(context.getPageSnapshotCached!).mockResolvedValueOnce({
         snapshot: {
+          snapshotId: 'snap_attributes',
+          pageRevision: 1,
           path: 'pages/test/test',
           elements: [
             {
-              uid: 'button.submit',
+              ref: 'button.submit',
               tagName: 'button',
               text: 'Submit',
               attributes: {
@@ -266,8 +283,10 @@ describe('getPageSnapshotTool', () => {
 
       const responseText = response.getResponseText();
       expect(responseText).toContain('元素数量: 1');
-      expect(responseText).toMatch(/uid=view\.container/);
-      expect(responseText).not.toMatch(/uid=button\.submit/);
+      expect(responseText).toMatch(/ref=view\.container/);
+      expect(responseText).not.toMatch(/ref=button\.submit/);
+      expect(context.elementMap.size).toBe(2);
+      expect(context.elementMap.has('button.submit')).toBe(true);
     });
 
     it('应该支持保存到文件', async () => {
@@ -384,7 +403,7 @@ describe('getPageSnapshotTool', () => {
     it('当 getPageSnapshotCached 返回与 context.elementMap 同一引用时仍应正确填充（回归：clear 别名 bug）', async () => {
       // 复现真实场景：MiniProgramContext.getPageSnapshotCached 内部执行
       // this.#elementMap = elementMap，使返回的 elementMap 与 context.elementMap 指向同一个 Map 实例。
-      // 修复前 handler 先 clear() 再 forEach 同一引用，会把正在遍历的集合清空，导致 UID 全部丢失。
+      // 修复前 handler 先 clear() 再 forEach 同一引用，会把正在遍历的集合清空，导致 ref 全部丢失。
       vi.mocked(context.getPageSnapshotCached!).mockImplementationOnce(async () => {
         const sharedMap = new Map([
           ['view.container', { selector: 'view.container', index: 0 }],
@@ -432,6 +451,8 @@ describe('getPageSnapshotTool', () => {
     it('应该处理空页面（无元素）', async () => {
       vi.mocked(context.getPageSnapshotCached!).mockResolvedValueOnce({
         snapshot: {
+          snapshotId: 'snap_empty',
+          pageRevision: 1,
           path: 'pages/empty/empty',
           elements: []
         },

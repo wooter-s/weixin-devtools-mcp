@@ -6,43 +6,159 @@
 import { z } from 'zod';
 
 import {
+  elementTargetSchema,
+  elementTargetToSelector,
+  type ElementTarget,
+} from '../elements/index.js';
+import {
   queryElements,
-  waitForCondition,
+  type PageStateCommit,
   type QueryOptions,
-  type WaitForOptions
+  type QueryResult,
 } from '../tools.js';
 
-import { defineTool, ToolCategory, ensureCurrentPage, extractErrorMessage, DEFAULT_WAIT_TIMEOUT, ResponseFormatter } from './ToolDefinition.js';
+import {
+  attachPageStateObservation,
+  defineTool,
+  ToolCategory,
+  ensureCurrentPage,
+  extractErrorMessage,
+  DEFAULT_WAIT_TIMEOUT,
+  ResponseFormatter,
+  runElementTargetOperation,
+  type PageStateOperation,
+} from './ToolDefinition.js';
+import { jsonValueSchema, ToolResultError, toJsonValue } from './result.js';
+
+function locatorSelector(locator: Exclude<ElementTarget, { kind: 'ref' }>): string {
+  if (locator.kind === 'text') return locator.tagName ?? '*';
+  return elementTargetToSelector(locator);
+}
+
+function elementResolutionCode(error: unknown): string | null {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : null;
+}
 
 /**
  * $ 选择器工具 - 通过CSS选择器查找页面元素
  */
-export const querySelectorTool = defineTool({
-  name: 'query_selector',
-  description: '通过CSS选择器查找页面元素，返回匹配元素的详细信息',
+export const findElementsTool = defineTool({
+  name: 'find_elements',
+  description: '通过 selector、id、testId、text 或 ref 查找页面元素并返回 opaque ref',
+  // 保持根节点为 MCP 规范要求的 object；组合参数约束由 handler 返回稳定 INVALID_ARGUMENT。
   schema: z.object({
-    selector: z.string().min(1, '选择器不能为空').describe('CSS选择器，如：view.container、#myId、.myClass、text=按钮'),
+    locator: elementTargetSchema,
+  }),
+  outputSchema: z.object({
+    pageRevision: z.number().int().nonnegative(),
+    count: z.number().int().nonnegative(),
+    elements: z.array(jsonValueSchema),
   }),
   annotations: {
     category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { selector } = request.params;
-
-    // 验证选择器
-    if (!selector || typeof selector !== 'string' || selector.trim() === '') {
-      throw new Error('选择器不能为空');
-    }
-
-    ensureCurrentPage(context);
+    const { locator } = request.params;
 
     try {
-      const options: QueryOptions = { selector };
-      const results = await queryElements(context.currentPage, context.elementMap, options);
+      const executeQuery = async (
+        pageState?: PageStateOperation
+      ): Promise<{
+        results: QueryResult[];
+        commit: PageStateCommit | undefined;
+      }> => {
+        let results: QueryResult[] = [];
+        let commit: PageStateCommit | undefined;
+        const synchronize =
+          pageState?.synchronizePageState.bind(pageState) ??
+          context.synchronizePageState?.bind(context);
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const baseline = synchronize
+            ? await synchronize({ mode: 'guard', forceRefresh: true })
+            : undefined;
+          if (!baseline) {
+            await context.syncCurrentPage();
+          }
+          ensureCurrentPage(context);
+          const expectedRevision = baseline?.pageRevision ?? context.getPageRevision();
+          const expectedPath = baseline?.pagePath ?? (await context.currentPage.path);
+
+          if (locator.kind === 'ref') {
+            const readRef = async (): Promise<QueryResult[]> => {
+              const operation = async (
+                element: Awaited<ReturnType<typeof context.getElementByTarget>>
+              ) => [
+                {
+                  ref: locator.ref,
+                  tagName: element.tagName,
+                  text: await element.text().catch(() => undefined),
+                },
+              ];
+              return pageState
+                ? pageState.withElementByTargetOperation(locator, operation)
+                : runElementTargetOperation(context, locator, operation);
+            };
+            results = await readRef();
+          } else {
+            const selector = locatorSelector(locator);
+            const options: QueryOptions = { selector, pageRevision: expectedRevision };
+            const queryElementMap = new Map();
+            results = await queryElements(context.currentPage, queryElementMap, options);
+            if (locator.kind === 'text') {
+              results = results.filter((element) =>
+                locator.exact === false
+                  ? element.text?.includes(locator.value)
+                  : element.text === locator.value
+              );
+            }
+            const index = 'index' in locator ? locator.index : undefined;
+            if (index !== undefined) results = results[index] ? [results[index]] : [];
+
+            const returnedRefs = new Set(results.map((element) => element.ref));
+            for (const ref of queryElementMap.keys()) {
+              if (!returnedRefs.has(ref)) queryElementMap.delete(ref);
+            }
+            const registerElementMap =
+              pageState?.registerElementMap.bind(pageState) ??
+              context.registerElementMap?.bind(context);
+            if (registerElementMap) {
+              try {
+                registerElementMap(queryElementMap, { expectedRevision, expectedPath });
+              } catch (error) {
+                if (elementResolutionCode(error) === 'STALE_ELEMENT' && attempt < 2) {
+                  continue;
+                }
+                throw error;
+              }
+            } else {
+              for (const [ref, info] of queryElementMap) context.elementMap.set(ref, info);
+            }
+          }
+
+          commit = await attachPageStateObservation(context, response, {}, pageState ?? context);
+          if (!commit?.domChanged) break;
+          if (attempt === 2) {
+            throw new ToolResultError('STALE_ELEMENT', '页面在查询期间持续变化，请刷新快照后重试');
+          }
+        }
+        return { results, commit };
+      };
+
+      const { results, commit } = context.withPageStateOperation
+        ? await context.withPageStateOperation(executeQuery)
+        : await executeQuery();
 
       if (results.length === 0) {
-        response.appendResponseLine(`未找到匹配选择器 "${selector}" 的元素`);
+        response.appendResponseLine(`未找到匹配 locator ${JSON.stringify(locator)} 的元素`);
+        response.mergeStructuredContent({
+          pageRevision: commit?.pageRevision ?? context.getPageRevision(),
+          count: 0,
+          elements: [],
+        });
         return;
       }
 
@@ -51,7 +167,7 @@ export const querySelectorTool = defineTool({
 
       for (let i = 0; i < results.length; i++) {
         const element = results[i];
-        response.appendResponseLine(`[${i + 1}] ${element.tagName} (uid: ${element.uid})`);
+        response.appendResponseLine(`[${i + 1}] ${element.tagName} (ref: ${element.ref})`);
 
         if (element.text) {
           response.appendResponseLine(`    文本: ${element.text}`);
@@ -72,9 +188,11 @@ export const querySelectorTool = defineTool({
         response.appendResponseLine('');
       }
 
-      // 查询可能会发现新元素，包含快照信息
-      response.setIncludeSnapshot(true);
-
+      response.mergeStructuredContent({
+        pageRevision: commit?.pageRevision ?? context.getPageRevision(),
+        count: results.length,
+        elements: toJsonValue(results),
+      });
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
       response.appendResponseLine(ResponseFormatter.error(`查询元素失败: ${errorMessage}`));
@@ -96,15 +214,21 @@ export const waitForTool = defineTool({
     // 2. 选择器等待: { selector: ".button" }
     // 3. 复杂条件: { selector: ".button", text: "提交", timeout: 5000 }
     delay: z.number().optional().describe('等待指定毫秒数（时间等待模式）'),
-    selector: z.string().optional().describe('等待元素选择器（选择器等待模式）'),
-    timeout: z.number().optional().default(DEFAULT_WAIT_TIMEOUT).describe(`超时时间(毫秒)，默认${DEFAULT_WAIT_TIMEOUT}ms`),
+    target: elementTargetSchema.optional().describe('等待元素目标（定位等待模式）'),
+    timeout: z
+      .number()
+      .optional()
+      .default(DEFAULT_WAIT_TIMEOUT)
+      .describe(`超时时间(毫秒)，默认${DEFAULT_WAIT_TIMEOUT}ms`),
     text: z.string().optional().describe('等待元素包含指定文本'),
     visible: z.boolean().optional().describe('等待元素可见状态，true为可见，false为隐藏'),
     disappear: z.boolean().optional().default(false).describe('等待元素消失，默认false'),
-  }).refine(
-    (data) => data.delay !== undefined || data.selector !== undefined,
-    { message: '必须提供 delay（时间等待）或 selector（选择器等待）' }
-  ),
+  }),
+  outputSchema: z.object({
+    matched: z.boolean(),
+    durationMs: z.number().nonnegative(),
+    pageRevision: z.number().int().nonnegative(),
+  }),
   annotations: {
     category: ToolCategory.CORE,
     audience: ['developers'],
@@ -112,23 +236,19 @@ export const waitForTool = defineTool({
   handler: async (request, response, context) => {
     const options = request.params;
 
-    ensureCurrentPage(context);
-
     try {
       const startTime = Date.now();
 
       // 构建等待描述信息和实际等待参数
       let waitDescription = '';
-      let waitParam: number | string | WaitForOptions;
 
       if (options.delay !== undefined) {
         // 时间等待模式
         waitDescription = `等待 ${options.delay}ms`;
-        waitParam = options.delay;
-      } else if (options.selector) {
-        // 选择器等待模式
+        await new Promise((resolve) => setTimeout(resolve, options.delay));
+      } else if (options.target) {
         const parts = [];
-        parts.push(`选择器 "${options.selector}"`);
+        parts.push(`目标 ${JSON.stringify(options.target)}`);
         if (options.disappear) parts.push('消失');
         else parts.push('出现');
         if (options.text) parts.push(`包含文本 "${options.text}"`);
@@ -139,35 +259,89 @@ export const waitForTool = defineTool({
         if (options.timeout) {
           waitDescription += ` (超时: ${options.timeout}ms)`;
         }
-
-        // 构建 WaitForOptions 参数
-        waitParam = {
-          selector: options.selector,
-          timeout: options.timeout,
-          ...(options.text && { text: options.text }),
-          ...(options.visible !== undefined && { visible: options.visible }),
-          ...(options.disappear !== undefined && { disappear: options.disappear }),
-        };
       } else {
-        throw new Error('必须提供 delay 或 selector 参数');
+        throw new ToolResultError('INVALID_ARGUMENT', '必须提供 delay 或 target 参数');
       }
 
       response.appendResponseLine(`开始 ${waitDescription}...`);
+      let result = options.delay !== undefined;
+      let matchedCommit: PageStateCommit | undefined;
+      if (options.target) {
+        const deadline = Date.now() + options.timeout;
+        while (Date.now() <= deadline) {
+          const poll = async (
+            pageState?: PageStateOperation
+          ): Promise<{
+            matched: boolean;
+            commit?: PageStateCommit;
+          }> => {
+            let candidate = false;
+            try {
+              const read = async (
+                element: Awaited<ReturnType<typeof context.getElementByTarget>>
+              ) => {
+                const textMatches =
+                  options.text === undefined || (await element.text()).includes(options.text);
+                const size = options.visible === undefined ? null : await element.size();
+                const visibleMatches =
+                  options.visible === undefined ||
+                  (Number(size?.width) > 0 && Number(size?.height) > 0) === options.visible;
+                return !options.disappear && textMatches && visibleMatches;
+              };
+              candidate = pageState
+                ? await pageState.withElementByTargetOperation(options.target!, read)
+                : await runElementTargetOperation(context, options.target!, read);
+            } catch (error) {
+              const code = elementResolutionCode(error);
+              if (code === 'ELEMENT_NOT_FOUND') {
+                candidate = options.disappear;
+              } else {
+                // 歧义、非法 target、连接错误或读取错误都不能伪装成“元素已消失”。
+                throw error;
+              }
+            }
 
-      const result = await waitForCondition(context.currentPage, waitParam);
+            if (!candidate || !pageState) return { matched: candidate };
+            const commit = await pageState.synchronizePageState({
+              mode: 'snapshot',
+              forceRefresh: true,
+            });
+            // 条件读取期间若 epoch 发生变化，使用新 epoch 再轮询一次。
+            return commit.domChanged ? { matched: false } : { matched: true, commit };
+          };
+
+          const outcome = context.withPageStateOperation
+            ? await context.withPageStateOperation(poll)
+            : await poll();
+          if (outcome.matched) {
+            result = true;
+            matchedCommit = outcome.commit;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
 
       const endTime = Date.now();
       const duration = endTime - startTime;
 
       if (result) {
+        let commit = matchedCommit;
+        if (commit) {
+          response.setIncludeSnapshot(true);
+          response.setPageStateCommit?.(commit);
+        } else {
+          commit = await attachPageStateObservation(context, response);
+        }
         response.appendResponseLine(ResponseFormatter.success(`等待成功，耗时 ${duration}ms`));
-
-        // 等待完成后，页面可能发生变化
-        response.setIncludeSnapshot(true);
+        response.mergeStructuredContent({
+          matched: true,
+          durationMs: duration,
+          pageRevision: commit?.pageRevision ?? context.getPageRevision(),
+        });
       } else {
-        response.appendResponseLine(ResponseFormatter.error(`等待失败，耗时 ${duration}ms`));
+        throw new Error(`等待条件超时，耗时 ${duration}ms`);
       }
-
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
       response.appendResponseLine(ResponseFormatter.error(`等待失败: ${errorMessage}`));

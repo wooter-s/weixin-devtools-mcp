@@ -3,10 +3,9 @@
  * 从 src/tools.ts 提取
  */
 
-import type { ElementMapInfo, QueryResult, QueryOptions, WaitForOptions } from './types.js';
-import { generateElementUid } from './snapshot.js';
-
+import { createElementRef, createSnapshotId } from '../elements/index.js';
 import { extractErrorMessage } from '../utils/error.js';
+import type { ElementMapInfo, QueryResult, QueryOptions, WaitForOptions } from './types.js';
 
 /**
  * 通过选择器查询页面元素
@@ -16,7 +15,7 @@ export async function queryElements(
   elementMap: Map<string, ElementMapInfo>,
   options: QueryOptions
 ): Promise<QueryResult[]> {
-  const { selector } = options;
+  const { selector, pageRevision } = options;
 
   if (!selector || typeof selector !== 'string' || selector.trim() === '') {
     throw new Error("选择器不能为空");
@@ -25,25 +24,23 @@ export async function queryElements(
   if (!page) {
     throw new Error("页面对象是必需的");
   }
+  if (!Number.isSafeInteger(pageRevision) || pageRevision < 0) {
+    throw new Error('pageRevision 必须是非负安全整数');
+  }
 
   try {
     const elements = await page.$$(selector);
     const results: QueryResult[] = [];
-
-    const uidCounter = new Map<string, number>();
+    const querySnapshotId = createSnapshotId(pageRevision);
+    const pagePath = await page.path;
 
     for (let i = 0; i < elements.length; i++) {
       const element = elements[i];
       try {
-        const baseUid = await generateElementUid(element, i);
-
-        const count = uidCounter.get(baseUid) || 0;
-        uidCounter.set(baseUid, count + 1);
-
-        const uid = count === 0 ? baseUid : `${baseUid}[${count + 1}]`;
+        const ref = createElementRef(querySnapshotId, i);
 
         const result: QueryResult = {
-          uid,
+          ref,
           tagName: element.tagName || 'unknown',
         };
 
@@ -74,7 +71,7 @@ export async function queryElements(
 
         try {
           const attributes: Record<string, string> = {};
-          const commonAttrs = ['class', 'id', 'data-testid'];
+          const commonAttrs = ['class', 'id', 'data-testid', 'data-id'];
           for (const attr of commonAttrs) {
             try {
               const value = await element.attribute(attr);
@@ -95,9 +92,22 @@ export async function queryElements(
 
         results.push(result);
 
-        elementMap.set(uid, {
+        elementMap.set(ref, {
           selector: selector,
-          index: i
+          index: i,
+          generationKind: 'query',
+          snapshotId: querySnapshotId,
+          pageRevision,
+          pagePath,
+          element,
+          fingerprint: {
+            tagName: result.tagName,
+            id: result.attributes?.id,
+            testId: result.attributes?.['data-testid'],
+            dataId: result.attributes?.['data-id'],
+            className: result.attributes?.class?.split(/\s+/).find(Boolean),
+            text: result.text,
+          },
         });
 
       } catch (error) {

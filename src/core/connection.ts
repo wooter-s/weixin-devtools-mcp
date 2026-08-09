@@ -6,12 +6,11 @@
 import type { ChildProcess } from "child_process";
 import { spawn } from "child_process";
 import fs from "fs";
+import net from 'node:net';
 import path from "path";
 import { promisify } from "util";
 
-import net from 'node:net';
-
-import automator from "miniprogram-automator";
+import type { MiniProgram } from 'miniprogram-automator';
 
 import {
   DevToolsError,
@@ -19,6 +18,9 @@ import {
   ErrorCategory,
   type ErrorContext
 } from '../types/errors.js';
+import { loadMiniProgramAutomator } from '../utils/automator-loader.js';
+import { extractErrorMessage } from '../utils/error.js';
+
 import type {
   ConnectOptions,
   ConnectResult,
@@ -27,8 +29,6 @@ import type {
   StartupResult,
   AutomatorLaunchOptions,
 } from './types.js';
-
-import { extractErrorMessage } from '../utils/error.js';
 
 const sleep = promisify(setTimeout);
 
@@ -74,6 +74,8 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
     throw new Error("项目路径是必需的");
   }
 
+  let miniProgram: MiniProgram | null = null;
+
   try {
     let resolvedProjectPath = projectPath;
     if (projectPath.startsWith('@playground/')) {
@@ -100,257 +102,26 @@ export async function connectDevtools(options: ConnectOptions): Promise<ConnectR
       };
     }
 
-    const miniProgram = await automator.launch(launchOptions);
-
+    const automator = await loadMiniProgramAutomator();
+    miniProgram = await automator.launch(launchOptions);
     const currentPage = await miniProgram.currentPage();
     if (!currentPage) {
       throw new Error("无法获取当前页面");
-    }
-    const pagePath = await currentPage.path;
-
-    // 自动启动网络监听
-    try {
-      await miniProgram.mockWxMethod('request', function(this: any, options: any) {
-        // @ts-expect-error wx is available in WeChat miniprogram runtime - wx is available in WeChat miniprogram environment
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-        if (!wxObj) return this.origin(options);
-        if (!wxObj.__networkLogs) wxObj.__networkLogs = [];
-
-        const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        const startTime = Date.now();
-
-        const originalSuccess = options.success;
-        options.success = function(res: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'request',
-            url: options.url,
-            method: options.method || 'GET',
-            headers: options.header,
-            data: options.data,
-            statusCode: res.statusCode,
-            response: res.data,
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: true
-          });
-          if (originalSuccess) originalSuccess(res);
-        };
-
-        const originalFail = options.fail;
-        options.fail = function(err: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'request',
-            url: options.url,
-            method: options.method || 'GET',
-            headers: options.header,
-            data: options.data,
-            error: err.errMsg || String(err),
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: false
-          });
-          if (originalFail) originalFail(err);
-        };
-
-        return this.origin(options);
-      });
-
-      await miniProgram.mockWxMethod('uploadFile', function(this: any, options: any) {
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-        if (!wxObj) return this.origin(options);
-        if (!wxObj.__networkLogs) wxObj.__networkLogs = [];
-
-        const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        const startTime = Date.now();
-
-        const originalSuccess = options.success;
-        options.success = function(res: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'uploadFile',
-            url: options.url,
-            statusCode: res.statusCode,
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: true
-          });
-          if (originalSuccess) originalSuccess(res);
-        };
-
-        const originalFail = options.fail;
-        options.fail = function(err: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'uploadFile',
-            url: options.url,
-            error: err.errMsg || String(err),
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: false
-          });
-          if (originalFail) originalFail(err);
-        };
-
-        return this.origin(options);
-      });
-
-      await miniProgram.mockWxMethod('downloadFile', function(this: any, options: any) {
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as any;
-        if (!wxObj) return this.origin(options);
-        if (!wxObj.__networkLogs) wxObj.__networkLogs = [];
-
-        const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        const startTime = Date.now();
-
-        const originalSuccess = options.success;
-        options.success = function(res: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'downloadFile',
-            url: options.url,
-            statusCode: res.statusCode,
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: true
-          });
-          if (originalSuccess) originalSuccess(res);
-        };
-
-        const originalFail = options.fail;
-        options.fail = function(err: any) {
-          wxObj.__networkLogs.push({
-            id: requestId,
-            type: 'downloadFile',
-            url: options.url,
-            error: err.errMsg || String(err),
-            duration: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            success: false
-          });
-          if (originalFail) originalFail(err);
-        };
-
-        return this.origin(options);
-      });
-
-      // 拦截 Mpx 框架的 $xfetch
-      await miniProgram.evaluate(function() {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const getApp = (globalThis as any).getApp as undefined | (() => any);
-
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        if (typeof wx === 'undefined') return;
-
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        wx.__networkLogs = wx.__networkLogs || [];
-
-        const app = typeof getApp !== 'undefined' ? getApp?.() : null;
-        const hasMpxFetch = app &&
-                            app.$xfetch &&
-                            app.$xfetch.interceptors &&
-                            typeof app.$xfetch.interceptors.request.use === 'function';
-
-        const hasGetApp = typeof getApp !== 'undefined';
-        const debugInfo = {
-          hasGetApp,
-          hasApp: !!app,
-          has$xfetch: !!(app && app.$xfetch),
-          hasInterceptors: !!(app && app.$xfetch && app.$xfetch.interceptors),
-          hasMpxFetch: hasMpxFetch
-        };
-        console.error('[MCP-DEBUG] Mpx检测:', debugInfo);
-
-        if (hasMpxFetch) {
-          console.error('[MCP] 正在安装 Mpx $xfetch 拦截器（强制覆盖）...');
-
-          app.$xfetch.interceptors.request.use(function(config: any) {
-            const requestId = 'mpx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-            const startTime = Date.now();
-
-            config.__mcp_requestId = requestId;
-            config.__mcp_startTime = startTime;
-
-            // @ts-expect-error wx is available in WeChat miniprogram runtime
-            wx.__networkLogs.push({
-              id: requestId,
-              type: 'request',
-              method: config.method || 'GET',
-              url: config.url,
-              headers: config.header || config.headers,
-              data: config.data,
-              params: config.params,
-              timestamp: new Date().toISOString(),
-              source: 'getApp().$xfetch',
-              phase: 'request'
-            });
-
-            return config;
-          });
-
-          app.$xfetch.interceptors.response.use(
-            function onSuccess(response: any) {
-              const requestId = response.requestConfig?.__mcp_requestId;
-              const startTime = response.requestConfig?.__mcp_startTime || Date.now();
-
-              // @ts-expect-error wx is available in WeChat miniprogram runtime
-              wx.__networkLogs.push({
-                id: requestId,
-                type: 'response',
-                statusCode: response.status,
-                data: response.data,
-                headers: response.header || response.headers,
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString(),
-                source: 'getApp().$xfetch',
-                phase: 'response',
-                success: true
-              });
-
-              return response;
-            },
-            function onError(error: any) {
-              const requestId = error.requestConfig?.__mcp_requestId;
-              const startTime = error.requestConfig?.__mcp_startTime || Date.now();
-
-              // @ts-expect-error wx is available in WeChat miniprogram runtime
-              wx.__networkLogs.push({
-                id: requestId,
-                type: 'response',
-                statusCode: error.status || error.statusCode,
-                error: error.message || error.errMsg || String(error),
-                duration: Date.now() - startTime,
-                timestamp: new Date().toISOString(),
-                source: 'getApp().$xfetch',
-                phase: 'response',
-                success: false
-              });
-
-              throw error;
-            }
-          );
-
-          console.error('[MCP] Mpx $xfetch 拦截器安装完成');
-        }
-
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        wx.__networkInterceptorsInstalled = true;
-      });
-
-      console.error('[connectDevtools] 网络监听已自动启动（包含 Mpx 框架支持）');
-    } catch (err) {
-      console.warn('[connectDevtools] 网络监听启动失败:', err);
     }
 
     return {
       miniProgram,
       currentPage,
-      pagePath
+      pagePath: await currentPage.path
     };
   } catch (error) {
+    if (miniProgram) {
+      try {
+        await miniProgram.disconnect();
+      } catch {
+        // 候选连接清理失败不应覆盖原始连接错误。
+      }
+    }
     const errorMessage = extractErrorMessage(error);
     throw new Error(`连接微信开发者工具失败: ${errorMessage}`);
   }
@@ -555,19 +326,27 @@ async function connectionPhase(
   }
 
   const miniProgram = await connectWithRetry(wsEndpoint, 3);
+  try {
+    const currentPage = await miniProgram.currentPage();
+    if (!currentPage) {
+      throw new Error('无法获取当前页面');
+    }
 
-  const currentPage = await miniProgram.currentPage();
-  if (!currentPage) {
-    throw new Error('无法获取当前页面');
+    const pagePath = await currentPage.path;
+
+    return {
+      miniProgram,
+      currentPage,
+      pagePath
+    };
+  } catch (error) {
+    try {
+      await miniProgram.disconnect();
+    } catch {
+      // 候选连接清理失败不覆盖页面初始化错误。
+    }
+    throw error;
   }
-
-  const pagePath = await currentPage.path;
-
-  return {
-    miniProgram,
-    currentPage,
-    pagePath
-  };
 }
 
 function buildCliCommand(options: EnhancedConnectOptions): string[] {
@@ -864,7 +643,8 @@ export async function detectIDEPort(verbose: boolean = false): Promise<number | 
   return null;
 }
 
-async function connectWithRetry(wsEndpoint: string, maxRetries: number): Promise<any> {
+async function connectWithRetry(wsEndpoint: string, maxRetries: number): Promise<MiniProgram> {
+  const automator = await loadMiniProgramAutomator();
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await automator.connect({ wsEndpoint });
@@ -875,9 +655,11 @@ async function connectWithRetry(wsEndpoint: string, maxRetries: number): Promise
       await sleep(1000 * Math.pow(2, i));
     }
   }
+
+  throw new Error('连接重试未执行');
 }
 
-async function performHealthCheck(miniProgram: any): Promise<'healthy' | 'degraded' | 'unhealthy'> {
+async function performHealthCheck(miniProgram: MiniProgram): Promise<'healthy' | 'degraded' | 'unhealthy'> {
   try {
     const currentPage = await miniProgram.currentPage();
     if (!currentPage) {

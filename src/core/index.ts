@@ -12,6 +12,7 @@ export type {
   DetailedConnectResult,
   ElementSnapshot,
   PageSnapshot,
+  PageStateCommit,
   ElementMapInfo,
   ClickOptions,
   ScreenshotOptions,
@@ -33,6 +34,26 @@ export type {
   AutomatorLaunchOptions,
 } from './types.js';
 
+export {
+  ElementResolutionError,
+  applyTextInput,
+  createElementRef,
+  createSnapshotId,
+  elementTargetToSelector,
+  fromLegacyInputOptions,
+  resolveElementTarget,
+} from '../elements/index.js';
+export type {
+  ElementFingerprint,
+  ElementResolutionErrorCode,
+  ElementTarget,
+  LocatorStability,
+  ResolveElementOptions,
+  ResolvedElement,
+  TextInputCommand,
+  TextInputElement,
+} from '../elements/index.js';
+
 // 连接管理
 export {
   DevToolsConnectionError,
@@ -45,8 +66,13 @@ export {
 
 // 页面快照
 export {
-  generateElementUid,
+  collectPageTopology,
   getPageSnapshot,
+} from './snapshot.js';
+export type {
+  GetPageSnapshotOptions,
+  PageTopologyCapture,
+  SnapshotCollectionStrategy,
 } from './snapshot.js';
 
 // 交互操作

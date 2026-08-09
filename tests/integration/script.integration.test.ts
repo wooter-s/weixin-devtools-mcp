@@ -8,9 +8,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MiniProgramContext } from '../../src/MiniProgramContext.js';
 
 import { IntegrationHarness } from './helpers/integration-harness.js';
+import {
+  handleIntegrationUnavailable,
+  shouldRunIntegrationTests,
+} from './helpers/integration-mode.js';
 
-// 只在环境变量RUN_INTEGRATION_TESTS为true时运行
-const shouldRun = process.env.RUN_INTEGRATION_TESTS === 'true';
+const shouldRun = shouldRunIntegrationTests();
 
 describe.skipIf(!shouldRun)('Script Integration Tests', () => {
   const harness = new IntegrationHarness({
@@ -41,8 +44,8 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       miniProgram = context.miniProgram;
       environmentReady = miniProgram !== null;
     } catch (error) {
-      console.error('连接失败:', error);
       environmentReady = false;
+      handleIntegrationUnavailable('Script 初始连接失败', error);
     }
   }, 180_000);
 

@@ -3,9 +3,9 @@
  * 从 src/tools.ts 提取
  */
 
-import type { ElementMapInfo, ClickOptions, InputTextOptions, GetValueOptions, FormControlOptions } from './types.js';
-
+import { applyTextInput } from '../elements/index.js';
 import { extractErrorMessage } from '../utils/error.js';
+import type { ElementMapInfo, ClickOptions, InputTextOptions, GetValueOptions, FormControlOptions } from './types.js';
 
 /**
  * 点击页面元素
@@ -88,7 +88,7 @@ export async function inputText(
   elementMap: Map<string, ElementMapInfo>,
   options: InputTextOptions
 ): Promise<void> {
-  const { uid, text, clear = false, append = false } = options;
+  const { uid } = options;
 
   if (!uid) {
     throw new Error("元素uid是必需的");
@@ -118,16 +118,10 @@ export async function inputText(
       throw new Error(`无法获取索引为 ${mapInfo.index} 的元素`);
     }
 
-    if (clear && !append) {
-      await element.clear();
-    }
-
-    if (append) {
-      const currentValue = await element.value().catch(() => '');
-      await element.input(currentValue + text);
-    } else {
-      await element.input(text);
-    }
+    const command = options.mode === 'clear'
+      ? { mode: 'clear' as const }
+      : { mode: options.mode, text: options.text };
+    await applyTextInput(element, command);
 
   } catch (error) {
     const errorMessage = extractErrorMessage(error);

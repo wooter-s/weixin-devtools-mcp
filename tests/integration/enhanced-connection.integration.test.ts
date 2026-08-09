@@ -11,10 +11,14 @@ import { MiniProgramContext } from '../../src/MiniProgramContext.js';
 import { connectDevtoolsTool, getConnectionStatusTool } from '../../src/tools/connection.js';
 
 import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
+import {
+  handleIntegrationUnavailable,
+  shouldRunIntegrationTests,
+} from './helpers/integration-mode.js';
 
-const shouldRunIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const shouldRun = shouldRunIntegrationTests();
 
-describe.skipIf(!shouldRunIntegrationTests)('连接架构集成测试', () => {
+describe.skipIf(!shouldRun)('连接架构集成测试', () => {
   const harness = new IntegrationHarness({
     portCount: 8,
     connectRetries: 3,
@@ -26,6 +30,7 @@ describe.skipIf(!shouldRunIntegrationTests)('连接架构集成测试', () => {
 
   async function ensureConnected(): Promise<boolean> {
     if (!runtimeReady || !context) {
+      handleIntegrationUnavailable('连接架构运行时不可用', '初始连接未建立');
       return false;
     }
 
@@ -37,8 +42,9 @@ describe.skipIf(!shouldRunIntegrationTests)('连接架构集成测试', () => {
     try {
       await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
       return true;
-    } catch {
+    } catch (error) {
       runtimeReady = false;
+      handleIntegrationUnavailable('连接架构重连失败', error);
       return false;
     }
   }
@@ -62,9 +68,7 @@ describe.skipIf(!shouldRunIntegrationTests)('连接架构集成测试', () => {
       runtimeReady = true;
     } catch (error) {
       runtimeReady = false;
-      console.warn(
-        `[integration] 初始连接失败，后续用例将跳过: ${error instanceof Error ? error.message : String(error)}`
-      );
+      handleIntegrationUnavailable('连接架构初始连接失败', error);
     }
   }, 180_000);
 

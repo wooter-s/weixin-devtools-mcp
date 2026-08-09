@@ -19,6 +19,12 @@ import {
   sleep,
 } from '../../utils/test-utils.js';
 
+import {
+  handleIntegrationUnavailable,
+  isIntegrationStrictMode,
+  shouldRunIntegrationTests,
+} from './integration-mode.js';
+
 const DEFAULT_PROJECT_PATH = path.resolve(process.cwd(), 'playground/wx');
 const DEFAULT_CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
 
@@ -125,7 +131,7 @@ export class IntegrationHarness {
     this.#connectTimeoutMs = options.connectTimeoutMs ?? 60_000;
     this.#connectRetries = options.connectRetries ?? 3;
     this.#verbose = options.verbose ?? false;
-    this.#enabled = process.env.RUN_INTEGRATION_TESTS === 'true';
+    this.#enabled = shouldRunIntegrationTests();
     this.#reuseSession = options.reuseSession ?? process.env.INTEGRATION_REUSE_SESSION !== 'false';
     this.#sessionKey = `${this.#projectPath}::${this.#cliPath}`;
   }
@@ -173,12 +179,19 @@ export class IntegrationHarness {
     if (!envCheck.isReady) {
       this.#reason = `环境检查失败: ${this.#issues.join('; ')}`;
       this.#ready = false;
+      handleIntegrationUnavailable('环境检查失败', this.#reason);
       return this.getState();
     }
 
     const cleanupSuccess = await cleanupConflictingWeChatInstances(this.#projectPath, this.#cliPath);
     if (!cleanupSuccess) {
-      this.#warnings.push('冲突实例清理未完全成功，连接稳定性可能受影响');
+      const cleanupMessage = '冲突实例清理未完全成功，连接稳定性可能受影响';
+      this.#warnings.push(cleanupMessage);
+      if (isIntegrationStrictMode()) {
+        this.#ready = false;
+        this.#reason = cleanupMessage;
+        handleIntegrationUnavailable('环境清理失败', cleanupMessage);
+      }
     }
 
     try {
@@ -191,6 +204,7 @@ export class IntegrationHarness {
       this.#ready = false;
       this.#issues.push(`端口池分配失败: ${normalizedError.message}`);
       this.#reason = normalizedError.message;
+      handleIntegrationUnavailable('端口池分配失败', normalizedError);
     }
 
     return this.getState();
@@ -253,6 +267,9 @@ export class IntegrationHarness {
 
       try {
         const response = await runTool(targetContext, connectDevtoolsTool.handler, params);
+        if (!targetContext.miniProgram || !targetContext.connectionStatus.connected) {
+          throw new Error('连接工具返回成功，但 Context 未持有可用 MiniProgram 会话');
+        }
         if (this.#reuseSession) {
           IntegrationHarness.#sharedSessions.set(this.#sessionKey, {
             context: targetContext,
@@ -312,9 +329,13 @@ export class IntegrationHarness {
   }
 
   async #disconnectDirect(context: MiniProgramContext): Promise<void> {
-    await safeCleanup(async () => {
+    if (isIntegrationStrictMode()) {
       await runTool(context, disconnectDevtoolsTool.handler, {});
-    });
+    } else {
+      await safeCleanup(async () => {
+        await runTool(context, disconnectDevtoolsTool.handler, {});
+      });
+    }
 
     const miniProgram = context.miniProgram;
     if (miniProgram) {

@@ -8,8 +8,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MiniProgramContext } from '../../src/MiniProgramContext.js';
 
 import { IntegrationHarness } from './helpers/integration-harness.js';
+import {
+  handleIntegrationUnavailable,
+  shouldRunIntegrationTests,
+} from './helpers/integration-mode.js';
 
-const shouldRunIntegration = process.env.RUN_INTEGRATION_TESTS === 'true';
+const shouldRunIntegration = shouldRunIntegrationTests();
 
 describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
   const harness = new IntegrationHarness({
@@ -24,6 +28,7 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
 
   async function ensureMiniProgram(): Promise<MiniProgram | null> {
     if (!runtimeReady || !context) {
+      handleIntegrationUnavailable('导航运行时不可用', '初始连接未建立');
       return null;
     }
 
@@ -31,8 +36,9 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
     if (!status.connected) {
       try {
         await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
-      } catch {
+      } catch (error) {
         runtimeReady = false;
+        handleIntegrationUnavailable('导航重连失败', error);
         return null;
       }
     }
@@ -61,9 +67,7 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
       runtimeReady = miniProgram !== null;
     } catch (error) {
       runtimeReady = false;
-      console.warn(
-        `[integration] 导航测试初始连接失败: ${error instanceof Error ? error.message : String(error)}`
-      );
+      handleIntegrationUnavailable('导航初始连接失败', error);
     }
   }, 180_000);
 
@@ -103,7 +107,7 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
     await app.navigateTo('/subpackages/login/pages/login/login-wechat');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    await app.navigateBack(1);
+    await app.navigateBack();
     await new Promise(resolve => setTimeout(resolve, 800));
 
     const currentPage = await app.currentPage();

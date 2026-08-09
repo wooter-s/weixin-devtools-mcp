@@ -5,7 +5,6 @@
  * 基于 chrome-devtools-mcp 架构模式重构
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
@@ -13,19 +12,28 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { MiniProgramContext } from './MiniProgramContext.js';
-import { parseToolProfileConfig, resolveToolsByProfile } from './config/tool-profile.js';
-import type {
-  ToolCategory,
-  ToolRequest,
-  ToolDefinition
-} from './tools/index.js';
+import type { ToolCategory } from './config/tool-category.js';
 import {
-  allTools,
-  SimpleToolResponse
-} from './tools/index.js';
+  parseToolProfileConfig,
+  resolveToolDescriptorsByProfile,
+} from './config/tool-profile.js';
+import type { ElementSnapshot, PageSnapshot, PageStateCommit } from './core/types.js';
+import { LeanServer } from './protocol/lean-server.js';
+import { loadToolDescriptorManifest } from './protocol/tool-descriptor-manifest.js';
+import type * as ToolResultRuntimeModule from './protocol/tool-result.js';
+import type { ToolInvocationMeta } from './protocol/tool-result.js';
+import type { ToolDefinition, ToolRequest } from './tools/ToolDefinition.js';
+import type {
+  ToolErrorCode,
+  ToolNotice,
+  ToolObservation,
+} from './tools/result.js';
+import {
+  loadToolRuntime,
+  type ToolRuntimeModule,
+} from './tools/runtime-loader.js';
 import { extractErrorMessage } from './utils/error.js';
 import { PACKAGE_NAME, VERSION } from './version.js';
 
@@ -37,7 +45,7 @@ const globalContext = MiniProgramContext.create();
 /**
  * 创建 MCP 服务器
  */
-const server = new Server(
+const server = new LeanServer(
   {
     name: PACKAGE_NAME,
     version: VERSION,
@@ -56,19 +64,22 @@ const server = new Server(
 const toolHandlers = new Map<string, ToolDefinition>();
 
 /**
- * 被 profile 禁用的工具映射
- */
-const disabledToolHandlers = new Map<string, ToolDefinition>();
-
-/**
  * 工具 profile 配置与激活结果
  */
 const toolProfileConfig = parseToolProfileConfig();
-const { activeTools, disabledTools } = resolveToolsByProfile(allTools, toolProfileConfig);
+const descriptorManifest = loadToolDescriptorManifest(
+  new URL('./protocol/tool-descriptors.generated.json', import.meta.url),
+);
+const {
+  activeTools: activeToolDescriptors,
+  disabledTools: disabledToolDescriptors,
+} = resolveToolDescriptorsByProfile(descriptorManifest.tools, toolProfileConfig);
+const activeToolNames = new Set(activeToolDescriptors.map(tool => tool.name));
+let toolRuntimeRegistration: Promise<ToolRuntimeModule> | undefined;
+type ToolResultRuntime = typeof ToolResultRuntimeModule;
+let toolResultRuntimePromise: Promise<ToolResultRuntime> | undefined;
 
-for (const [toolName, toolDefinition] of disabledTools) {
-  disabledToolHandlers.set(toolName, toolDefinition);
-}
+const MAX_OBSERVATION_DIFF_ITEMS = 20;
 
 function getDisabledToolHint(category: ToolCategory): string {
   return [
@@ -84,6 +95,161 @@ function getDisabledToolHint(category: ToolCategory): string {
  */
 function registerTool(tool: ToolDefinition): void {
   toolHandlers.set(tool.name, tool);
+}
+
+async function loadAndRegisterToolRuntime(): Promise<ToolRuntimeModule> {
+  toolRuntimeRegistration ??= loadToolRuntime()
+    .then(runtime => {
+      const implementations = new Map(runtime.allTools.map(tool => [tool.name, tool]));
+      if (
+        implementations.size !== descriptorManifest.toolCount ||
+        descriptorManifest.tools.some(descriptor => !implementations.has(descriptor.name))
+      ) {
+        throw new Error('工具实现与构建期 descriptor manifest 不一致，请重新执行 npm run build');
+      }
+
+      for (const toolName of activeToolNames) {
+        const implementation = implementations.get(toolName);
+        if (!implementation) {
+          throw new Error(`工具 ${toolName} 缺少运行时实现，请重新执行 npm run build`);
+        }
+        registerTool(implementation);
+      }
+      return runtime;
+    })
+    .catch(error => {
+      toolRuntimeRegistration = undefined;
+      throw error;
+    });
+  return toolRuntimeRegistration;
+}
+
+function loadToolResultRuntime(): Promise<ToolResultRuntime> {
+  toolResultRuntimePromise ??= import('./protocol/tool-result.js').catch(error => {
+    toolResultRuntimePromise = undefined;
+    throw error;
+  });
+  return toolResultRuntimePromise;
+}
+
+function observationIdentity(element: ElementSnapshot, index: number): string {
+  const attributes = element.attributes ?? {};
+  const stableId = attributes['data-testid'] ?? attributes.id ?? attributes['data-id'];
+  return stableId
+    ? `${element.tagName}:stable:${stableId}`
+    : `${element.tagName}:position:${index}`;
+}
+
+function observationFingerprint(element: ElementSnapshot): string {
+  return JSON.stringify({
+    tagName: element.tagName,
+    text: element.text ?? null,
+    attributes: element.attributes ?? null,
+    position: element.position ?? null,
+  });
+}
+
+function observationElement(element: ElementSnapshot) {
+  return {
+    ref: element.ref,
+    tagName: element.tagName,
+    ...(element.text ? { text: element.text } : {}),
+  };
+}
+
+function createObservationDiff(previous: PageSnapshot, current: PageSnapshot) {
+  const previousByIdentity = new Map(previous.elements.map((element, index) => [
+    observationIdentity(element, index),
+    element,
+  ]));
+  const currentByIdentity = new Map(current.elements.map((element, index) => [
+    observationIdentity(element, index),
+    element,
+  ]));
+
+  const added: ReturnType<typeof observationElement>[] = [];
+  const changed: ReturnType<typeof observationElement>[] = [];
+  const removed: string[] = [];
+
+  for (const [identity, element] of currentByIdentity) {
+    const previousElement = previousByIdentity.get(identity);
+    if (!previousElement) {
+      added.push(observationElement(element));
+    } else if (observationFingerprint(previousElement) !== observationFingerprint(element)) {
+      changed.push(observationElement(element));
+    }
+  }
+  for (const [identity, element] of previousByIdentity) {
+    if (!currentByIdentity.has(identity)) removed.push(element.ref);
+  }
+
+  const total = added.length + changed.length + removed.length;
+  let remaining = MAX_OBSERVATION_DIFF_ITEMS;
+  const boundedAdded = added.slice(0, remaining);
+  remaining -= boundedAdded.length;
+  const boundedChanged = changed.slice(0, remaining);
+  remaining -= boundedChanged.length;
+  const boundedRemoved = removed.slice(0, remaining);
+
+  return {
+    added: boundedAdded,
+    changed: boundedChanged,
+    removed: boundedRemoved,
+    truncated: total > MAX_OBSERVATION_DIFF_ITEMS,
+  };
+}
+
+function captureObservation(commit: PageStateCommit): ToolObservation {
+  const { snapshot, previousSnapshot: previous } = commit;
+  const diff = previous ? createObservationDiff(previous, snapshot) : undefined;
+  const changed = commit.domChanged ||
+    Boolean(previous && (
+      previous.path !== snapshot.path ||
+      previous.pageRevision !== snapshot.pageRevision
+    )) ||
+    Boolean(diff && (diff.added.length > 0 || diff.changed.length > 0 || diff.removed.length > 0));
+
+  return {
+    pagePath: snapshot.path,
+    pageRevision: snapshot.pageRevision,
+    snapshotId: snapshot.snapshotId,
+    generatedAt: new Date().toISOString(),
+    elementCount: snapshot.elements.length,
+    changed,
+    ...(diff ? { diff } : {}),
+  };
+}
+
+function firstSummaryLine(text: string): string {
+  return text.split('\n').map(line => line.trim()).find(Boolean) ?? '执行成功';
+}
+
+function failureResult(
+  resultRuntime: ToolResultRuntime,
+  toolName: string,
+  error: Error,
+  code?: ToolErrorCode,
+) {
+  return invocationFailureResult(
+    resultRuntime,
+    resultRuntime.startToolInvocation(toolName),
+    error,
+    code,
+  );
+}
+
+function invocationFailureResult(
+  resultRuntime: ToolResultRuntime,
+  invocation: ToolInvocationMeta,
+  error: Error,
+  code?: ToolErrorCode,
+) {
+  const failure = resultRuntime.buildToolFailure(invocation, error, code ? { code } : undefined);
+  return {
+    content: [{ type: 'text' as const, text: `[${failure.code}] ${failure.error.message}` }],
+    structuredContent: { ...failure },
+    isError: true,
+  };
 }
 
 /**
@@ -155,16 +321,17 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 
   if (resourcePath === "page/snapshot") {
-    if (!globalContext.currentPage) {
-      throw new Error("当前没有活动页面");
-    }
-
     try {
-      // 这里可以实现获取页面快照的逻辑
+      const { snapshot: pageSnapshot } = await globalContext.synchronizePageState({
+        mode: 'snapshot',
+        forceRefresh: true,
+      });
       const snapshot = {
-        path: await globalContext.currentPage.path,
-        elementCount: globalContext.getElementMap().size,
-        timestamp: new Date().toISOString()
+        snapshotId: pageSnapshot.snapshotId,
+        pageRevision: pageSnapshot.pageRevision,
+        path: pageSnapshot.path,
+        elementCount: pageSnapshot.elements.length,
+        timestamp: new Date().toISOString(),
       };
 
       return {
@@ -186,16 +353,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
  * 处理工具列表请求
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = activeTools.map(tool => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: zodToJsonSchema(tool.schema, {
-      strictUnions: true
-    }),
-    annotations: tool.annotations
-  }));
-
-  return { tools };
+  return { tools: activeToolDescriptors };
 });
 
 /**
@@ -203,35 +361,82 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
-  const tool = toolHandlers.get(toolName);
-
-  if (!tool) {
-    const disabledTool = disabledToolHandlers.get(toolName);
+  const resultRuntimePromise = loadToolResultRuntime();
+  if (!activeToolNames.has(toolName)) {
+    const resultRuntime = await resultRuntimePromise;
+    const disabledTool = disabledToolDescriptors.get(toolName);
     if (disabledTool) {
-      const category = disabledTool.annotations?.category;
+      const category = disabledTool._meta.category;
       const disabledMessage = category
         ? getDisabledToolHint(category)
         : '请使用 --tools-profile=full 启用全部工具';
 
-      return {
-        content: [{
-          type: "text",
-          text: `工具 "${toolName}" 当前未启用。\n${disabledMessage}`
-        }],
-        isError: true
-      };
+      return failureResult(
+        resultRuntime,
+        toolName,
+        new Error(`工具 "${toolName}" 当前未启用。\n${disabledMessage}`),
+        'TOOL_DISABLED',
+      );
     }
 
-    throw new Error(`未知的工具: ${toolName}`);
+    return failureResult(
+      resultRuntime,
+      toolName,
+      new Error(`未知的工具: ${toolName}`),
+      'UNKNOWN_TOOL',
+    );
+  }
+
+  const runtimeOutcomePromise = loadAndRegisterToolRuntime().then(
+    runtime => ({ ok: true as const, runtime }),
+    error => ({ ok: false as const, error }),
+  );
+  const resultRuntime = await resultRuntimePromise;
+  const invocation = resultRuntime.startToolInvocation(toolName);
+  const runtimeOutcome = await runtimeOutcomePromise;
+  if (!runtimeOutcome.ok) {
+    const normalizedError = runtimeOutcome.error instanceof Error
+      ? runtimeOutcome.error
+      : new Error(extractErrorMessage(runtimeOutcome.error));
+    return invocationFailureResult(
+      resultRuntime,
+      invocation,
+      normalizedError,
+      'INTERNAL_ERROR',
+    );
+  }
+
+  const runtime = runtimeOutcome.runtime;
+  const registeredTool = toolHandlers.get(toolName);
+  if (!registeredTool) {
+    return invocationFailureResult(
+      resultRuntime,
+      invocation,
+      new Error(`工具 ${toolName} 未完成运行时注册`),
+      'INTERNAL_ERROR',
+    );
+  }
+  const tool = registeredTool;
+
+  let validatedParams: unknown;
+  try {
+    validatedParams = tool.schema.parse(request.params.arguments || {});
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error(extractErrorMessage(error));
+    return invocationFailureResult(
+      resultRuntime,
+      invocation,
+      normalizedError,
+      error instanceof Error && error.name === 'ZodError'
+        ? 'INVALID_ARGUMENT'
+        : 'INTERNAL_ERROR',
+    );
   }
 
   try {
-    // 验证参数
-    const validatedParams = tool.schema.parse(request.params.arguments || {});
-
     // 创建工具请求和响应对象
     const toolRequest: ToolRequest = { params: validatedParams };
-    const toolResponse = new SimpleToolResponse();
+    const toolResponse = new runtime.SimpleToolResponse();
 
     // 执行工具处理器
     await tool.handler(toolRequest, toolResponse, globalContext);
@@ -258,36 +463,62 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
     }
 
-    // 仅在确有结构化内容时才附带 structuredContent 字段。
-    // 否则空对象 {} 会被部分 MCP 客户端优先渲染，从而吞掉 content 中的文本响应。
-    const structuredContent = toolResponse.getStructuredContent();
-    const hasStructuredContent = Object.keys(structuredContent).length > 0;
+    const data = toolResponse.getStructuredContent();
+    if (Object.keys(data).length === 0) {
+      data.summary = firstSummaryLine(responseText);
+    }
+
+    let observation: ToolObservation | undefined;
+    const warnings: ToolNotice[] = [];
+    if (toolResponse.shouldIncludeSnapshot()) {
+      let commit: PageStateCommit | undefined;
+      try {
+        commit = toolResponse.getPageStateCommit() ??
+          await globalContext.synchronizePageState({ mode: 'snapshot', forceRefresh: true });
+      } catch (error) {
+        warnings.push({
+          code: 'OBSERVATION_UNAVAILABLE',
+          message: `自动页面观察失败: ${extractErrorMessage(error)}`,
+        });
+      }
+
+      if (commit) {
+        const returnedRevision = data.pageRevision;
+        if (typeof returnedRevision === 'number' && returnedRevision !== commit.pageRevision) {
+          throw new Error(
+            `工具 ${tool.name} 返回的 pageRevision=${returnedRevision} 与已提交 revision=${commit.pageRevision} 不一致`,
+          );
+        }
+        const returnedSnapshotId = data.snapshotId;
+        if (typeof returnedSnapshotId === 'string' && returnedSnapshotId !== commit.snapshot.snapshotId) {
+          throw new Error(
+            `工具 ${tool.name} 返回的 snapshotId 与已提交页面状态不一致`,
+          );
+        }
+        observation = captureObservation(commit);
+      }
+    }
+
+    const structuredContent = resultRuntime.buildToolSuccess(
+      tool,
+      invocation,
+      data,
+      observation,
+      warnings,
+    );
 
     return {
       content,
-      ...(hasStructuredContent ? { structuredContent } : {}),
+      structuredContent: { ...structuredContent },
     };
 
   } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return {
-      content: [{
-        type: "text",
-        text: `工具执行失败: ${errorMessage}`
-      }],
-      isError: true
-    };
+    const normalizedError = error instanceof Error ? error : new Error(extractErrorMessage(error));
+    return invocationFailureResult(resultRuntime, invocation, normalizedError);
   }
 });
 
-/**
- * 注册激活工具
- */
-for (const tool of activeTools) {
-  registerTool(tool);
-}
-
-const profileSummary = `[ToolProfile] profile=${toolProfileConfig.profile}, active=${activeTools.length}, disabled=${disabledTools.size}`;
+const profileSummary = `[ToolProfile] profile=${toolProfileConfig.profile}, active=${activeToolDescriptors.length}, disabled=${disabledToolDescriptors.size}`;
 console.error(profileSummary);
 
 /**

@@ -3,9 +3,8 @@
  * 提供标准化的 mock 对象创建函数，消除测试文件中重复的 mock 定义
  */
 
+import type { Element, MiniProgram, Page } from 'miniprogram-automator';
 import { vi } from 'vitest';
-
-import type { MiniProgram, Page } from 'miniprogram-automator';
 
 import type {
   ConnectionStatusSnapshot,
@@ -148,7 +147,7 @@ export function createMockConnectResult(
 export function createMockContext(
   overrides?: Partial<ToolContext>,
 ): ToolContext {
-  return {
+  const context: ToolContext = {
     miniProgram: null,
     currentPage: null,
     elementMap: new Map(),
@@ -159,17 +158,27 @@ export function createMockContext(
       syncFromRemote: vi.fn(async () => 0),
       getRequests: vi.fn(() => []),
       getCurrentCount: vi.fn(() => 0),
+      stopRemoteMonitoring: vi.fn(async () => 0),
     })),
     clearNetworkRequests: vi.fn(),
     getElementByUid: vi.fn(async () => {
       throw new Error('Element not found');
     }),
+    getElementByTarget: vi.fn(async () => {
+      throw new Error('Element not found');
+    }),
+    getPageRevision: vi.fn(() => 0),
+    markPageMutation: vi.fn(),
+    syncCurrentPage: vi.fn(async () => {
+      if (!context.currentPage) throw new Error('Page not found');
+      return context.currentPage;
+    }),
     connectDevtools: vi.fn(async () => createMockConnectResult({ connectionId: 'mock_conn' })),
     reconnectDevtools: vi.fn(async () => createMockConnectResult({ connectionId: 'mock_reconn' })),
     disconnectDevtools: vi.fn(async () => createDefaultConnectionStatus()),
     getConnectionStatus: vi.fn(async () => createDefaultConnectionStatus()),
-    ...overrides,
   };
+  return Object.assign(context, overrides);
 }
 
 // ─── MiniProgram / Page Mock ─────────────────────────────────────────
@@ -201,14 +210,44 @@ export function createMockMiniProgram(
  * 创建 mock Page 对象
  * 包含常用的查询、数据、等待等方法
  */
-export function createMockPage(overrides?: Record<string, unknown>) {
-  return {
+export function createMockPage(overrides?: Partial<Page>): Page {
+  const page: Page = {
     path: 'pages/index/index',
     data: vi.fn(async () => ({})),
     setData: vi.fn(async () => undefined),
     waitFor: vi.fn(async () => undefined),
     $: vi.fn(async () => null),
     $$: vi.fn(async () => []),
-    ...overrides,
+    size: vi.fn(async () => ({ width: 375, height: 667 })),
+    scrollTo: vi.fn(async () => undefined),
   };
+  return Object.assign(page, overrides);
+}
+
+export function createMockElement(overrides?: Partial<Element>): Element {
+  const element: Element = {
+    tagName: 'view',
+    text: vi.fn(async () => ''),
+    attribute: vi.fn(async () => null),
+    value: vi.fn(async () => ''),
+    size: vi.fn(async () => ({ width: 100, height: 40 })),
+    offset: vi.fn(async () => ({ left: 0, top: 0 })),
+    outerWxml: vi.fn(async () => '<view />'),
+    tap: vi.fn(async () => undefined),
+    longpress: vi.fn(async () => undefined),
+    touchmove: vi.fn(async () => undefined),
+    input: vi.fn(async () => undefined),
+    trigger: vi.fn(async () => undefined),
+    scrollIntoView: vi.fn(async () => undefined),
+    boundingClientRect: vi.fn(async () => ({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 40,
+      width: 100,
+      height: 40,
+    })),
+    style: vi.fn(async () => ''),
+  };
+  return Object.assign(element, overrides);
 }

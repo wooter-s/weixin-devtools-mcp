@@ -24,7 +24,7 @@ interface TestResult {
   name: string;
   success: boolean;
   duration: number;
-  error?: string;
+  error?: string;se
   output?: string;
   validation?: {
     elementCount?: number;

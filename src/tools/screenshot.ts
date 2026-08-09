@@ -18,6 +18,10 @@ export const screenshotTool = defineTool({
   schema: z.object({
     path: z.string().optional().describe('图片保存路径（可选），如果不提供则返回base64编码的图片数据'),
   }),
+  outputSchema: z.discriminatedUnion('mode', [
+    z.object({ mode: z.literal('path'), path: z.string(), mimeType: z.literal('image/png') }),
+    z.object({ mode: z.literal('inline'), mimeType: z.literal('image/png'), encodedLength: z.number().int().nonnegative() }),
+  ]),
   annotations: {
     category: ToolCategory.DEBUG,
     audience: ['developers'],
@@ -35,6 +39,11 @@ export const screenshotTool = defineTool({
 
       if (path) {
         response.appendResponseLine(ResponseFormatter.success(`截图已保存到: ${path}`));
+        response.mergeStructuredContent({
+          mode: 'path',
+          path,
+          mimeType: 'image/png',
+        });
       } else if (result) {
         response.appendResponseLine(ResponseFormatter.success('截图获取成功'));
         response.appendResponseLine(`Base64数据长度: ${result.length} 字符`);
@@ -42,6 +51,11 @@ export const screenshotTool = defineTool({
 
         // 附加图片到响应
         response.attachImage(result, 'image/png');
+        response.mergeStructuredContent({
+          mode: 'inline',
+          mimeType: 'image/png',
+          encodedLength: result.length,
+        });
       }
 
     } catch (error) {

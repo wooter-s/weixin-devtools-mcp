@@ -14,13 +14,17 @@ import { getConnectionStatusTool } from '../../src/tools/connection.js';
 import { listConsoleMessagesTool, getConsoleMessageTool } from '../../src/tools/console.js';
 import { clickTool } from '../../src/tools/input.js';
 import { listNetworkRequestsTool, getNetworkRequestTool } from '../../src/tools/network.js';
-import { querySelectorTool, waitForTool } from '../../src/tools/page.js';
+import { findElementsTool, waitForTool } from '../../src/tools/page.js';
 import { screenshotTool } from '../../src/tools/screenshot.js';
 import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
 
 import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
+import {
+  handleIntegrationUnavailable,
+  shouldRunIntegrationTests,
+} from './helpers/integration-mode.js';
 
-const RUN_INTEGRATION_TESTS = process.env.RUN_INTEGRATION_TESTS === 'true';
+const shouldRun = shouldRunIntegrationTests();
 
 function extractFirstMsgId(responseText: string): number | null {
   const match = responseText.match(/msgid=(\d+)/);
@@ -39,7 +43,7 @@ function extractFirstReqId(responseText: string): string | null {
   return match[1] ?? null;
 }
 
-describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests', () => {
+describe.skipIf(!shouldRun)('MCP Real Environment Integration Tests', () => {
   const harness = new IntegrationHarness({
     portCount: 10,
     connectRetries: 3,
@@ -51,6 +55,7 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
 
   async function ensureConnected(): Promise<boolean> {
     if (!runtimeReady || !context) {
+      handleIntegrationUnavailable('MCP real env 运行时不可用', '初始连接未建立');
       return false;
     }
 
@@ -62,8 +67,9 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
     try {
       await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
       return true;
-    } catch {
+    } catch (error) {
       runtimeReady = false;
+      handleIntegrationUnavailable('MCP real env 重连失败', error);
       return false;
     }
   }
@@ -86,11 +92,7 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
       runtimeReady = true;
     } catch (error) {
       runtimeReady = false;
-      console.warn(
-        `[integration] MCP real env 初始连接失败，后续用例将跳过: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      handleIntegrationUnavailable('MCP real env 初始连接失败', error);
     }
   }, 180_000);
 
@@ -131,11 +133,13 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
 
     await runTool(context, getPageSnapshotTool.handler, { format: 'compact' });
 
-    const queryResponse = await runTool(context, querySelectorTool.handler, { selector: 'view' });
+    const queryResponse = await runTool(context, findElementsTool.handler, {
+      locator: { kind: 'selector', value: 'view' },
+    });
     expect(queryResponse.getResponseText()).toContain('找到');
 
     const waitResponse = await runTool(context, waitForTool.handler, {
-      selector: 'view',
+      target: { kind: 'selector', value: 'view' },
       timeout: 10_000,
     });
     expect(waitResponse.getResponseText()).toContain('等待');
@@ -213,16 +217,21 @@ describe.skipIf(!RUN_INTEGRATION_TESTS)('MCP Real Environment Integration Tests'
     const snapshotResponse = await runTool(context, getPageSnapshotTool.handler, { format: 'compact' });
     expect(snapshotResponse.getResponseText()).toContain('页面快照获取成功');
 
-    const queryResponse = await runTool(context, querySelectorTool.handler, { selector: 'view' });
+    const queryResponse = await runTool(context, findElementsTool.handler, {
+      locator: { kind: 'selector', value: 'view' },
+    });
     expect(queryResponse.getResponseText()).toContain('找到');
 
-    const candidateUid = Array.from(context.elementMap.keys()).find(
-      uid => uid.includes('button') || uid.includes('view')
-    );
+    const candidateRef = Array.from(context.elementMap.entries()).find(([, info]) =>
+      info.fingerprint?.tagName === 'button' || info.selector.includes('button')
+    )?.[0];
 
-    if (candidateUid) {
+    if (candidateRef) {
       try {
-        const clickResponse = await runTool(context, clickTool.handler, { uid: candidateUid });
+        const clickResponse = await runTool(context, clickTool.handler, {
+          target: { kind: 'ref', ref: candidateRef },
+          dblClick: false,
+        });
         expect(clickResponse.getResponseText()).toContain('点击');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -29,6 +29,18 @@ import {
   type ConsoleMessage,
   type ToolContext,
 } from './ToolDefinition.js';
+import { jsonValueSchema, toJsonValue } from './result.js';
+
+const consoleListDataSchema = z.object({
+  monitoring: z.boolean(),
+  startedAt: z.string().nullable(),
+  total: z.number().int().nonnegative(),
+  pageSize: z.number().int().positive(),
+  pageIdx: z.number().int().nonnegative(),
+  messages: z.array(jsonValueSchema),
+});
+
+const consoleDetailDataSchema = z.object({ message: jsonValueSchema });
 
 /**
  * 初始化 ConsoleStorage（新结构）
@@ -78,6 +90,7 @@ export const listConsoleMessagesTool = defineTool({
       .optional()
       .describe('是否包含历史导航的消息（最近3次导航）'),
   }),
+  outputSchema: consoleListDataSchema,
   annotations: {
     category: ToolCategory.CONSOLE,
     audience: ['developers'],
@@ -177,6 +190,14 @@ export const listConsoleMessagesTool = defineTool({
 
     response.appendResponseLine('');
     response.appendResponseLine(ResponseFormatter.hint('使用 get_console_message 工具按 msgid 查看详细信息'));
+    response.mergeStructuredContent({
+      monitoring: context.consoleStorage.isMonitoring,
+      startedAt: context.consoleStorage.startTime,
+      total,
+      pageSize,
+      pageIdx,
+      messages: toJsonValue(pagedMessages),
+    });
   },
 });
 
@@ -189,6 +210,7 @@ export const getConsoleMessageTool = defineTool({
   schema: z.object({
     msgid: z.number().positive().describe('消息的 Stable ID（从 list_console_messages 获取）'),
   }),
+  outputSchema: consoleDetailDataSchema,
   annotations: {
     category: ToolCategory.CONSOLE,
     audience: ['developers'],
@@ -239,6 +261,7 @@ export const getConsoleMessageTool = defineTool({
     response.appendResponseLine(ResponseFormatter.section('Console Message (Detail View)'));
     response.appendResponseLine('');
     response.appendResponseLine(formatConsoleEventVerbose(detailData));
+    response.mergeStructuredContent({ message: toJsonValue(detailData) });
   },
 });
 

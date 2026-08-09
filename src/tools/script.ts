@@ -5,7 +5,15 @@
 
 import { z } from 'zod';
 
-import { defineTool, ToolCategory, ensureMiniProgram, extractErrorMessage, ResponseFormatter } from './ToolDefinition.js';
+import {
+  defineTool,
+  ToolCategory,
+  ensureMiniProgram,
+  extractErrorMessage,
+  ResponseFormatter,
+  runPageStateOperation,
+} from './ToolDefinition.js';
+import { jsonValueSchema, toJsonValue } from './result.js';
 
 export const evaluateScript = defineTool({
   name: 'evaluate_script',
@@ -56,17 +64,20 @@ export const evaluateScript = defineTool({
   return currentPage.data;
 }\``
     ),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- evaluate 参数需要接受任意 JSON 可序列化类型
-    args: z.array(z.any()).optional().describe(
-      `可选的参数数组，传递给函数执行。
+    args: z
+      .array(z.any())
+      .optional()
+      .describe(
+        `可选的参数数组，传递给函数执行。
 参数必须是 JSON 可序列化的类型（字符串、数字、布尔值、对象、数组等）。
 
 示例：
 - 单个参数: ["testKey"]
 - 多个参数: ["key", 123, { foo: "bar" }]
 - 复杂对象: [{ name: "test", data: [1, 2, 3] }]`
-    )
+      ),
   }),
+  outputSchema: z.object({ result: jsonValueSchema }),
   annotations: {
     category: ToolCategory.CORE,
     audience: ['developers'],
@@ -80,23 +91,27 @@ export const evaluateScript = defineTool({
     try {
       // 执行脚本
       // miniProgram.evaluate 会自动处理函数序列化和参数传递
-      const result = await context.miniProgram.evaluate(functionCode, ...args);
+      const result = await runPageStateOperation(context, () =>
+        context.miniProgram!.evaluate(functionCode, ...args)
+      );
 
       // 序列化结果
       const serialized = JSON.stringify(result, null, 2);
 
       // 返回响应
-      response.appendResponseLine(ResponseFormatter.success('脚本在小程序 AppService 上下文中执行成功'));
+      response.appendResponseLine(
+        ResponseFormatter.success('脚本在小程序 AppService 上下文中执行成功')
+      );
       response.appendResponseLine('');
       response.appendResponseLine('返回结果：');
       response.appendResponseLine('```json');
       response.appendResponseLine(serialized);
       response.appendResponseLine('```');
-
+      response.mergeStructuredContent({ result: toJsonValue(result) });
     } catch (error: unknown) {
       // 错误处理
       const errorMessage = extractErrorMessage(error);
       throw new Error(`脚本执行失败: ${errorMessage}`);
     }
-  }
+  },
 });

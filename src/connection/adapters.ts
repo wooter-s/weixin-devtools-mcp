@@ -1,10 +1,11 @@
-import automator from 'miniprogram-automator';
+import type { MiniProgram } from 'miniprogram-automator';
 
 import {
   connectDevtoolsEnhanced,
   detectIDEPort,
 } from '../core/connection.js';
 import type { EnhancedConnectOptions } from '../core/types.js';
+import { loadMiniProgramAutomator } from '../utils/automator-loader.js';
 
 import {
   EnvironmentConnectionError,
@@ -86,9 +87,11 @@ async function connectByWsEndpoint(
   wsEndpoint: string,
   strategyUsed: ConnectionStrategy,
 ): Promise<AdapterConnectionResult> {
+  let candidate: MiniProgram | null = null;
   try {
-    const miniProgram = await automator.connect({ wsEndpoint, timeout: request.timeoutMs });
-    const currentPage = await miniProgram.currentPage();
+    const automator = await loadMiniProgramAutomator();
+    candidate = await automator.connect({ wsEndpoint, timeout: request.timeoutMs });
+    const currentPage = await candidate.currentPage();
     if (!currentPage) {
       throw new ProtocolConnectionError('wsEndpoint 已连接但 currentPage 不可用', [
         '确认目标 DevTools 实例已打开小程序项目',
@@ -99,11 +102,18 @@ async function connectByWsEndpoint(
     return {
       strategyUsed,
       endpoint: wsEndpoint,
-      miniProgram,
+      miniProgram: candidate,
       currentPage,
       pagePath,
     };
   } catch (error) {
+    if (candidate) {
+      try {
+        await candidate.disconnect();
+      } catch {
+        // 候选清理失败不覆盖原始协议错误。
+      }
+    }
     const baseError = error instanceof Error ? error : new Error(String(error));
     throw new ProtocolConnectionError(
       baseError.message,

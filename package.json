@@ -1,6 +1,6 @@
 {
   "name": "weixin-devtools-mcp",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "WeChat Mini Program automation MCP server with intelligent connection, page interaction, assertion validation and network monitoring",
   "type": "module",
   "author": "Wooter Shen",
@@ -34,13 +34,13 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc && node scripts/set-executable.mjs",
+    "build": "tsc && node scripts/generate-tool-descriptors.mjs && node scripts/set-executable.mjs",
     "prepare": "npm run build",
     "prepublishOnly": "npm run typecheck && npm run typecheck:test && npm test",
     "watch": "tsc --watch",
@@ -52,13 +52,27 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "pretest": "npm run build",
     "test": "vitest --run tests/protocol/ tests/tools/ tests/utils/",
     "test:watch": "vitest tests/protocol/ tests/tools/ tests/utils/",
     "test:coverage": "vitest --coverage tests/protocol/ tests/tools/ tests/utils/",
     "test:protocol": "vitest --run tests/protocol/",
     "test:tools": "vitest --run tests/tools/",
-    "test:integration": "RUN_INTEGRATION_TESTS=true vitest --run tests/integration/",
-    "test:integration:watch": "RUN_INTEGRATION_TESTS=true vitest tests/integration/",
+    "bench:test": "vitest --run tests/utils/benchmark-core.test.ts",
+    "bench:preflight": "node scripts/benchmarks/preflight.mjs",
+    "bench:run": "node scripts/benchmarks/run.mjs",
+    "bench:aggregate": "node scripts/benchmarks/aggregate.mjs",
+    "bench:compare": "node scripts/benchmarks/compare.mjs",
+    "bench:protocol:compare": "node scripts/benchmarks/protocol-static-pair.mjs",
+    "bench:snapshot:synthetic": "node scripts/benchmarks/snapshot-synthetic.mjs",
+    "bench:dom-epoch:synthetic": "node scripts/benchmarks/phase2-dom-epoch-synthetic.mjs",
+    "bench:runtime:synthetic": "node scripts/benchmarks/runtime-lifecycle-synthetic.mjs",
+    "bench:fixture:smoke": "node scripts/benchmarks/fixture-smoke.mjs",
+    "bench:serve": "node scripts/benchmarks/local-server.mjs",
+    "test:integration": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=true vitest --run tests/integration/",
+    "test:integration:watch": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=true vitest tests/integration/",
+    "test:integration:optional": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=false vitest --run tests/integration/",
+    "test:integration:optional:watch": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=false vitest tests/integration/",
     "test:all": "npm test && npm run test:integration",
     "diagnose:devtools-connection": "node scripts/diagnostics/diagnose-devtools-connection.mjs",
     "diagnose:mcp-config": "node scripts/diagnostics/diagnose-mcp-config.mjs",
@@ -69,8 +83,8 @@
     "test:manual:screenshot-diagnostic": "node tests/manual/diagnostics/verify-screenshot-diagnostic.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.6.0",
-    "miniprogram-automator": "^0.12.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "miniprogram-automator": "0.12.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },
@@ -78,6 +92,7 @@
     "@eslint/js": "^9.39.1",
     "@types/node": "^20.11.24",
     "@vitest/coverage-v8": "^1.6.0",
+    "ajv": "^8.20.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",

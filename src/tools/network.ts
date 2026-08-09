@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import type { NetworkRequest as StoredNetworkRequest } from './ToolDefinition.js';
 import { defineTool, ToolCategory, ensureMiniProgram, ResponseFormatter, type NetworkRequestType } from './ToolDefinition.js';
+import { jsonValueSchema, ToolResultError, toJsonValue } from './result.js';
 
 interface NetworkRequestSummary {
   reqid: string;
@@ -93,6 +94,27 @@ const clearNetworkRequestsSchema = z.object({
   clearRemote: z.boolean().optional().default(true).describe('是否同时清空小程序端日志'),
 });
 
+const networkListDataSchema = z.object({
+  monitoring: z.boolean(),
+  startedAt: z.string().nullable(),
+  syncedCount: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  pageSize: z.number().int().positive(),
+  pageIdx: z.number().int().nonnegative(),
+  requests: z.array(jsonValueSchema),
+});
+
+const networkDetailDataSchema = z.object({ request: jsonValueSchema });
+const stopNetworkDataSchema = z.object({
+  monitoring: z.literal(false),
+  clearedCount: z.number().int().nonnegative(),
+});
+const clearNetworkDataSchema = z.object({
+  localClearedCount: z.number().int().nonnegative(),
+  remoteClearedCount: z.number().int().nonnegative(),
+  monitoring: z.boolean(),
+});
+
 // 注意: start_network_monitoring 已移除，监听在连接成功后自动启动
 
 /**
@@ -102,6 +124,7 @@ export const listNetworkRequestsTool = defineTool({
   name: 'list_network_requests',
   description: '列表查询网络请求（短格式，支持分页和过滤），用于获取 reqid 后再查询详情',
   schema: listNetworkRequestsSchema,
+  outputSchema: networkListDataSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
@@ -121,7 +144,7 @@ export const listNetworkRequestsTool = defineTool({
     } = request.params;
 
     if (successOnly && failedOnly) {
-      throw new Error('successOnly 与 failedOnly 不能同时为 true');
+      throw new ToolResultError('INVALID_ARGUMENT', 'successOnly 与 failedOnly 不能同时为 true');
     }
 
     const syncedCount = await context.getNetworkCollector().syncFromRemote(true);
@@ -158,7 +181,7 @@ export const listNetworkRequestsTool = defineTool({
     if (since) {
       const sinceTime = new Date(since).getTime();
       if (Number.isNaN(sinceTime)) {
-        throw new Error('since 参数必须是有效的 ISO 8601 时间字符串');
+        throw new ToolResultError('INVALID_ARGUMENT', 'since 参数必须是有效的 ISO 8601 时间字符串');
       }
       filteredRequests = filteredRequests.filter(req => new Date(req.timestamp).getTime() >= sinceTime);
     }
@@ -167,6 +190,7 @@ export const listNetworkRequestsTool = defineTool({
     const start = pageIdx * pageSize;
     const end = Math.min(start + pageSize, total);
     const pageRequests = filteredRequests.slice(start, end);
+    const summaries = pageRequests.map(toSummary);
 
     response.appendResponseLine(ResponseFormatter.section('Network Requests (List View)'));
     response.appendResponseLine(`监听状态: ${context.networkStorage.isMonitoring ? '运行中' : '已停止'}`);
@@ -178,10 +202,19 @@ export const listNetworkRequestsTool = defineTool({
 
     if (pageRequests.length === 0) {
       response.appendResponseLine('<no requests found>');
+      response.mergeStructuredContent({
+        monitoring: context.networkStorage.isMonitoring,
+        startedAt: context.networkStorage.startTime,
+        syncedCount,
+        total,
+        pageSize,
+        pageIdx,
+        requests: [],
+      });
       return;
     }
 
-    for (const item of pageRequests.map(toSummary)) {
+    for (const item of summaries) {
       response.appendResponseLine(
         `reqid=${item.reqid} [${item.type}] ${item.method} ${item.url} status=${item.status}`
       );
@@ -189,6 +222,15 @@ export const listNetworkRequestsTool = defineTool({
 
     response.appendResponseLine('');
     response.appendResponseLine(ResponseFormatter.hint('使用 get_network_request 结合 reqid 查看完整详情'));
+    response.mergeStructuredContent({
+      monitoring: context.networkStorage.isMonitoring,
+      startedAt: context.networkStorage.startTime,
+      syncedCount,
+      total,
+      pageSize,
+      pageIdx,
+      requests: toJsonValue(summaries),
+    });
   },
 });
 
@@ -199,6 +241,7 @@ export const getNetworkRequestTool = defineTool({
   name: 'get_network_request',
   description: '通过 reqid 获取单条网络请求完整详情',
   schema: getNetworkRequestSchema,
+  outputSchema: networkDetailDataSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
@@ -253,6 +296,7 @@ export const getNetworkRequestTool = defineTool({
     if (matched.completedAt) {
       response.appendResponseLine(`完成时间: ${matched.completedAt}`);
     }
+    response.mergeStructuredContent({ request: toJsonValue(matched) });
   },
 });
 
@@ -263,6 +307,7 @@ export const stopNetworkMonitoringTool = defineTool({
   name: 'stop_network_monitoring',
   description: '停止网络监听并禁用拦截器',
   schema: stopNetworkMonitoringSchema,
+  outputSchema: stopNetworkDataSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
@@ -271,35 +316,7 @@ export const stopNetworkMonitoringTool = defineTool({
     ensureMiniProgram(context);
 
     const { clearLogs } = request.params;
-
-    await context.miniProgram!.evaluate(function() {
-      // @ts-ignore - wx is available in WeChat miniprogram environment
-      const wxObj = typeof wx !== 'undefined' ? wx : null;
-      if (wxObj) {
-        // @ts-ignore
-        wxObj.__networkInterceptorsDisabled = true;
-      }
-    });
-
-    const storage = context.networkStorage;
-    storage.isMonitoring = false;
-    context.networkStorage = storage;
-
-    let clearedCount = 0;
-    if (clearLogs) {
-      clearedCount = await context.miniProgram!.evaluate(function() {
-        // @ts-ignore
-        const wxObj = typeof wx !== 'undefined' ? wx : null;
-        if (wxObj && wxObj.__networkLogs) {
-          // @ts-ignore
-          const count = wxObj.__networkLogs.length;
-          // @ts-ignore
-          wxObj.__networkLogs = [];
-          return count;
-        }
-        return 0;
-      });
-    }
+    const clearedCount = await context.getNetworkCollector().stopRemoteMonitoring({ clearLogs });
 
     response.appendResponseLine(ResponseFormatter.section('网络监听已停止'));
     response.appendResponseLine('监听状态: 已停止');
@@ -308,6 +325,10 @@ export const stopNetworkMonitoringTool = defineTool({
     }
     response.appendResponseLine('');
     response.appendResponseLine(ResponseFormatter.hint('使用 reconnect_devtools 重新连接可恢复监听'));
+    response.mergeStructuredContent({
+      monitoring: false,
+      clearedCount,
+    });
   },
 });
 
@@ -318,6 +339,7 @@ export const clearNetworkRequestsTool = defineTool({
   name: 'clear_network_requests',
   description: '清空已收集的网络请求记录',
   schema: clearNetworkRequestsSchema,
+  outputSchema: clearNetworkDataSchema,
   annotations: {
     category: ToolCategory.NETWORK,
     audience: ['developers'],
@@ -353,5 +375,10 @@ export const clearNetworkRequestsTool = defineTool({
     }
     response.appendResponseLine('');
     response.appendResponseLine(ResponseFormatter.hint('网络监听仍在运行，新的请求会继续被收集'));
+    response.mergeStructuredContent({
+      localClearedCount: localCountBefore,
+      remoteClearedCount: remoteCount,
+      monitoring: context.networkStorage.isMonitoring,
+    });
   },
 });

@@ -44,7 +44,7 @@ import {
   stopNetworkMonitoringTool,
   clearNetworkRequestsTool
 } from './network.js';
-import { querySelectorTool, waitForTool } from './page.js';
+import { findElementsTool, waitForTool } from './page.js';
 import { screenshotTool } from './screenshot.js';
 import { evaluateScript } from './script.js';
 import { getPageSnapshotTool } from './snapshot.js';
@@ -56,7 +56,7 @@ const tools: ToolDefinition[] = [
   getConnectionStatusTool,
   getCurrentPageTool,
   getPageSnapshotTool,
-  querySelectorTool,
+  findElementsTool,
   waitForTool,
   clickTool,
   inputTextTool,
