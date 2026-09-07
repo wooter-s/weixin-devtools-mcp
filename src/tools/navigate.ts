@@ -56,7 +56,7 @@ async function refreshPageAfterNavigation(
   context.markPageMutation();
   context.invalidateSnapshotCache?.();
   context.clearElementMap?.();
-  context.splitConsoleAfterNavigation?.();
+  await context.splitConsoleAfterNavigation?.();
   context.splitNetworkAfterNavigation?.();
 
   try {

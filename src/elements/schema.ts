@@ -4,11 +4,7 @@ const indexedLocatorFields = {
   index: z.number().int().nonnegative().optional().describe('从 0 开始的匹配索引；多匹配时必须提供'),
 };
 
-export const elementTargetSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('ref'),
-    ref: z.string().min(1).describe('页面快照返回的 opaque ref'),
-  }),
+export const locatorSegmentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('testId'),
     value: z.string().min(1).describe('data-testid 属性值'),
@@ -16,6 +12,10 @@ export const elementTargetSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('id'),
     value: z.string().min(1).describe('id 属性值'),
+  }),
+  z.object({
+    kind: z.literal('dataId'),
+    value: z.string().min(1).describe('data-id 属性值'),
   }),
   z.object({
     kind: z.literal('selector'),
@@ -28,6 +28,19 @@ export const elementTargetSchema = z.discriminatedUnion('kind', [
     exact: z.boolean().optional().default(true).describe('是否精确匹配，默认 true'),
     tagName: z.string().min(1).optional().describe('可选的组件标签限制'),
     ...indexedLocatorFields,
+  }),
+]);
+
+export const elementTargetSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('ref'),
+    ref: z.string().min(1).describe('页面快照返回的 opaque ref'),
+  }),
+  z.object({
+    kind: z.literal('path'),
+    path: z.array(locatorSegmentSchema).min(1).max(16).describe(
+      '从 Page 开始、逐级进入自定义组件作用域的 locator path'
+    ),
   }),
 ]);
 

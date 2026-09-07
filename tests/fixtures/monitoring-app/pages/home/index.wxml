@@ -1,0 +1,14 @@
+<view id="root">
+  <text id="title">MCP regression</text>
+  <text id="count">{{count}}</text>
+  <button id="increment" bindtap="increment">Increment</button>
+  <input id="input" value="{{input}}" bindinput="inputChange" />
+  <textarea id="textarea" value="{{text}}" bindinput="textChange" />
+  <switch id="switch" checked="{{checked}}" bindchange="switchChange" />
+  <slider id="slider" value="{{slider}}" bindchange="sliderChange" />
+  <picker id="picker" value="{{picker}}" range="{{items}}" bindchange="pickerChange"><view>Pick</view></picker>
+  <button id="disabled" disabled="{{true}}">Disabled</button>
+  <view id="conditional" wx:if="{{visible}}">Conditional</view>
+  <view id="visibility" hidden="{{hidden}}">Visibility</view>
+  <test-card id="card" />
+</view>

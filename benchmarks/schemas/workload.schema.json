@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/weixin-devtools-mcp/benchmark-workload.schema.json",
+  "title": "weixin-devtools-mcp benchmark workload",
+  "type": "object",
+  "required": ["version", "fixture", "rules", "scenarios"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "minLength": 1 },
+    "fixture": {
+      "type": "object",
+      "required": ["project", "entryRoute", "secondaryRoute", "localRequestOnly"],
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "string", "minLength": 1 },
+        "entryRoute": { "type": "string", "pattern": "^/" },
+        "secondaryRoute": { "type": "string", "pattern": "^/" },
+        "localRequestOnly": { "const": true }
+      }
+    },
+    "rules": { "type": "object" },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "direction", "warmups", "iterations", "description", "acceptance"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]+$" },
+          "direction": { "enum": ["runtime", "locator", "protocol"] },
+          "warmups": { "type": "integer", "minimum": 0 },
+          "iterations": { "type": "integer", "minimum": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "acceptance": { "type": "object" }
+        }
+      }
+    }
+  }
+}

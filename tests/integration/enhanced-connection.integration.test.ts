@@ -5,12 +5,20 @@
  * 同时验证关键参数校验逻辑。
  */
 
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { MiniProgramContext } from '../../src/MiniProgramContext.js';
-import { connectDevtoolsTool, getConnectionStatusTool } from '../../src/tools/connection.js';
+import type { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import { connectDevtoolsTool } from '../../src/tools/connection.js';
 
-import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
+import {
+  createIntegrationContext,
+  IntegrationHarness,
+  runTool,
+} from './helpers/integration-harness.js';
 import {
   handleIntegrationUnavailable,
   shouldRunIntegrationTests,
@@ -40,7 +48,7 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
     }
 
     try {
-      await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
+      await harness.reconnect(context);
       return true;
     } catch (error) {
       runtimeReady = false;
@@ -56,13 +64,11 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
       return;
     }
 
-    context = MiniProgramContext.create();
+    context = createIntegrationContext();
     try {
       const connected = await harness.connect(context, {
-        strategy: 'auto',
         timeoutMs: 60_000,
         healthCheck: false,
-        autoDiscover: true,
       });
       context = connected.context;
       runtimeReady = true;
@@ -80,20 +86,21 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
     context = null;
   }, 120_000);
 
-  it('auto 策略应该返回可用连接状态', async () => {
-    if (!(await ensureConnected()) || !context) {
-      return;
+  it('project 目标独立验证启动，不能由显式端点覆盖', async () => {
+    const projectPath = path.resolve('tests/fixtures/monitoring-app');
+    const isolated = createIntegrationContext();
+    try {
+      await runTool(isolated, connectDevtoolsTool.handler, {
+        target: { kind: 'project', projectPath, cliPath: harness.cliPath, autoPort: 9431 },
+        timeoutMs: 15_000,
+        healthCheck: false,
+      });
+      expect(isolated.connectionStatus.connected).toBe(true);
+      expect(isolated.connectionStatus.strategyUsed).toMatch(/launch|connect/);
+    } finally {
+      await isolated.disconnectDevtools();
+      await promisify(execFile)(harness.cliPath, ['close', '--project', projectPath]);
     }
-
-    const statusResponse = await runTool(context, getConnectionStatusTool.handler, { refreshHealth: true });
-    const text = statusResponse.getResponseText();
-    expect(text).toContain('连接状态:');
-    expect(text).toContain('已连接: 是');
-
-    const status = context.connectionStatus;
-    expect(status.connected).toBe(true);
-    expect(status.state).toMatch(/connected|degraded/);
-    expect(status.strategyUsed).toMatch(/auto|launch|connect|discover|wsEndpoint|browserUrl/);
   }, 90_000);
 
   it('reconnect_devtools 应该复用历史参数重连', async () => {
@@ -101,10 +108,7 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
       return;
     }
 
-    const reconnectResponse = await harness.reconnect(context, {
-      timeoutMs: 60_000,
-      healthCheck: false,
-    });
+    const reconnectResponse = await harness.reconnect(context);
     expect(reconnectResponse.getResponseText()).toContain('重连成功');
 
     const status = await context.getConnectionStatus({ refreshHealth: false });
@@ -122,7 +126,6 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
     expect(disconnected.state).toBe('disconnected');
 
     const connected = await harness.connect(context, {
-      strategy: 'auto',
       timeoutMs: 60_000,
       healthCheck: false,
     });
@@ -132,24 +135,23 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
     expect(restored.connected).toBe(true);
   }, 120_000);
 
-  it('connect 策略缺少 projectPath 时应返回参数错误', async () => {
-    const isolatedContext = MiniProgramContext.create();
+  it('project 目标缺少 projectPath 时应返回参数错误', async () => {
+    const isolatedContext = createIntegrationContext();
 
     await expect(
       runTool(isolatedContext, connectDevtoolsTool.handler, {
-        strategy: 'connect',
+        target: { kind: 'project', projectPath: '' },
         timeoutMs: 5_000,
       })
     ).rejects.toThrow(/projectPath/i);
   });
 
   it('timeoutMs 非法值应被拒绝', async () => {
-    const isolatedContext = MiniProgramContext.create();
+    const isolatedContext = createIntegrationContext();
 
     await expect(
       runTool(isolatedContext, connectDevtoolsTool.handler, {
-        strategy: 'auto',
-        projectPath: harness.projectPath,
+        target: { kind: 'project', projectPath: harness.projectPath },
         timeoutMs: 0,
       })
     ).rejects.toThrow(/timeoutMs 必须是正数/);

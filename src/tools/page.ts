@@ -8,7 +8,8 @@ import { z } from 'zod';
 import {
   elementTargetSchema,
   elementTargetToSelector,
-  type ElementTarget,
+  locatorSegmentSchema,
+  type LocatorSegment,
 } from '../elements/index.js';
 import {
   queryElements,
@@ -30,7 +31,7 @@ import {
 } from './ToolDefinition.js';
 import { jsonValueSchema, ToolResultError, toJsonValue } from './result.js';
 
-function locatorSelector(locator: Exclude<ElementTarget, { kind: 'ref' }>): string {
+function locatorSelector(locator: LocatorSegment): string {
   if (locator.kind === 'text') return locator.tagName ?? '*';
   return elementTargetToSelector(locator);
 }
@@ -46,11 +47,11 @@ function elementResolutionCode(error: unknown): string | null {
  */
 export const findElementsTool = defineTool({
   name: 'find_elements',
-  description: '通过 selector、id、testId、text 或 ref 查找页面元素并返回 opaque ref',
+  description: '在 Page 根作用域通过 selector、id、testId、dataId 或 text 查找元素并返回 opaque ref',
   // 保持根节点为 MCP 规范要求的 object；组合参数约束由 handler 返回稳定 INVALID_ARGUMENT。
   schema: z.object({
-    locator: elementTargetSchema,
-  }),
+    locator: locatorSegmentSchema,
+  }).strict(),
   outputSchema: z.object({
     pageRevision: z.number().int().nonnegative(),
     count: z.number().int().nonnegative(),
@@ -87,56 +88,38 @@ export const findElementsTool = defineTool({
           const expectedRevision = baseline?.pageRevision ?? context.getPageRevision();
           const expectedPath = baseline?.pagePath ?? (await context.currentPage.path);
 
-          if (locator.kind === 'ref') {
-            const readRef = async (): Promise<QueryResult[]> => {
-              const operation = async (
-                element: Awaited<ReturnType<typeof context.getElementByTarget>>
-              ) => [
-                {
-                  ref: locator.ref,
-                  tagName: element.tagName,
-                  text: await element.text().catch(() => undefined),
-                },
-              ];
-              return pageState
-                ? pageState.withElementByTargetOperation(locator, operation)
-                : runElementTargetOperation(context, locator, operation);
-            };
-            results = await readRef();
-          } else {
-            const selector = locatorSelector(locator);
-            const options: QueryOptions = { selector, pageRevision: expectedRevision };
-            const queryElementMap = new Map();
-            results = await queryElements(context.currentPage, queryElementMap, options);
-            if (locator.kind === 'text') {
-              results = results.filter((element) =>
-                locator.exact === false
-                  ? element.text?.includes(locator.value)
-                  : element.text === locator.value
-              );
-            }
-            const index = 'index' in locator ? locator.index : undefined;
-            if (index !== undefined) results = results[index] ? [results[index]] : [];
+          const selector = locatorSelector(locator);
+          const options: QueryOptions = { selector, pageRevision: expectedRevision };
+          const queryElementMap = new Map();
+          results = await queryElements(context.currentPage, queryElementMap, options);
+          if (locator.kind === 'text') {
+            results = results.filter((element) =>
+              locator.exact === false
+                ? element.text?.includes(locator.value)
+                : element.text === locator.value
+            );
+          }
+          const index = 'index' in locator ? locator.index : undefined;
+          if (index !== undefined) results = results[index] ? [results[index]] : [];
 
-            const returnedRefs = new Set(results.map((element) => element.ref));
-            for (const ref of queryElementMap.keys()) {
-              if (!returnedRefs.has(ref)) queryElementMap.delete(ref);
-            }
-            const registerElementMap =
-              pageState?.registerElementMap.bind(pageState) ??
-              context.registerElementMap?.bind(context);
-            if (registerElementMap) {
-              try {
-                registerElementMap(queryElementMap, { expectedRevision, expectedPath });
-              } catch (error) {
-                if (elementResolutionCode(error) === 'STALE_ELEMENT' && attempt < 2) {
-                  continue;
-                }
-                throw error;
+          const returnedRefs = new Set(results.map((element) => element.ref));
+          for (const ref of queryElementMap.keys()) {
+            if (!returnedRefs.has(ref)) queryElementMap.delete(ref);
+          }
+          const registerElementMap =
+            pageState?.registerElementMap.bind(pageState) ??
+            context.registerElementMap?.bind(context);
+          if (registerElementMap) {
+            try {
+              registerElementMap(queryElementMap, { expectedRevision, expectedPath });
+            } catch (error) {
+              if (elementResolutionCode(error) === 'STALE_ELEMENT' && attempt < 2) {
+                continue;
               }
-            } else {
-              for (const [ref, info] of queryElementMap) context.elementMap.set(ref, info);
+              throw error;
             }
+          } else {
+            for (const [ref, info] of queryElementMap) context.elementMap.set(ref, info);
           }
 
           commit = await attachPageStateObservation(context, response, {}, pageState ?? context);

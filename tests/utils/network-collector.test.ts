@@ -1,138 +1,123 @@
+import vm from 'node:vm';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { NetworkCollector } from '../../src/collectors/NetworkCollector.js';
+import { networkRuntime } from '../../src/collectors/network-runtime.js';
 
-function createMiniProgram() {
-  const evaluate = vi.fn(async (_fn: unknown): Promise<unknown> => undefined);
-  const mockWxMethod = vi.fn(async (_method: string, _handler: unknown): Promise<void> => undefined);
-  const restoreWxMethod = vi.fn(async (_method: string): Promise<void> => undefined);
-  return {
-    evaluate,
-    mockWxMethod,
-    restoreWxMethod,
-  };
-}
+import { runtime } from './runtime-fixture.js';
 
 describe('NetworkCollector remote lifecycle', () => {
-  it('同一实例重复启动只安装一套 wx 拦截器', async () => {
-    const miniProgram = createMiniProgram();
+  it('repeated install is idempotent and stop restores all descriptors', async () => {
+    const r = runtime();
+    const before = Object.getOwnPropertyDescriptors(r.wx);
     const collector = new NetworkCollector();
+    await collector.startRemoteMonitoring(r.mini);
+    const wrapped = Object.getOwnPropertyDescriptors(r.wx);
+    await collector.startRemoteMonitoring(r.mini);
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')).toEqual(wrapped.request);
+    expect(r.calls.evaluate).toHaveBeenCalledOnce();
+    vm.runInContext("wx.request({ url: 'local' }); wx.uploadFile({ url: 'local' })", r.sandbox);
+    expect(await collector.stopRemoteMonitoring({ clearLogs: true })).toBe(2);
+    for (const name of Object.keys(before)) expect(Object.getOwnPropertyDescriptor(r.wx, name)).toEqual(before[name]);
+    expect(collector.isMonitoring()).toBe(false);
+  });
 
-    await collector.startRemoteMonitoring(miniProgram as never);
-    await collector.startRemoteMonitoring(miniProgram as never);
+  it('partial install failure rolls back previously installed methods', async () => {
+    const r = runtime();
+    Object.defineProperty(r.wx, 'uploadFile', { configurable: false });
+    const collector = new NetworkCollector();
+    await expect(collector.startRemoteMonitoring(r.mini)).rejects.toThrow();
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(r.native);
+    expect(collector.isMonitoring()).toBe(false);
+  });
 
-    expect(miniProgram.mockWxMethod.mock.calls.map(call => call[0])).toEqual([
-      'request',
-      'uploadFile',
-      'downloadFile',
-    ]);
+  it('aborted late installation rolls back and excludes another start until settled', async () => {
+    const r = runtime();
+    const execute = r.calls.evaluate.getMockImplementation()!;
+    let release!: () => void;
+    r.calls.evaluate.mockImplementationOnce(async (...args) => {
+      await new Promise<void>(resolve => { release = resolve; });
+      return execute(...args);
+    });
+    const collector = new NetworkCollector();
+    const abort = new AbortController();
+    const start = collector.startRemoteMonitoring(r.mini, { signal: abort.signal });
+    abort.abort(new Error('deadline'));
+    await expect(collector.startRemoteMonitoring(r.mini)).rejects.toThrow('尚未收敛');
+    release();
+    await expect(start).rejects.toThrow('deadline');
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(r.native);
+    await collector.startRemoteMonitoring(r.mini);
     expect(collector.isMonitoring()).toBe(true);
+    await collector.stopRemoteMonitoring();
   });
 
-  it('停止监听会恢复全部 wx 方法并可清空远端日志', async () => {
-    const miniProgram = createMiniProgram();
-    miniProgram.evaluate
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(2);
+  it('failed restoration can be retried', async () => {
+    const r = runtime();
     const collector = new NetworkCollector();
-    await collector.startRemoteMonitoring(miniProgram as never);
-
-    const cleared = await collector.stopRemoteMonitoring({ clearLogs: true });
-
-    expect(miniProgram.restoreWxMethod.mock.calls.map(call => call[0])).toEqual([
-      'request',
-      'uploadFile',
-      'downloadFile',
-    ]);
-    expect(cleared).toBe(2);
+    await collector.startRemoteMonitoring(r.mini);
+    r.calls.evaluate.mockRejectedValueOnce(new Error('restore failed'));
+    await expect(collector.stopRemoteMonitoring()).rejects.toThrow('restore failed');
     expect(collector.isMonitoring()).toBe(false);
+    await collector.stopRemoteMonitoring();
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(r.native);
   });
 
-  it('部分安装失败时回滚已经模拟的方法', async () => {
-    const miniProgram = createMiniProgram();
-    miniProgram.mockWxMethod
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('upload mock failed'));
-    const collector = new NetworkCollector();
-
-    await expect(collector.startRemoteMonitoring(miniProgram as never))
-      .rejects.toThrow('upload mock failed');
-
-    expect(miniProgram.restoreWxMethod).toHaveBeenCalledOnce();
-    expect(miniProgram.restoreWxMethod).toHaveBeenCalledWith('request');
-    expect(collector.isMonitoring()).toBe(false);
+  it('late stop cannot remove a new runtime owner or third-party replacement', async () => {
+    const r = runtime();
+    await r.mini.evaluate(networkRuntime, { action: 'install', owner: 'old' });
+    await r.mini.evaluate(networkRuntime, { action: 'install', owner: 'new' });
+    const current = Object.getOwnPropertyDescriptor(r.wx, 'request')?.value;
+    await r.mini.evaluate(networkRuntime, { action: 'stop', owner: 'old' });
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(current);
+    const thirdParty = vi.fn();
+    Object.defineProperty(r.wx, 'request', { value: thirdParty });
+    await r.mini.evaluate(networkRuntime, { action: 'stop', owner: 'new' });
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(thirdParty);
   });
 
-  it('恢复失败会保留所有权并允许下一次停止重试', async () => {
-    const miniProgram = createMiniProgram();
-    miniProgram.restoreWxMethod.mockImplementationOnce(async () => {
-      throw new Error('restore failed');
+  it('stop during a pending start restores the completed installation', async () => {
+    const r = runtime();
+    const execute = r.calls.evaluate.getMockImplementation()!;
+    let release!: () => void;
+    r.calls.evaluate.mockImplementationOnce(async (...args) => {
+      await new Promise<void>(resolve => { release = resolve; });
+      return execute(...args);
     });
     const collector = new NetworkCollector();
-    await collector.startRemoteMonitoring(miniProgram as never);
-
-    await expect(collector.stopRemoteMonitoring()).rejects.toThrow('恢复 wx 方法失败');
-    expect(collector.isMonitoring()).toBe(false);
-
-    await expect(collector.stopRemoteMonitoring()).resolves.toBe(0);
-    expect(miniProgram.restoreWxMethod).toHaveBeenCalledTimes(4);
+    const start = collector.startRemoteMonitoring(r.mini);
+    const stop = collector.stopRemoteMonitoring();
+    release();
+    await start;
+    await stop;
+    expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(r.native);
   });
 
-  it('远程日志同步失败时向上抛错，不会伪装成新增 0 条', async () => {
-    const miniProgram = createMiniProgram();
+  it('remote read errors propagate and request ids update in place', async () => {
+    const r = runtime();
     const collector = new NetworkCollector();
-    await collector.startRemoteMonitoring(miniProgram as never);
-    const syncError = new Error('connection lost');
-    miniProgram.evaluate.mockRejectedValueOnce(syncError);
-
-    await expect(collector.syncFromRemote(true)).rejects.toBe(syncError);
+    await collector.startRemoteMonitoring(r.mini);
+    r.calls.evaluate.mockRejectedValueOnce(new Error('connection lost'));
+    await expect(collector.syncFromRemote(true)).rejects.toThrow('connection lost');
+    const row = { id: 'one', type: 'request' as const, url: 'local', timestamp: new Date().toISOString(), success: false };
+    const id = collector.addRequest(row);
+    expect(collector.addRequest({ ...row, success: true })).toBe(id);
+    expect(collector.getCurrentCount()).toBe(1);
+    await collector.stopRemoteMonitoring();
   });
+});
 
-  it('相同逻辑 request id 只保留一条并就地更新', () => {
-    const collector = new NetworkCollector();
-    const firstId = collector.addRequest({
-      id: 'req-1',
-      type: 'request',
-      url: 'http://127.0.0.1/start',
-      timestamp: '2026-01-01T00:00:00.000Z',
-      success: false,
-      pending: true,
-    });
-    const secondId = collector.addRequest({
-      id: 'req-1',
-      type: 'request',
-      url: 'http://127.0.0.1/start',
-      timestamp: '2026-01-01T00:00:00.000Z',
-      completedAt: '2026-01-01T00:00:00.100Z',
-      statusCode: 200,
-      success: true,
-      pending: false,
-    });
-
-    expect(secondId).toBe(firstId);
-    expect(collector.getRequests()).toHaveLength(1);
-    expect(collector.getRequestById('req-1')).toMatchObject({
-      statusCode: 200,
-      success: true,
-      pending: false,
-    });
-  });
-
-  it('拦截器把 origin 返回的 RequestTask 原样返回给业务代码', async () => {
-    const handlers = new Map<string, (this: { origin: () => unknown }, options: object) => unknown>();
-    const miniProgram = createMiniProgram();
-    miniProgram.mockWxMethod.mockImplementation(async (method: string, handler: unknown) => {
-      handlers.set(method, handler as (this: { origin: () => unknown }, options: object) => unknown);
-    });
-    const collector = new NetworkCollector();
-    await collector.startRemoteMonitoring(miniProgram as never);
-    const requestTask = { abort: vi.fn() };
-
-    const returned = handlers.get('request')!.call(
-      { origin: () => requestTask },
-      { url: 'http://127.0.0.1/test' },
-    );
-
-    expect(returned).toBe(requestTask);
-  });
+it('retains rollback ownership when install response and rollback transport both fail', async () => {
+  const r = runtime();
+  const execute = r.calls.evaluate.getMockImplementation()!;
+  r.calls.evaluate.mockImplementationOnce(async (...args) => {
+    await execute(...args);
+    throw new Error('install response lost');
+  }).mockRejectedValueOnce(new Error('rollback transport lost'));
+  const collector = new NetworkCollector();
+  await expect(collector.startRemoteMonitoring(r.mini)).rejects.toThrow('回滚未完成');
+  expect(collector.isMonitoring()).toBe(false);
+  await collector.stopRemoteMonitoring();
+  expect(Object.getOwnPropertyDescriptor(r.wx, 'request')?.value).toBe(r.native);
 });

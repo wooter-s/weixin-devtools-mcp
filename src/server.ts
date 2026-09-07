@@ -8,8 +8,10 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  ErrorCode,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  McpError,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -18,10 +20,18 @@ import type { ToolCategory } from './config/tool-category.js';
 import {
   parseToolProfileConfig,
   resolveToolDescriptorsByProfile,
+  summarizeToolProfile,
 } from './config/tool-profile.js';
 import type { ElementSnapshot, PageSnapshot, PageStateCommit } from './core/types.js';
 import { LeanServer } from './protocol/lean-server.js';
-import { loadToolDescriptorManifest } from './protocol/tool-descriptor-manifest.js';
+import {
+  sanitizePublicObject,
+  sanitizePublicText,
+} from './protocol/public-sanitizer.js';
+import {
+  assertToolDescriptorsMatchManifest,
+  loadToolDescriptorManifest,
+} from './protocol/tool-descriptor-manifest.js';
 import type * as ToolResultRuntimeModule from './protocol/tool-result.js';
 import type { ToolInvocationMeta } from './protocol/tool-result.js';
 import type { ToolDefinition, ToolRequest } from './tools/ToolDefinition.js';
@@ -32,15 +42,11 @@ import type {
 } from './tools/result.js';
 import {
   loadToolRuntime,
+  type RuntimeToolResponse,
   type ToolRuntimeModule,
 } from './tools/runtime-loader.js';
 import { extractErrorMessage } from './utils/error.js';
 import { PACKAGE_NAME, VERSION } from './version.js';
-
-/**
- * 全局上下文状态 - 使用 MiniProgramContext 类管理
- */
-const globalContext = MiniProgramContext.create();
 
 /**
  * 创建 MCP 服务器
@@ -74,12 +80,20 @@ const {
   activeTools: activeToolDescriptors,
   disabledTools: disabledToolDescriptors,
 } = resolveToolDescriptorsByProfile(descriptorManifest.tools, toolProfileConfig);
+const toolProfileSummary = summarizeToolProfile(
+  toolProfileConfig,
+  { activeTools: activeToolDescriptors, disabledTools: disabledToolDescriptors },
+  tool => tool._meta.category,
+);
+const globalContext = MiniProgramContext.create({ toolProfile: toolProfileSummary });
 const activeToolNames = new Set(activeToolDescriptors.map(tool => tool.name));
 let toolRuntimeRegistration: Promise<ToolRuntimeModule> | undefined;
 type ToolResultRuntime = typeof ToolResultRuntimeModule;
 let toolResultRuntimePromise: Promise<ToolResultRuntime> | undefined;
 
 const MAX_OBSERVATION_DIFF_ITEMS = 20;
+const CONNECTION_STATUS_RESOURCE_URI = 'weixin://connection/status';
+const PAGE_SNAPSHOT_RESOURCE_URI = 'weixin://page/snapshot';
 
 function getDisabledToolHint(category: ToolCategory): string {
   return [
@@ -98,15 +112,14 @@ function registerTool(tool: ToolDefinition): void {
 }
 
 async function loadAndRegisterToolRuntime(): Promise<ToolRuntimeModule> {
-  toolRuntimeRegistration ??= loadToolRuntime()
-    .then(runtime => {
+  toolRuntimeRegistration ??= Promise.all([
+    loadToolRuntime(),
+    import('./protocol/tool-descriptors.js'),
+  ])
+    .then(([runtime, descriptorRuntime]) => {
+      const runtimeDescriptors = descriptorRuntime.buildToolDescriptors(runtime.allTools);
+      assertToolDescriptorsMatchManifest(descriptorManifest, runtimeDescriptors);
       const implementations = new Map(runtime.allTools.map(tool => [tool.name, tool]));
-      if (
-        implementations.size !== descriptorManifest.toolCount ||
-        descriptorManifest.tools.some(descriptor => !implementations.has(descriptor.name))
-      ) {
-        throw new Error('工具实现与构建期 descriptor manifest 不一致，请重新执行 npm run build');
-      }
 
       for (const toolName of activeToolNames) {
         const implementation = implementations.get(toolName);
@@ -132,12 +145,12 @@ function loadToolResultRuntime(): Promise<ToolResultRuntime> {
   return toolResultRuntimePromise;
 }
 
-function observationIdentity(element: ElementSnapshot, index: number): string {
+function observationIdentity(element: ElementSnapshot, index: number, scopeId: string): string {
   const attributes = element.attributes ?? {};
   const stableId = attributes['data-testid'] ?? attributes.id ?? attributes['data-id'];
   return stableId
-    ? `${element.tagName}:stable:${stableId}`
-    : `${element.tagName}:position:${index}`;
+    ? `${scopeId}:${element.tagName}:stable:${stableId}`
+    : `${scopeId}:${element.tagName}:position:${index}`;
 }
 
 function observationFingerprint(element: ElementSnapshot): string {
@@ -157,14 +170,30 @@ function observationElement(element: ElementSnapshot) {
   };
 }
 
+function scopedSnapshotElements(snapshot: PageSnapshot) {
+  const scopes = snapshot.scopes;
+  if (!scopes) {
+    return snapshot.elements.map((element, index) => ({
+      scopeId: snapshot.rootScopeId ?? 'scope_0',
+      element,
+      index,
+    }));
+  }
+  return scopes.flatMap(scope => scope.elements.map((element, index) => ({
+    scopeId: scope.scopeId,
+    element,
+    index,
+  })));
+}
+
 function createObservationDiff(previous: PageSnapshot, current: PageSnapshot) {
-  const previousByIdentity = new Map(previous.elements.map((element, index) => [
-    observationIdentity(element, index),
-    element,
+  const previousByIdentity = new Map(scopedSnapshotElements(previous).map(entry => [
+    observationIdentity(entry.element, entry.index, entry.scopeId),
+    entry.element,
   ]));
-  const currentByIdentity = new Map(current.elements.map((element, index) => [
-    observationIdentity(element, index),
-    element,
+  const currentByIdentity = new Map(scopedSnapshotElements(current).map(entry => [
+    observationIdentity(entry.element, entry.index, entry.scopeId),
+    entry.element,
   ]));
 
   const added: ReturnType<typeof observationElement>[] = [];
@@ -214,7 +243,7 @@ function captureObservation(commit: PageStateCommit): ToolObservation {
     pageRevision: snapshot.pageRevision,
     snapshotId: snapshot.snapshotId,
     generatedAt: new Date().toISOString(),
-    elementCount: snapshot.elements.length,
+    elementCount: snapshot.usage?.elements ?? scopedSnapshotElements(snapshot).length,
     changed,
     ...(diff ? { diff } : {}),
   };
@@ -234,19 +263,69 @@ function failureResult(
     resultRuntime,
     resultRuntime.startToolInvocation(toolName),
     error,
-    code,
+    { code },
   );
+}
+
+type McpToolContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
+function responseContent(
+  response: RuntimeToolResponse,
+  options: { sanitizeText?: boolean } = {},
+): McpToolContent[] {
+  const content: McpToolContent[] = [];
+  const text = response.getResponseText();
+  if (text) {
+    content.push({
+      type: 'text',
+      text: options.sanitizeText ? sanitizePublicText(text, null) : text,
+    });
+  }
+  for (const image of response.getAttachedImages()) {
+    content.push({ type: 'image', data: image.data, mimeType: image.mimeType });
+  }
+  return content;
 }
 
 function invocationFailureResult(
   resultRuntime: ToolResultRuntime,
   invocation: ToolInvocationMeta,
   error: Error,
-  code?: ToolErrorCode,
+  options: {
+    code?: ToolErrorCode;
+    response?: RuntimeToolResponse;
+  } = {},
 ) {
-  const failure = resultRuntime.buildToolFailure(invocation, error, code ? { code } : undefined);
+  const partialData = options.response?.getStructuredContent();
+  const warnings: ToolNotice[] = [];
+  let observation: ToolObservation | undefined;
+  const commit = options.response?.getPageStateCommit();
+  if (commit) {
+    try {
+      observation = captureObservation(commit);
+    } catch (observationError) {
+      warnings.push({
+        code: 'OBSERVATION_UNAVAILABLE',
+        message: `已提交页面观察无法序列化: ${extractErrorMessage(observationError)}`,
+      });
+    }
+  }
+  const failure = resultRuntime.buildToolFailure(invocation, error, {
+    code: options.code,
+    partialData: partialData && Object.keys(partialData).length > 0 ? partialData : undefined,
+    observation,
+    warnings,
+  });
+  const content: McpToolContent[] = [
+    { type: 'text', text: `[${failure.code}] ${failure.error.message}` },
+  ];
+  if (options.response) {
+    content.push(...responseContent(options.response, { sanitizeText: true }));
+  }
   return {
-    content: [{ type: 'text' as const, text: `[${failure.code}] ${failure.error.message}` }],
+    content,
     structuredContent: { ...failure },
     isError: true,
   };
@@ -256,82 +335,100 @@ function invocationFailureResult(
  * 处理资源列表请求
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  const resources = [];
-
-  // 连接状态资源
-  resources.push({
-    uri: "weixin://connection/status",
-    mimeType: "application/json",
-    name: "连接状态",
-    description: "微信开发者工具连接状态"
-  });
-
-  // 如果已连接，提供页面快照资源
-  if (globalContext.isConnected() && globalContext.currentPage) {
-    resources.push({
-      uri: "weixin://page/snapshot",
+  return {
+    resources: [{
+      uri: CONNECTION_STATUS_RESOURCE_URI,
+      mimeType: "application/json",
+      name: "连接状态",
+      description: "连接、工具 profile 与监听生命周期状态"
+    }, {
+      uri: PAGE_SNAPSHOT_RESOURCE_URI,
       mimeType: "application/json",
       name: "页面快照",
-      description: "当前页面的元素快照"
-    });
-  }
-
-  return { resources };
+      description: "当前页面的 V2 作用域图快照（读取时需要已连接）"
+    }],
+  };
 });
 
 /**
  * 处理资源读取请求
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const url = new URL(request.params.uri);
-
-  // 对于 weixin://connection/status, url.host="connection", url.pathname="/status"
-  // 对于 weixin://page/snapshot, url.host="page", url.pathname="/snapshot"
-  const resourcePath = `${url.host}${url.pathname}`;
-
-  if (resourcePath === "connection/status") {
+  if (request.params.uri === CONNECTION_STATUS_RESOURCE_URI) {
     const connectionStatus = await globalContext.getConnectionStatus({ refreshHealth: false });
     const summary = globalContext.getStatusSummary();
+    const runtimeStatus = globalContext.getRuntimeStatus();
     const status = {
+      schemaVersion: '2.0',
       state: connectionStatus.state,
       connectionId: connectionStatus.connectionId,
       connected: connectionStatus.connected,
       hasCurrentPage: connectionStatus.hasCurrentPage,
       pagePath: connectionStatus.pagePath,
-      strategyUsed: connectionStatus.strategyUsed,
+      method: connectionStatus.strategyUsed,
       endpoint: connectionStatus.endpoint,
       health: connectionStatus.health,
       lastError: connectionStatus.lastError,
       lastConnectedAt: connectionStatus.lastConnectedAt,
       lastHealthCheckAt: connectionStatus.lastHealthCheckAt,
       elementCount: summary.elementCount,
-      consoleMonitoring: summary.consoleMonitoring,
       consoleMessageCount: summary.consoleMessageCount,
-      networkMonitoring: summary.networkMonitoring,
-      networkRequestCount: summary.networkRequestCount
+      networkRequestCount: summary.networkRequestCount,
+      ...runtimeStatus,
     };
 
     return {
       contents: [{
         uri: request.params.uri,
         mimeType: "application/json",
-        text: JSON.stringify(status, null, 2)
+        text: JSON.stringify(sanitizePublicObject(status), null, 2)
       }]
     };
   }
 
-  if (resourcePath === "page/snapshot") {
+  if (request.params.uri === PAGE_SNAPSHOT_RESOURCE_URI) {
+    if (!globalContext.isConnected()) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        '获取页面快照失败: 请先连接微信开发者工具',
+      );
+    }
+    if (!globalContext.currentPage) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        '获取页面快照失败: 当前没有活动页面',
+      );
+    }
+
     try {
-      const { snapshot: pageSnapshot } = await globalContext.synchronizePageState({
-        mode: 'snapshot',
-        forceRefresh: true,
-      });
+      const { snapshot: pageSnapshot } = await globalContext.capturePageSnapshot();
+      const rootScopeId = pageSnapshot.rootScopeId ?? 'scope_0';
+      const scopes = (pageSnapshot.scopes ?? [{
+        scopeId: rootScopeId,
+        kind: 'page' as const,
+        depth: 0,
+        status: 'complete' as const,
+        elements: pageSnapshot.elements,
+      }]).map(scope => ({
+        scopeId: scope.scopeId,
+        kind: scope.kind,
+        rootRef: scope.rootRef ?? null,
+        depth: scope.depth,
+        status: scope.status,
+        reason: scope.reason ?? null,
+        elements: scope.elements,
+      }));
       const snapshot = {
+        schemaVersion: '2.0',
         snapshotId: pageSnapshot.snapshotId,
         pageRevision: pageSnapshot.pageRevision,
         path: pageSnapshot.path,
-        elementCount: pageSnapshot.elements.length,
-        timestamp: new Date().toISOString(),
+        rootScopeId,
+        complete: pageSnapshot.complete ?? scopes.every(scope => scope.status === 'complete'),
+        budget: pageSnapshot.budget,
+        usage: pageSnapshot.usage,
+        scopes,
+        edges: pageSnapshot.edges ?? [],
       };
 
       return {
@@ -342,11 +439,20 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         }]
       };
     } catch (error) {
-      throw new Error(`获取页面快照失败: ${extractErrorMessage(error)}`);
+      if (!globalContext.isConnected() || !globalContext.currentPage) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `获取页面快照失败: ${sanitizePublicText(extractErrorMessage(error))}`,
+        );
+      }
+      throw new Error(`获取页面快照失败: ${sanitizePublicText(extractErrorMessage(error))}`);
     }
   }
 
-  throw new Error(`未知的资源: ${request.params.uri}`);
+  throw new McpError(
+    ErrorCode.InvalidParams,
+    `未知的资源: ${sanitizePublicText(request.params.uri)}`,
+  );
 });
 
 /**
@@ -402,7 +508,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultRuntime,
       invocation,
       normalizedError,
-      'INTERNAL_ERROR',
+      { code: 'INTERNAL_ERROR' },
     );
   }
 
@@ -413,7 +519,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultRuntime,
       invocation,
       new Error(`工具 ${toolName} 未完成运行时注册`),
-      'INTERNAL_ERROR',
+      { code: 'INTERNAL_ERROR' },
     );
   }
   const tool = registeredTool;
@@ -427,41 +533,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultRuntime,
       invocation,
       normalizedError,
-      error instanceof Error && error.name === 'ZodError'
-        ? 'INVALID_ARGUMENT'
-        : 'INTERNAL_ERROR',
+      {
+        code: error instanceof Error && error.name === 'ZodError'
+          ? 'INVALID_ARGUMENT'
+          : 'INTERNAL_ERROR',
+      },
     );
   }
 
+  const toolResponse = new runtime.SimpleToolResponse();
   try {
     // 创建工具请求和响应对象
     const toolRequest: ToolRequest = { params: validatedParams };
-    const toolResponse = new runtime.SimpleToolResponse();
 
     // 执行工具处理器
     await tool.handler(toolRequest, toolResponse, globalContext);
 
-    // 构建响应内容
-    const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [];
-
-    // 添加文本响应
+    const content = responseContent(toolResponse);
     const responseText = toolResponse.getResponseText();
-    if (responseText) {
-      content.push({
-        type: "text",
-        text: responseText
-      });
-    }
-
-    // 添加附加的图片
-    const attachedImages = toolResponse.getAttachedImages();
-    for (const image of attachedImages) {
-      content.push({
-        type: "image",
-        data: image.data,
-        mimeType: image.mimeType
-      });
-    }
 
     const data = toolResponse.getStructuredContent();
     if (Object.keys(data).length === 0) {
@@ -510,15 +599,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return {
       content,
       structuredContent: { ...structuredContent },
+      isError: false,
     };
 
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error(extractErrorMessage(error));
-    return invocationFailureResult(resultRuntime, invocation, normalizedError);
+    return invocationFailureResult(resultRuntime, invocation, normalizedError, {
+      response: toolResponse,
+    });
   }
 });
 
-const profileSummary = `[ToolProfile] profile=${toolProfileConfig.profile}, active=${activeToolDescriptors.length}, disabled=${disabledToolDescriptors.size}`;
+const profileSummary = [
+  `[ToolProfile] profile=${toolProfileSummary.profile}`,
+  `active=${toolProfileSummary.activeToolCount}`,
+  `disabled=${toolProfileSummary.disabledToolCount}`,
+  `categories=${toolProfileSummary.activeCategories.join(',') || 'none'}`,
+].join(', ');
 console.error(profileSummary);
 
 /**

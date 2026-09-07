@@ -4,7 +4,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { ValidationConnectionError } from '../../src/connection/errors.js';
 import {
   connectDevtoolsTool,
   disconnectDevtoolsTool,
@@ -69,6 +68,19 @@ describe('connection tools', () => {
     disconnectDevtools: vi.fn(),
     getConnectionStatus: vi.fn(),
     getPageRevision: vi.fn(() => 1),
+    getRuntimeStatus: vi.fn(() => ({
+      toolProfile: {
+        profile: 'full',
+        activeToolCount: 31,
+        disabledToolCount: 0,
+        activeCategories: ['core', 'console', 'network', 'debug'],
+        inactiveCategories: [],
+      },
+      monitoring: {
+        console: { enabled: true, state: 'running', startedAt: '2026-01-01T00:00:00.000Z', lastError: null },
+        network: { enabled: true, state: 'running', startedAt: '2026-01-01T00:00:00.000Z', lastError: null },
+      },
+    })),
     startAutomaticMonitoring: vi.fn(async () => ({
       consoleStarted: true,
       networkStarted: true,
@@ -122,14 +134,16 @@ describe('connection tools', () => {
       health: { level: 'healthy', checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
       status: 'connected',
       timing: { totalMs: 1200, connectMs: 1000, healthMs: 200 },
+      attempts: [],
       warnings: [],
     });
 
     await connectDevtoolsTool.handler(
       {
         params: {
-          strategy: 'launch',
-          projectPath: '/tmp/demo',
+          target: { kind: 'project', projectPath: '/tmp/demo' },
+          timeoutMs: 45_000,
+          healthCheck: true,
         },
       },
       response as any,
@@ -137,27 +151,17 @@ describe('connection tools', () => {
     );
 
     expect(mockContext.connectDevtools).toHaveBeenCalledWith({
-      strategy: 'launch',
-      projectPath: '/tmp/demo',
-      cliPath: undefined,
-      autoPort: undefined,
-      browserUrl: undefined,
-      wsEndpoint: undefined,
-      wsHeaders: undefined,
-      timeoutMs: undefined,
-      fallback: undefined,
-      healthCheck: undefined,
-      autoDiscover: undefined,
-      verbose: undefined,
-      autoAudits: undefined,
+      target: { kind: 'project', projectPath: '/tmp/demo' },
+      timeoutMs: 45_000,
+      healthCheck: true,
     });
     expect(response.getLines().join('\n')).toContain('✅ 连接成功');
     expect(response.getLines().join('\n')).toContain('连接ID: conn_1');
-    expect(response.getLines().join('\n')).toContain('策略: launch');
-    expect(mockContext.startAutomaticMonitoring).toHaveBeenCalledOnce();
+    expect(response.getLines().join('\n')).toContain('方式: launch');
+    expect(mockContext.startAutomaticMonitoring).not.toHaveBeenCalled();
   });
 
-  it('connect_devtools 应只委托 Context 启动统一监听', async () => {
+  it('connect_devtools 不应在工具 handler 中重复启动监听', async () => {
     const response = createMockResponse();
     mockContext.connectDevtools.mockResolvedValue({
       connectionId: 'conn_3',
@@ -169,25 +173,76 @@ describe('connection tools', () => {
       health: { level: 'healthy', checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
       status: 'connected',
       timing: { totalMs: 1000, connectMs: 850, healthMs: 150 },
+      attempts: [],
       warnings: [],
     });
 
     await connectDevtoolsTool.handler(
       {
         params: {
-          strategy: 'launch',
-          projectPath: '/tmp/demo',
+          target: { kind: 'project', projectPath: '/tmp/demo' },
+          timeoutMs: 45_000,
+          healthCheck: true,
         },
       },
       response as any,
       mockContext
     );
 
-    expect(mockContext.startAutomaticMonitoring).toHaveBeenCalledOnce();
+    expect(mockContext.startAutomaticMonitoring).not.toHaveBeenCalled();
     expect(mockMiniProgram.evaluate).not.toHaveBeenCalled();
   });
 
-  it('统一监听启动降级时应输出明确告警', async () => {
+  it('connect_devtools 应脱敏公开输出且不修改内部连接结果', async () => {
+    const response = createMockResponse();
+    const rawResult = {
+      connectionId: 'conn_sensitive',
+      strategyUsed: 'wsEndpoint',
+      endpoint: 'ws://user:pass@127.0.0.1:9420/path?token=endpoint-secret#fragment',
+      miniProgram: mockMiniProgram,
+      currentPage: mockCurrentPage,
+      pagePath: '/pages/home/index?token=page-secret#fragment',
+      health: {
+        level: 'degraded',
+        checks: [{ name: 'auth', status: 'fail', message: 'password=health-secret' }],
+        checkedAt: '2026-01-01T00:00:00.000Z',
+      },
+      status: 'degraded',
+      timing: { totalMs: 10, connectMs: 8, healthMs: 2 },
+      attempts: [{
+        endpoint: 'ws://attempt:pass@127.0.0.1:9420/path?secret=attempt-secret',
+        error: { message: 'Authorization: Bearer bearer-secret' },
+      }],
+      warnings: ['password=warning-secret'],
+    };
+    mockContext.connectDevtools.mockResolvedValue(rawResult);
+
+    await connectDevtoolsTool.handler(
+      {
+        params: {
+          target: { kind: 'wsEndpoint', endpoint: rawResult.endpoint },
+          timeoutMs: 45_000,
+          healthCheck: true,
+        },
+      },
+      response as any,
+      mockContext
+    );
+
+    const publicData = response.mergeStructuredContent.mock.calls[0]?.[0];
+    const publicOutput = JSON.stringify({ lines: response.getLines(), data: publicData });
+    expect(publicData).toMatchObject({
+      endpoint: 'ws://127.0.0.1:9420/path',
+      pagePath: '/pages/home/index',
+    });
+    expect(publicOutput).not.toMatch(
+      /endpoint-secret|page-secret|health-secret|attempt-secret|bearer-secret|warning-secret|user:pass|attempt:pass/u,
+    );
+    expect(rawResult.endpoint).toContain('user:pass');
+    expect(rawResult.attempts[0].error.message).toContain('bearer-secret');
+  });
+
+  it('Context 返回监听降级告警时应原样输出', async () => {
     const response = createMockResponse();
     mockContext.startAutomaticMonitoring.mockResolvedValueOnce({
       consoleStarted: true,
@@ -205,14 +260,16 @@ describe('connection tools', () => {
       health: { level: 'healthy', checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
       status: 'connected',
       timing: { totalMs: 900, connectMs: 700, healthMs: 200 },
-      warnings: [],
+      attempts: [],
+      warnings: ['网络监听启动失败 - mock failure'],
     });
 
     await connectDevtoolsTool.handler(
       {
         params: {
-          strategy: 'discover',
-          projectPath: '/tmp/demo',
+          target: { kind: 'discover' },
+          timeoutMs: 45_000,
+          healthCheck: true,
         },
       },
       response as any,
@@ -234,6 +291,7 @@ describe('connection tools', () => {
       health: { level: 'healthy', checks: [], checkedAt: '2026-01-01T00:00:00.000Z' },
       status: 'connected',
       timing: { totalMs: 800, connectMs: 650, healthMs: 150 },
+      attempts: [],
       warnings: [],
     });
 
@@ -285,6 +343,46 @@ describe('connection tools', () => {
     expect(response.getLines().join('\n')).toContain('已连接: 是');
   });
 
+  it('get_connection_status 应脱敏 lastError 与端点且保留内部原值', async () => {
+    const response = createMockResponse();
+    const rawStatus = {
+      state: 'degraded',
+      connected: true,
+      connectionId: 'conn_status',
+      strategyUsed: 'wsEndpoint',
+      endpoint: 'ws://user:pass@127.0.0.1:9420/path?token=endpoint-secret',
+      pagePath: '/pages/home/index?token=page-secret',
+      health: null,
+      lastError: {
+        code: 'PROTOCOL',
+        message: 'Authorization: Bearer bearer-secret password=password-secret',
+        endpoint: 'ws://error:pass@127.0.0.1:9420/path?secret=error-secret',
+      },
+    };
+    mockContext.getConnectionStatus.mockResolvedValue(rawStatus);
+
+    await getConnectionStatusTool.handler(
+      { params: { refreshHealth: false } },
+      response as any,
+      mockContext
+    );
+
+    const publicData = response.mergeStructuredContent.mock.calls[0]?.[0];
+    const publicOutput = JSON.stringify({ lines: response.getLines(), data: publicData });
+    expect(publicData).toMatchObject({
+      endpoint: 'ws://127.0.0.1:9420/path',
+      pagePath: '/pages/home/index',
+      lastError: {
+        endpoint: 'ws://127.0.0.1:9420/path',
+      },
+    });
+    expect(publicOutput).not.toMatch(
+      /endpoint-secret|page-secret|bearer-secret|password-secret|error-secret|user:pass|error:pass/u,
+    );
+    expect(rawStatus.lastError.message).toContain('bearer-secret');
+    expect(rawStatus.endpoint).toContain('endpoint-secret');
+  });
+
   it('get_current_page 在未连接时应报错', async () => {
     const response = createMockResponse();
     await expect(
@@ -310,49 +408,18 @@ describe('connection tools', () => {
     });
   });
 
-  it('connect_devtools 应透传 wsHeaders 契约错误信息', async () => {
-    const response = createMockResponse();
-    const contractError = new ValidationConnectionError(
-      '当前连接链路不支持 wsHeaders 参数',
-      ['请移除 wsHeaders 参数后重试'],
-      { strategy: 'wsEndpoint' }
-    );
-
-    mockContext.connectDevtools.mockRejectedValue(contractError);
-
-    await expect(
-      connectDevtoolsTool.handler(
-        {
-          params: {
-            strategy: 'wsEndpoint',
-            wsEndpoint: 'ws://127.0.0.1:9420',
-            wsHeaders: {
-              authorization: 'Bearer token',
-            },
-          },
-        },
-        response as any,
-        mockContext
-      )
-    ).rejects.toThrow('当前连接链路不支持 wsHeaders 参数');
-
-    expect(mockContext.connectDevtools).toHaveBeenCalledWith({
+  it('connect_devtools schema 应拒绝 V1 扁平参数和 wsHeaders', () => {
+    expect(connectDevtoolsTool.schema.safeParse({
       strategy: 'wsEndpoint',
-      projectPath: undefined,
-      cliPath: undefined,
-      autoPort: undefined,
-      browserUrl: undefined,
       wsEndpoint: 'ws://127.0.0.1:9420',
-      wsHeaders: {
-        authorization: 'Bearer token',
+    }).success).toBe(false);
+    expect(connectDevtoolsTool.schema.safeParse({
+      target: {
+        kind: 'wsEndpoint',
+        endpoint: 'ws://127.0.0.1:9420',
+        wsHeaders: { authorization: 'Bearer token' },
       },
-      timeoutMs: undefined,
-      fallback: undefined,
-      healthCheck: undefined,
-      autoDiscover: undefined,
-      verbose: undefined,
-      autoAudits: undefined,
-    });
+    }).success).toBe(false);
   });
 
   describe('错误路径测试', () => {
@@ -364,8 +431,9 @@ describe('connection tools', () => {
         connectDevtoolsTool.handler(
           {
             params: {
-              strategy: 'launch',
-              projectPath: '/tmp/demo',
+              target: { kind: 'project', projectPath: '/tmp/demo' },
+              timeoutMs: 45_000,
+              healthCheck: true,
             },
           },
           response as any,

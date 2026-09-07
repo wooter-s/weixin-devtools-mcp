@@ -3,6 +3,7 @@ import path from 'path';
 import type { MiniProgram } from 'miniprogram-automator';
 
 import { MiniProgramContext } from '../../../src/MiniProgramContext.js';
+import { ToolCategory } from '../../../src/config/tool-category.js';
 import type { ConnectionRequest } from '../../../src/connection/index.js';
 import { SimpleToolResponse } from '../../../src/tools/ToolDefinition.js';
 import {
@@ -29,13 +30,14 @@ const DEFAULT_PROJECT_PATH = path.resolve(process.cwd(), 'playground/wx');
 const DEFAULT_CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
 
 export interface IntegrationHarnessOptions {
+  /** Explicit existing endpoint; null forces project launch even when the env variable is set. */
+  wsEndpoint?: string | null;
   projectPath?: string;
   cliPath?: string;
   startPort?: number;
   portCount?: number;
   connectTimeoutMs?: number;
   connectRetries?: number;
-  verbose?: boolean;
   reuseSession?: boolean;
 }
 
@@ -100,16 +102,29 @@ export async function runTool<TParams>(
   return response;
 }
 
+/** 集成链路覆盖全部工具类别，避免默认 core profile 将监听明确置为 disabled。 */
+export function createIntegrationContext(): MiniProgramContext {
+  return MiniProgramContext.create({
+    toolProfile: {
+      profile: 'full',
+      activeToolCount: 31,
+      disabledToolCount: 0,
+      activeCategories: Object.values(ToolCategory),
+      inactiveCategories: [],
+    },
+  });
+}
+
 export class IntegrationHarness {
   static #sharedSessions: Map<string, SharedSession> = new Map();
 
   readonly #projectPath: string;
+  readonly #wsEndpoint: string | null;
   readonly #cliPath: string;
   readonly #startPort: number;
   readonly #portCount: number;
   readonly #connectTimeoutMs: number;
   readonly #connectRetries: number;
-  readonly #verbose: boolean;
   readonly #enabled: boolean;
   readonly #reuseSession: boolean;
   readonly #sessionKey: string;
@@ -125,15 +140,15 @@ export class IntegrationHarness {
 
   constructor(options: IntegrationHarnessOptions = {}) {
     this.#projectPath = options.projectPath ?? DEFAULT_PROJECT_PATH;
+    this.#wsEndpoint = options.wsEndpoint === undefined ? process.env.INTEGRATION_WS_ENDPOINT || null : options.wsEndpoint;
     this.#cliPath = options.cliPath ?? DEFAULT_CLI_PATH;
     this.#startPort = options.startPort ?? 9420;
     this.#portCount = options.portCount ?? 8;
     this.#connectTimeoutMs = options.connectTimeoutMs ?? 60_000;
     this.#connectRetries = options.connectRetries ?? 3;
-    this.#verbose = options.verbose ?? false;
     this.#enabled = shouldRunIntegrationTests();
     this.#reuseSession = options.reuseSession ?? process.env.INTEGRATION_REUSE_SESSION !== 'false';
-    this.#sessionKey = `${this.#projectPath}::${this.#cliPath}`;
+    this.#sessionKey = `${this.#projectPath}::${this.#cliPath}::${this.#wsEndpoint ?? "project"}`;
   }
 
   get projectPath(): string {
@@ -169,6 +184,12 @@ export class IntegrationHarness {
     if (!this.#enabled) {
       this.#reason = 'RUN_INTEGRATION_TESTS 未启用';
       this.#ready = false;
+      return this.getState();
+    }
+
+    if (this.#wsEndpoint) {
+      this.#ready = true;
+      this.#warnings.push(`显式连接已有端点: ${this.#wsEndpoint}；本 suite 不验证 project 启动`);
       return this.getState();
     }
 
@@ -247,22 +268,21 @@ export class IntegrationHarness {
       }
     }
 
-    const targetContext = context ?? MiniProgramContext.create();
+    const targetContext = context ?? createIntegrationContext();
     const attempts = Math.max(1, this.#connectRetries);
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const autoPort = overrides.autoPort ?? await this.reservePort();
-      const params: ConnectionRequest = {
-        strategy: 'auto',
+      const target = overrides.target ?? (this.#wsEndpoint ? { kind: 'wsEndpoint' as const, endpoint: this.#wsEndpoint } : {
+        kind: 'project' as const,
         projectPath: this.#projectPath,
         cliPath: this.#cliPath,
-        autoPort,
-        timeoutMs: this.#connectTimeoutMs,
-        healthCheck: false,
-        autoDiscover: true,
-        verbose: this.#verbose,
-        ...overrides,
+        autoPort: await this.reservePort(),
+      });
+      const params: ConnectionRequest = {
+        target,
+        timeoutMs: overrides.timeoutMs ?? this.#connectTimeoutMs,
+        healthCheck: overrides.healthCheck ?? false,
       };
 
       try {
@@ -295,18 +315,9 @@ export class IntegrationHarness {
 
   async reconnect(
     context: MiniProgramContext,
-    overrides: Partial<ConnectionRequest> = {}
+    request?: ConnectionRequest
   ): Promise<SimpleToolResponse> {
-    const params: Partial<ConnectionRequest> = {
-      strategy: 'auto',
-      projectPath: this.#projectPath,
-      cliPath: this.#cliPath,
-      timeoutMs: this.#connectTimeoutMs,
-      healthCheck: false,
-      autoDiscover: true,
-      ...overrides,
-    };
-    return runTool(context, reconnectDevtoolsTool.handler, params);
+    return runTool(context, reconnectDevtoolsTool.handler, request ?? {});
   }
 
   async disconnect(context: MiniProgramContext): Promise<void> {

@@ -1,0 +1,917 @@
+{
+  "acceptance": {
+    "passed": null,
+    "verdict": "SUPERSEDED_NO_VALID_VERDICT",
+    "scenarios": [
+      {
+        "gates": [
+          { "actual": 100, "expected": 100, "name": "基线正式样本数", "passed": true },
+          { "actual": 100, "expected": 100, "name": "优化后正式样本数", "passed": true },
+          { "actual": 1, "expected": 1, "name": "成功率下限", "passed": true },
+          {
+            "actual": 0.1707499999997708,
+            "expected": 50.692666999999346,
+            "name": "p95 回退预算",
+            "passed": true
+          },
+          {
+            "actual": 100,
+            "expected": 100,
+            "name": "指标 structuredErrorCount.sum",
+            "passed": true
+          }
+        ],
+        "passed": true,
+        "scenarioId": "protocol_business_error"
+      },
+      {
+        "gates": [
+          { "actual": 100, "expected": 100, "name": "基线正式样本数", "passed": true },
+          { "actual": 100, "expected": 100, "name": "优化后正式样本数", "passed": true },
+          { "actual": 1, "expected": 1, "name": "成功率下限", "passed": true },
+          {
+            "actual": 0.18504099999972823,
+            "expected": 50.75087500000154,
+            "name": "p95 回退预算",
+            "passed": true
+          },
+          {
+            "actual": 100,
+            "expected": 100,
+            "name": "指标 structuredErrorCount.sum",
+            "passed": true
+          }
+        ],
+        "passed": true,
+        "scenarioId": "protocol_invalid_arguments"
+      },
+      {
+        "gates": [
+          { "actual": 30, "expected": 30, "name": "基线正式样本数", "passed": true },
+          { "actual": 30, "expected": 30, "name": "优化后正式样本数", "passed": true },
+          { "actual": 1, "expected": 1, "name": "成功率下限", "passed": true },
+          {
+            "actual": 138.94979200000034,
+            "expected": 661.767975000001,
+            "name": "p95 回退预算",
+            "passed": true
+          },
+          {
+            "actual": 138.67816700000003,
+            "expected": 209.6435,
+            "name": "指标 lifecycleMs.p95",
+            "passed": true
+          }
+        ],
+        "passed": true,
+        "scenarioId": "protocol_stdio_lifecycle"
+      },
+      {
+        "gates": [
+          { "actual": 100, "expected": 100, "name": "基线正式样本数", "passed": true },
+          { "actual": 100, "expected": 100, "name": "优化后正式样本数", "passed": true },
+          { "actual": 1, "expected": 1, "name": "成功率下限", "passed": true },
+          {
+            "actual": 0.2637079999999514,
+            "expected": 50.73125000000073,
+            "name": "p95 回退预算",
+            "passed": true
+          },
+          {
+            "actual": 100,
+            "expected": 100,
+            "name": "指标 structuredContentCount.sum",
+            "passed": true
+          }
+        ],
+        "passed": true,
+        "scenarioId": "protocol_success"
+      },
+      {
+        "gates": [
+          { "actual": 100, "expected": 100, "name": "基线正式样本数", "passed": true },
+          { "actual": 100, "expected": 100, "name": "优化后正式样本数", "passed": true },
+          { "actual": 1, "expected": 1, "name": "成功率下限", "passed": true },
+          {
+            "actual": 21.256582999999864,
+            "expected": 335.7643750000025,
+            "name": "p95 回退预算",
+            "passed": true
+          },
+          { "actual": 3100, "expected": 3100, "name": "指标 toolsTotal.sum", "passed": true },
+          {
+            "actual": 3100,
+            "expected": 3100,
+            "name": "指标 toolsWithOutputSchema.sum",
+            "passed": true
+          },
+          {
+            "actual": 3100,
+            "expected": 3100,
+            "name": "指标 toolsWithContentAddressedSchemaId.sum",
+            "passed": true
+          },
+          {
+            "actual": 3100,
+            "expected": 3100,
+            "name": "指标 coldSchemaValidatorCount.sum",
+            "passed": true
+          },
+          {
+            "actual": 3100,
+            "expected": 3100,
+            "name": "指标 hotSchemaValidatorCount.sum",
+            "passed": true
+          },
+          { "actual": 80173, "expected": 95000, "name": "指标 responseBytes.p95", "passed": true },
+          {
+            "actual": 18.63779199999999,
+            "expected": 50.7432,
+            "name": "指标 coldListMs.p95",
+            "passed": true
+          },
+          {
+            "actual": 1.8545000000001437,
+            "expected": 15,
+            "name": "指标 hotListMs.p95",
+            "passed": true
+          }
+        ],
+        "passed": true,
+        "scenarioId": "protocol_tools_list"
+      }
+    ]
+  },
+  "authority": "superseded/non-authoritative",
+  "comparable": false,
+  "coverage": {
+    "coveredScenarios": [
+      "protocol_tools_list",
+      "protocol_success",
+      "protocol_invalid_arguments",
+      "protocol_business_error",
+      "protocol_stdio_lifecycle"
+    ],
+    "excludedScenarios": [
+      "real-devtools-runtime",
+      "real-devtools-locator-input",
+      "image-response",
+      "full-structured-workflow"
+    ]
+  },
+  "identity": {
+    "baselineSourceFingerprint": "7950bbc123fde35bfa3f62cda0c4ae72c67f26767cce8c6933d181f526eb511f",
+    "environmentFingerprint": "168119a3c63ca45a21f90c59bcf5d5fed95cf78187fad2275a4ae0603fb27b75",
+    "fixtureFingerprint": "0504f2ffabdfa2cb7e307dee7e4ea84018bb57001411454e204a639c996ce9a8",
+    "optimizedSourceFingerprint": "ef5f873bab2b0674859fb4b30566a4b37b157e0ede70bf5240470cf907991e29",
+    "workloadFingerprint": "a8e3095f62e3f3adeaeae3d2cfc6e9f2b073604d702d6ac787ab3a993363095c"
+  },
+  "recordType": "comparison",
+  "superseded": {
+    "status": true,
+    "reason": "legacy baseline lacks current benchmark harness provenance",
+    "replacement": "../phase2-protocol-final-indicative/comparison.json",
+    "previousAuthorityClaimInvalid": true
+  },
+  "scenarios": {
+    "protocol_business_error": {
+      "baseline": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 0.8969580000011774,
+          "mean": 0.40844376999972154,
+          "min": 0.14995799999815063,
+          "p50": 0.4048750000001746,
+          "p95": 0.6926669999993464,
+          "sum": 40.844376999972155
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 603,
+            "mean": 602.38,
+            "min": 601,
+            "p50": 602,
+            "p95": 603,
+            "sum": 60238
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredErrorCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_business_error",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "delta": {
+        "failures": 0,
+        "latencyP50Improvement": 0.6812818771223531,
+        "latencyP50Ms": -0.27583400000003166,
+        "latencyP95Improvement": 0.7534890502941068,
+        "latencyP95Ms": -0.5219169999995756,
+        "successRatePercentagePoints": 0,
+        "successes": 0
+      },
+      "optimized": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 0.2243329999996604,
+          "mean": 0.13091334999999618,
+          "min": 0.09537500000033106,
+          "p50": 0.12904100000014296,
+          "p95": 0.1707499999997708,
+          "sum": 13.091334999999617
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 603,
+            "mean": 602.66,
+            "min": 601,
+            "p50": 603,
+            "p95": 603,
+            "sum": 60266
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredErrorCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_business_error",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "scenarioId": "protocol_business_error"
+    },
+    "protocol_invalid_arguments": {
+      "baseline": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 1.0647919999973965,
+          "mean": 0.4178791000001729,
+          "min": 0.16237499999988358,
+          "p50": 0.3538750000006985,
+          "p95": 0.7508750000015425,
+          "sum": 41.78791000001729
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 1301,
+            "mean": 1300.37,
+            "min": 1298,
+            "p50": 1300,
+            "p95": 1301,
+            "sum": 130037
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredErrorCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_invalid_arguments",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "delta": {
+        "failures": 0,
+        "latencyP50Improvement": 0.5797725185463188,
+        "latencyP50Ms": -0.20516700000098353,
+        "latencyP95Improvement": 0.7535661727992701,
+        "latencyP95Ms": -0.5658340000018143,
+        "successRatePercentagePoints": 0,
+        "successes": 0
+      },
+      "optimized": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 0.8880829999998241,
+          "mean": 0.1584003999999959,
+          "min": 0.11458300000003874,
+          "p50": 0.14870799999971496,
+          "p95": 0.18504099999972823,
+          "sum": 15.84003999999959
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 1301,
+            "mean": 1300.36,
+            "min": 1288,
+            "p50": 1301,
+            "p95": 1301,
+            "sum": 130036
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredErrorCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_invalid_arguments",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "scenarioId": "protocol_invalid_arguments"
+    },
+    "protocol_stdio_lifecycle": {
+      "baseline": {
+        "errorCounts": {},
+        "executed": 30,
+        "failures": 0,
+        "latencyMs": {
+          "count": 30,
+          "max": 648.0666249999995,
+          "mean": 470.107557066667,
+          "min": 402.8162919999959,
+          "p50": 457.5767500000002,
+          "p95": 601.6072500000009,
+          "sum": 14103.22671200001
+        },
+        "metrics": {
+          "closeMs": {
+            "count": 30,
+            "max": 10.329084000004514,
+            "mean": 7.2799527333333875,
+            "min": 5.4785419999971054,
+            "p50": 7.251250000001164,
+            "p95": 8.629916999998386,
+            "sum": 218.39858200000162
+          },
+          "firstListMs": {
+            "count": 30,
+            "max": 200.1737920000014,
+            "mean": 123.57565273333324,
+            "min": 92.72945800000161,
+            "p50": 117.08499999999913,
+            "p95": 157.23329199999716,
+            "sum": 3707.269581999997
+          },
+          "initializeMs": {
+            "count": 30,
+            "max": 481.2516250000044,
+            "mean": 338.63554170000026,
+            "min": 285.97316700000374,
+            "p50": 324.7720410000038,
+            "p95": 440.1229170000006,
+            "sum": 10159.066251000007
+          },
+          "lifecycleMs": {
+            "count": 30,
+            "max": 647.5479590000032,
+            "mean": 469.49114716666685,
+            "min": 402.4320829999997,
+            "p50": 456.85229000000254,
+            "p95": 601.2568330000067,
+            "sum": 14084.734415000006
+          },
+          "responseBytes": {
+            "count": 30,
+            "max": 126879,
+            "mean": 126879,
+            "min": 126879,
+            "p50": 126879,
+            "p95": 126879,
+            "sum": 3806370
+          },
+          "roundTrips": {
+            "count": 30,
+            "max": 2,
+            "mean": 2,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "sum": 60
+          }
+        },
+        "scenarioId": "protocol_stdio_lifecycle",
+        "successRate": 1,
+        "successRateWilson95": { "high": 0.9999999999999999, "low": 0.8864866068260312 },
+        "successes": 30,
+        "warmups": 3
+      },
+      "delta": {
+        "failures": 0,
+        "latencyP50Improvement": 0.7602738229160468,
+        "latencyP50Ms": -347.8836250000004,
+        "latencyP95Improvement": 0.7690357089280421,
+        "latencyP95Ms": -462.6574580000006,
+        "successRatePercentagePoints": 0,
+        "successes": 0
+      },
+      "optimized": {
+        "errorCounts": {},
+        "executed": 30,
+        "failures": 0,
+        "latencyMs": {
+          "count": 30,
+          "max": 145.96091700000034,
+          "mean": 114.09937090000001,
+          "min": 103.67708300000004,
+          "p50": 109.69312499999978,
+          "p95": 138.94979200000034,
+          "sum": 3422.9811270000005
+        },
+        "metrics": {
+          "closeMs": {
+            "count": 30,
+            "max": 6.983041000000412,
+            "mean": 4.3392055666667755,
+            "min": 3.5649169999996957,
+            "p50": 4.035750000000007,
+            "p95": 6.378250000000662,
+            "sum": 130.17616700000326
+          },
+          "firstListMs": {
+            "count": 30,
+            "max": 31.64916600000015,
+            "mean": 20.241098566666658,
+            "min": 17.405416999999943,
+            "p50": 19.38995900000009,
+            "p95": 25.38616600000023,
+            "sum": 607.2329569999997
+          },
+          "initializeMs": {
+            "count": 30,
+            "max": 116.7101249999996,
+            "mean": 89.25820133333328,
+            "min": 79.90087500000027,
+            "p50": 85.71779199999992,
+            "p95": 109.92008400000032,
+            "sum": 2677.746039999998
+          },
+          "lifecycleMs": {
+            "count": 30,
+            "max": 145.7014999999992,
+            "mean": 113.8385054666667,
+            "min": 103.42866700000059,
+            "p50": 109.3600009999991,
+            "p95": 138.67816700000003,
+            "sum": 3415.155164000001
+          },
+          "responseBytes": {
+            "count": 30,
+            "max": 80173,
+            "mean": 80173,
+            "min": 80173,
+            "p50": 80173,
+            "p95": 80173,
+            "sum": 2405190
+          },
+          "roundTrips": {
+            "count": 30,
+            "max": 2,
+            "mean": 2,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "sum": 60
+          }
+        },
+        "scenarioId": "protocol_stdio_lifecycle",
+        "successRate": 1,
+        "successRateWilson95": { "high": 0.9999999999999999, "low": 0.8864866068260312 },
+        "successes": 30,
+        "warmups": 3
+      },
+      "scenarioId": "protocol_stdio_lifecycle"
+    },
+    "protocol_success": {
+      "baseline": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 1.079249999998865,
+          "mean": 0.4072921299999871,
+          "min": 0.1733749999984866,
+          "p50": 0.34341700000004494,
+          "p95": 0.7312500000007276,
+          "sum": 40.72921299999871
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 526,
+            "mean": 525.66,
+            "min": 524,
+            "p50": 526,
+            "p95": 526,
+            "sum": 52566
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredContentCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_success",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "delta": {
+        "failures": 0,
+        "latencyP50Improvement": 0.48447223055383326,
+        "latencyP50Ms": -0.16637600000012753,
+        "latencyP95Improvement": 0.6393736752141005,
+        "latencyP95Ms": -0.46754200000077617,
+        "successRatePercentagePoints": 0,
+        "successes": 0
+      },
+      "optimized": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 1.1996670000003178,
+          "mean": 0.1925695800000085,
+          "min": 0.14133300000003146,
+          "p50": 0.1770409999999174,
+          "p95": 0.2637079999999514,
+          "sum": 19.25695800000085
+        },
+        "metrics": {
+          "responseBytes": {
+            "count": 100,
+            "max": 527,
+            "mean": 525.88,
+            "min": 524,
+            "p50": 526,
+            "p95": 526,
+            "sum": 52588
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          },
+          "structuredContentCount": {
+            "count": 100,
+            "max": 1,
+            "mean": 1,
+            "min": 1,
+            "p50": 1,
+            "p95": 1,
+            "sum": 100
+          }
+        },
+        "scenarioId": "protocol_success",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "scenarioId": "protocol_success"
+    },
+    "protocol_tools_list": {
+      "baseline": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 334.239540999999,
+          "mean": 218.11440238999984,
+          "min": 170.54170800000065,
+          "p50": 206.887999999999,
+          "p95": 285.7643750000025,
+          "sum": 21811.440238999985
+        },
+        "metrics": {
+          "coldListMs": {
+            "count": 100,
+            "max": 204.23520800000188,
+            "mean": 107.8406221399998,
+            "min": 80.95483299999978,
+            "p50": 102.54774999999972,
+            "p95": 137.57879200000025,
+            "sum": 10784.06221399998
+          },
+          "coldSchemaCompileMs": {
+            "count": 100,
+            "max": 194.1764169999915,
+            "mean": 98.13249778999932,
+            "min": 73.79720799999996,
+            "p50": 92.65637099999913,
+            "p95": 127.11991499999749,
+            "sum": 9813.249778999932
+          },
+          "coldSchemaValidatorCount": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "hotListMs": {
+            "count": 100,
+            "max": 213.01129199999923,
+            "mean": 109.53605249999997,
+            "min": 88.38904100000036,
+            "p50": 104.43270800000028,
+            "p95": 141.05558399999973,
+            "sum": 10953.605249999997
+          },
+          "hotSchemaCompileMs": {
+            "count": 100,
+            "max": 195.05946000000404,
+            "mean": 100.29645265000052,
+            "min": 78.14862299999913,
+            "p50": 94.77141500000198,
+            "p95": 129.81003899999996,
+            "sum": 10029.645265000052
+          },
+          "hotSchemaValidatorCount": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "responseBytes": {
+            "count": 100,
+            "max": 126879,
+            "mean": 126879,
+            "min": 126879,
+            "p50": 126879,
+            "p95": 126879,
+            "sum": 12687900
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 2,
+            "mean": 2,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "sum": 200
+          },
+          "toolsTotal": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "toolsWithContentAddressedSchemaId": {
+            "count": 100,
+            "max": 0,
+            "mean": 0,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "sum": 0
+          },
+          "toolsWithOutputSchema": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          }
+        },
+        "scenarioId": "protocol_tools_list",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "delta": {
+        "failures": 0,
+        "latencyP50Improvement": 0.9154977572406319,
+        "latencyP50Ms": -189.40549999999894,
+        "latencyP95Improvement": 0.9256150001202925,
+        "latencyP95Ms": -264.5077920000026,
+        "successRatePercentagePoints": 0,
+        "successes": 0
+      },
+      "optimized": {
+        "errorCounts": {},
+        "executed": 100,
+        "failures": 0,
+        "latencyMs": {
+          "count": 100,
+          "max": 28.758000000000038,
+          "mean": 18.00783747999999,
+          "min": 16.49175000000014,
+          "p50": 17.482500000000073,
+          "p95": 21.256582999999864,
+          "sum": 1800.7837479999987
+        },
+        "metrics": {
+          "coldListMs": {
+            "count": 100,
+            "max": 25.794624999999996,
+            "mean": 16.22283582,
+            "min": 14.650458999999955,
+            "p50": 15.806708000000071,
+            "p95": 18.63779199999999,
+            "sum": 1622.283582
+          },
+          "coldSchemaCompileMs": {
+            "count": 100,
+            "max": 24.43637599999829,
+            "mean": 15.035580249999969,
+            "min": 13.73578799999973,
+            "p50": 14.754790999999841,
+            "p95": 16.13445900000056,
+            "sum": 1503.5580249999969
+          },
+          "coldSchemaValidatorCount": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "hotListMs": {
+            "count": 100,
+            "max": 4.9220000000000255,
+            "mean": 1.397628320000009,
+            "min": 1.1297500000000582,
+            "p50": 1.2904580000000578,
+            "p95": 1.8545000000001437,
+            "sum": 139.7628320000009
+          },
+          "hotSchemaCompileMs": {
+            "count": 100,
+            "max": 0.03379199999960747,
+            "mean": 0.015520830000117485,
+            "min": 0.010837000000037733,
+            "p50": 0.014623999999912485,
+            "p95": 0.02183299999967403,
+            "sum": 1.5520830000117485
+          },
+          "hotSchemaValidatorCount": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "responseBytes": {
+            "count": 100,
+            "max": 80173,
+            "mean": 80173,
+            "min": 80173,
+            "p50": 80173,
+            "p95": 80173,
+            "sum": 8017300
+          },
+          "roundTrips": {
+            "count": 100,
+            "max": 2,
+            "mean": 2,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "sum": 200
+          },
+          "toolsTotal": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "toolsWithContentAddressedSchemaId": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          },
+          "toolsWithOutputSchema": {
+            "count": 100,
+            "max": 31,
+            "mean": 31,
+            "min": 31,
+            "p50": 31,
+            "p95": 31,
+            "sum": 3100
+          }
+        },
+        "scenarioId": "protocol_tools_list",
+        "successRate": 1,
+        "successRateWilson95": { "high": 1, "low": 0.9630065017930143 },
+        "successes": 100,
+        "warmups": 10
+      },
+      "scenarioId": "protocol_tools_list"
+    }
+  },
+  "schemaVersion": "1.0"
+}

@@ -13,6 +13,7 @@ import type {
   ConnectionStatusSnapshot,
 } from '../connection/index.js';
 import type { ElementTarget } from '../elements/index.js';
+import type { RuntimeStatusMetadata } from '../runtime-status.js';
 import type { ElementMapInfo, PageSnapshot, PageStateCommit } from '../tools.js';
 
 import { createToolResultSchema, jsonObjectSchema, type JsonObject } from './result.js';
@@ -237,6 +238,9 @@ export interface ToolContext {
    */
   getNetworkCollector(): NetworkCollectorContext;
 
+  /** 通过 Context 统一停止监听，以同步 monitoring 生命周期状态。 */
+  stopNetworkMonitoring?(options?: { clearLogs?: boolean }): Promise<number>;
+
   /**
    * 清空当前会话的网络请求
    */
@@ -304,6 +308,9 @@ export interface ToolContext {
    */
   getConnectionStatus(options?: { refreshHealth?: boolean }): Promise<ConnectionStatusSnapshot>;
 
+  /** 获取最终工具 profile 与 Console/Network 监听状态。 */
+  getRuntimeStatus?(): RuntimeStatusMetadata;
+
   /**
    * 获取页面快照（带缓存）
    */
@@ -311,6 +318,18 @@ export interface ToolContext {
     forceRefresh?: boolean;
     ttl?: number;
   }): Promise<{ snapshot: PageSnapshot; elementMap: Map<string, ElementMapInfo> }>;
+
+  /** 按 V2 预算捕获 Page/CustomElement 作用域图并原子注册 refs。 */
+  capturePageSnapshot?(options?: {
+    root?: ElementTarget;
+    budget?: {
+      maxDepth?: number;
+      maxExpandedScopes?: number;
+      maxElements?: number;
+    };
+    includePosition?: boolean;
+    includeAttributes?: boolean;
+  }): Promise<PageStateCommit>;
 
   /**
    * 刷新当前页面引用，并同步连接状态中的 pagePath
@@ -330,7 +349,8 @@ export interface ToolContext {
   /**
    * 在导航后切分 Console 会话，保留历史并开启新会话
    */
-  splitConsoleAfterNavigation?(): void;
+  syncConsoleFromRemote?(): Promise<number>;
+  splitConsoleAfterNavigation?(): void | Promise<void>;
 
   /**
    * 在导航后切分 Network 会话，保留历史并开启新会话

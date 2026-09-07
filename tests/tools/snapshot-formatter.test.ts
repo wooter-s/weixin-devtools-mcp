@@ -203,8 +203,9 @@ describe('formatSnapshot', () => {
       // 应该是有效的JSON
       const parsed = JSON.parse(result);
       expect(parsed).toHaveProperty('path', 'pages/index/index');
-      expect(parsed).toHaveProperty('elements');
-      expect(parsed.elements).toHaveLength(3);
+      expect(parsed).not.toHaveProperty('elements');
+      expect(parsed.scopes[0].elements).toHaveLength(3);
+      expect(parsed.scopes[0]).toMatchObject({ rootRef: null, reason: null });
     });
 
     it('应该支持不包含位置信息', () => {
@@ -214,9 +215,9 @@ describe('formatSnapshot', () => {
       });
 
       const parsed = JSON.parse(result);
-      expect(parsed.elements[0]).not.toHaveProperty('position');
-      expect(parsed.elements[0]).toHaveProperty('ref');
-      expect(parsed.elements[0]).toHaveProperty('tagName');
+      expect(parsed.scopes[0].elements[0]).not.toHaveProperty('position');
+      expect(parsed.scopes[0].elements[0]).toHaveProperty('ref');
+      expect(parsed.scopes[0].elements[0]).toHaveProperty('tagName');
     });
 
     it('应该支持包含属性信息', () => {
@@ -226,8 +227,8 @@ describe('formatSnapshot', () => {
       });
 
       const parsed = JSON.parse(result);
-      expect(parsed.elements[0]).toHaveProperty('attributes');
-      expect(parsed.elements[0].attributes).toHaveProperty('class');
+      expect(parsed.scopes[0].elements[0]).toHaveProperty('attributes');
+      expect(parsed.scopes[0].elements[0].attributes).toHaveProperty('class');
     });
 
     it('应该默认不包含属性信息', () => {
@@ -237,7 +238,7 @@ describe('formatSnapshot', () => {
       });
 
       const parsed = JSON.parse(result);
-      expect(parsed.elements[0]).not.toHaveProperty('attributes');
+      expect(parsed.scopes[0].elements[0]).not.toHaveProperty('attributes');
     });
   });
 
@@ -266,7 +267,7 @@ describe('formatSnapshot', () => {
         maxElements: 1,
       });
       const parsed = JSON.parse(jsonResult);
-      expect(parsed.elements).toHaveLength(1);
+      expect(parsed.scopes[0].elements).toHaveLength(1);
     });
   });
 
@@ -338,7 +339,7 @@ describe('edge cases', () => {
 
     const json = formatSnapshot(emptySnapshot, { format: 'json' });
     const parsed = JSON.parse(json);
-    expect(parsed.elements).toHaveLength(0);
+    expect(parsed.scopes[0].elements).toHaveLength(0);
   });
 
   it('应该处理只有必需字段的元素', () => {

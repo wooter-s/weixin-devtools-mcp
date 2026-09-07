@@ -92,7 +92,10 @@ export const evaluateScript = defineTool({
       // 执行脚本
       // miniProgram.evaluate 会自动处理函数序列化和参数传递
       const result = await runPageStateOperation(context, () =>
-        context.miniProgram!.evaluate(functionCode, ...args)
+        context.miniProgram!.evaluate(
+          `function () { const __weixinMcpCallable =\n${functionCode}\n; return __weixinMcpCallable.apply(this, arguments); }`,
+          ...args
+        )
       );
 
       // 序列化结果

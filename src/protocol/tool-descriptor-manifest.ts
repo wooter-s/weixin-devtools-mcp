@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs';
 import { ToolCategory } from '../config/tool-category.js';
 import type { ToolDescriptor } from '../config/tool-profile.js';
 
-export const TOOL_DESCRIPTOR_MANIFEST_VERSION = 1;
+import { canonicalJson } from './canonical-json.js';
+
+export const TOOL_DESCRIPTOR_MANIFEST_VERSION = 2;
+export const TOOL_RESULT_SCHEMA_VERSION = '2.0';
 
 export interface ToolDescriptorManifest {
   formatVersion: typeof TOOL_DESCRIPTOR_MANIFEST_VERSION;
+  resultSchemaVersion: typeof TOOL_RESULT_SCHEMA_VERSION;
   toolCount: number;
   tools: ToolDescriptor[];
 }
@@ -32,15 +36,28 @@ export function createToolDescriptorManifest(
 ): ToolDescriptorManifest {
   return {
     formatVersion: TOOL_DESCRIPTOR_MANIFEST_VERSION,
+    resultSchemaVersion: TOOL_RESULT_SCHEMA_VERSION,
     toolCount: tools.length,
     tools: [...tools],
   };
+}
+
+export function assertToolDescriptorsMatchManifest(
+  manifest: ToolDescriptorManifest,
+  runtimeDescriptors: readonly ToolDescriptor[],
+): void {
+  if (canonicalJson(manifest.tools) !== canonicalJson(runtimeDescriptors)) {
+    throw new TypeError('工具实现与构建期 descriptor manifest 不一致，请重新执行 npm run build');
+  }
 }
 
 export function parseToolDescriptorManifest(serialized: string): ToolDescriptorManifest {
   const candidate: unknown = JSON.parse(serialized);
   if (!isRecord(candidate) || candidate.formatVersion !== TOOL_DESCRIPTOR_MANIFEST_VERSION) {
     throw new TypeError('工具描述符 manifest 版本不受支持，请重新执行 npm run build');
+  }
+  if (candidate.resultSchemaVersion !== TOOL_RESULT_SCHEMA_VERSION) {
+    throw new TypeError('工具描述符结果 schema 版本不受支持，请重新执行 npm run build');
   }
   if (!Array.isArray(candidate.tools)) {
     throw new TypeError('工具描述符 manifest 内容无效，请重新执行 npm run build');

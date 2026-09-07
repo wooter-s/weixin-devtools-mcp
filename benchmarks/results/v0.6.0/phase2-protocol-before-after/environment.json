@@ -1,0 +1,63 @@
+{
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M3 Pro",
+    "cpuCount": 12,
+    "totalMemoryBytes": 19327352832,
+    "node": "22.14.0",
+    "devtoolsVersion": "36.6.0",
+    "npm": "10.9.2",
+    "devtoolsAppPath": "/Applications/wechatwebdevtools.app",
+    "comparisonFingerprint": "168119a3c63ca45a21f90c59bcf5d5fed95cf78187fad2275a4ae0603fb27b75"
+  },
+  "workload": {
+    "version": "protocol-static-1.1.0",
+    "fingerprint": "a8e3095f62e3f3adeaeae3d2cfc6e9f2b073604d702d6ac787ab3a993363095c",
+    "path": "benchmarks/workload.protocol-static.v1.json"
+  },
+  "fixtureFingerprint": "0504f2ffabdfa2cb7e307dee7e4ea84018bb57001411454e204a639c996ce9a8",
+  "baselineSourceFingerprint": "7950bbc123fde35bfa3f62cda0c4ae72c67f26767cce8c6933d181f526eb511f",
+  "optimizedSourceFingerprint": "c348a1a8f17139da0a21db02720a03424c0492e0ada2e72307ed6a5416bba324",
+  "baselinePackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "^0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "optimizedPackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "^0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "safety": {
+    "devtoolsAccess": false,
+    "devtoolsProcessesInspected": false,
+    "devtoolsProcessesTerminated": 0,
+    "ownedMcpChildrenOnly": true
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "recordType": "runtime-lifecycle-before-after",
+  "authority": "synthetic/non-authoritative",
+  "synthetic": true,
+  "authoritative": false,
+  "generatedAt": "2026-08-07T16:47:07.939Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "node": "22.14.0"
+  },
+  "safety": {
+    "devtoolsAccess": false,
+    "devtoolsProcessesInspected": false,
+    "devtoolsProcessesTerminated": 0,
+    "subprocessesSpawned": 0,
+    "networkAccess": false
+  },
+  "workload": {
+    "samples": 100,
+    "warmups": 3,
+    "concurrency": 100,
+    "invariants": [
+      "partial-listener-registration-rollback",
+      "active-session-replacement-cleanup"
+    ],
+    "fingerprint": "7f67eec3863e6fb9f398875e3511765f458f94233ff60cba85ca79461af5c884"
+  },
+  "baseline": {
+    "entry": "/private/tmp/weixin-mcp-dep-baseline.jxAdPQ/build/MiniProgramContext.js",
+    "sourceFingerprint": "65e03daaa9fc42206f712c1d8dca09877fbfcff70aff868088ab238645787ab3",
+    "samples": 100,
+    "successes": 0,
+    "failures": 100,
+    "successRate": 0,
+    "successRateWilson95": {
+      "low": 3.469446951953614e-18,
+      "high": 0.03699349820698568
+    },
+    "invariants": {
+      "partialListenerRegistrationRollback": {
+        "successes": 0,
+        "successRate": 0
+      },
+      "activeSessionReplacementCleanup": {
+        "successes": 0,
+        "successRate": 0
+      }
+    },
+    "latencyMs": {
+      "min": 0.6771249999999895,
+      "max": 1.0287500000000023,
+      "mean": 0.8190192000000018,
+      "p50": 0.8150830000000155,
+      "p95": 0.9403749999999604
+    },
+    "wallClockMs": 1.057416000000046,
+    "errors": []
+  },
+  "optimized": {
+    "entry": "<REPO>/build/MiniProgramContext.js",
+    "sourceFingerprint": "9611268285d6cd2bdcbdd18454785a07db970f4505e1673a9b1e4c2ff7f8f832",
+    "samples": 100,
+    "successes": 100,
+    "failures": 0,
+    "successRate": 1,
+    "successRateWilson95": {
+      "low": 0.9630065017930143,
+      "high": 1
+    },
+    "invariants": {
+      "partialListenerRegistrationRollback": {
+        "successes": 100,
+        "successRate": 1
+      },
+      "activeSessionReplacementCleanup": {
+        "successes": 100,
+        "successRate": 1
+      }
+    },
+    "latencyMs": {
+      "min": 206.4545,
+      "max": 209.25583300000005,
+      "mean": 208.39718585,
+      "p50": 208.48033300000003,
+      "p95": 209.19379200000003
+    },
+    "wallClockMs": 210.61045900000005,
+    "errors": []
+  },
+  "delta": {
+    "successRatePercentagePoints": 100,
+    "listenerRollbackPercentagePoints": 100,
+    "replacementCleanupPercentagePoints": 100,
+    "p95LatencyMs": 208.25341700000007
+  }
+}

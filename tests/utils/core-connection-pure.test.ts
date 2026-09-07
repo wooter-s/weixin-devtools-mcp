@@ -1,7 +1,9 @@
+import net from 'node:net';
+
 import automator from 'miniprogram-automator';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { connectDevtools } from '../../src/core/connection.js';
+import { connectDevtoolsEnhanced } from '../../src/core/connection.js';
 
 vi.mock('miniprogram-automator', () => ({
   default: {
@@ -15,33 +17,36 @@ describe('core connectDevtools purity', () => {
     vi.clearAllMocks();
   });
 
-  it('只建立连接和读取页面，不安装 Console/Network 监听', async () => {
-    const page = { path: '/pages/home/index' };
-    const miniProgram = {
-      currentPage: vi.fn(async () => page),
-      mockWxMethod: vi.fn(async () => undefined),
-      evaluate: vi.fn(async () => undefined),
-      disconnect: vi.fn(async () => undefined),
-    };
-    vi.mocked(automator.launch).mockResolvedValue(miniProgram as never);
+  it('不再执行会隐式回退的 auto 模式', async () => {
+    await expect(connectDevtoolsEnhanced({
+      projectPath: process.cwd(),
+      mode: 'auto',
+    })).rejects.toThrow('auto 模式已移除');
 
-    const result = await connectDevtools({ projectPath: process.cwd() });
-
-    expect(result.pagePath).toBe('/pages/home/index');
-    expect(miniProgram.mockWxMethod).not.toHaveBeenCalled();
-    expect(miniProgram.evaluate).not.toHaveBeenCalled();
+    expect(automator.launch).not.toHaveBeenCalled();
+    expect(automator.connect).not.toHaveBeenCalled();
   });
 
-  it('已创建候选连接但页面不可用时主动断开候选', async () => {
-    const miniProgram = {
-      currentPage: vi.fn(async () => null),
-      disconnect: vi.fn(async () => undefined),
-    };
-    vi.mocked(automator.launch).mockResolvedValue(miniProgram as never);
+  it('connect 模式遇到预先占用端口时拒绝附着未知项目', async () => {
+    const server = net.createServer();
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('测试 TCP server 未返回端口');
+    }
 
-    await expect(connectDevtools({ projectPath: process.cwd() }))
-      .rejects.toThrow('无法获取当前页面');
-
-    expect(miniProgram.disconnect).toHaveBeenCalledOnce();
+    try {
+      await expect(connectDevtoolsEnhanced({
+        projectPath: process.cwd(),
+        mode: 'connect',
+        autoPort: address.port,
+        timeout: 1_000,
+      })).rejects.toThrow('无法验证其项目归属');
+      expect(automator.connect).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+      });
+    }
   });
 });

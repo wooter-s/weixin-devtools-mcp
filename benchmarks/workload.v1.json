@@ -1,0 +1,261 @@
+{
+  "$schema": "./schemas/workload.schema.json",
+  "version": "1.1.0",
+  "fixture": {
+    "project": "playground/benchmark-wx",
+    "entryRoute": "/pages/index/index",
+    "secondaryRoute": "/pages/secondary/index",
+    "localRequestOnly": true
+  },
+  "rules": {
+    "connectionWarmups": 3,
+    "interactionWarmups": 5,
+    "protocolWarmups": 10,
+    "percentiles": [0.5, 0.95],
+    "successInterval": "wilson-95",
+    "failedSamplesAreRetained": true,
+    "automaticRetries": 0
+  },
+  "scenarios": [
+    {
+      "id": "runtime_lifecycle_cycle",
+      "direction": "runtime",
+      "warmups": 3,
+      "iterations": 20,
+      "description": "冷连接、外部跳页、同路径 relaunch、正常重连、注入失败、恢复、监听验证和断连组成一个原子样本。",
+      "acceptance": {
+        "successRateMin": 0.95,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          { "name": "staleStateCount", "statistic": "sum", "operator": "eq", "value": 0 },
+          { "name": "wrongPageCount", "statistic": "sum", "operator": "eq", "value": 0 },
+          { "name": "duplicateConsoleCount", "statistic": "sum", "operator": "eq", "value": 0 },
+          { "name": "duplicateNetworkCount", "statistic": "sum", "operator": "eq", "value": 0 },
+          { "name": "consoleCapturedCount", "statistic": "sum", "operator": "gte", "value": 60 },
+          { "name": "networkCapturedCount", "statistic": "sum", "operator": "gte", "value": 60 }
+        ]
+      }
+    },
+    {
+      "id": "locator_duplicate_click",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 30,
+      "description": "在 20 个相同 class 和文案的元素中点击指定序号并核对 actionLog。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    },
+    {
+      "id": "locator_stale_same_page",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 20,
+      "description": "获取引用后重排或删除元素，验证唯一安全重绑或 STALE_ELEMENT。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    },
+    {
+      "id": "locator_stale_cross_page",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 10,
+      "description": "跨页后使用旧引用，必须稳定失败且不得点击同 selector 元素。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    },
+    {
+      "id": "locator_input_modes",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 30,
+      "description": "input 与 textarea 的 replace、append、clear 后回读精确值。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    },
+    {
+      "id": "locator_direct",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 10,
+      "description": "使用 id/testId/selector/text 直接定位并核对唯一目标。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    },
+    {
+      "id": "snapshot_fresh",
+      "direction": "locator",
+      "warmups": 5,
+      "iterations": 100,
+      "description": "每次改变页面 revision 后获取 fresh snapshot。",
+      "acceptance": { "successRateMin": 1, "p50ImprovementMin": 0.3, "p95ImprovementMin": 0.3 }
+    },
+    {
+      "id": "protocol_tools_list",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "在已启动的 stdio server 上，用强制重置的客户端 validator 冷/热获取 tools/list，并校验全部工具的 outputSchema、内容寻址 ID 与响应体积。进程冷启动另见 protocol_stdio_lifecycle。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          { "name": "toolsTotal", "statistic": "sum", "operator": "gte", "value": 3100 },
+          {
+            "name": "toolsWithOutputSchema",
+            "statistic": "sum",
+            "operator": "gte",
+            "value": 3100
+          },
+          {
+            "name": "toolsWithContentAddressedSchemaId",
+            "statistic": "sum",
+            "operator": "gte",
+            "value": 3100
+          },
+          {
+            "name": "coldSchemaValidatorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "hotSchemaValidatorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "responseBytes",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 95000
+          },
+          {
+            "name": "coldListMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 50.7432
+          },
+          {
+            "name": "hotListMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_success",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "成功工具响应的 structuredContent 与 outputSchema 验证。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredContentCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_invalid_arguments",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "参数错误具备稳定错误码、isError 和结构化错误体。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredErrorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_business_error",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "未连接、陈旧元素等业务错误具备稳定结构化契约。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredErrorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_image_response",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "截图二进制只出现在 image content，结构化结果仅保留元信息。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "lifecycleMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 209.6435
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_structured_workflow",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "客户端只读取 structuredContent 完成定位、交互和验证，不解析中文文本。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metricComparisons": [
+          { "name": "responseBytes", "statistic": "sum", "maxRelativeIncrease": 0.1 },
+          { "name": "roundTrips", "statistic": "sum", "maxRelativeIncrease": 0 }
+        ]
+      }
+    },
+    {
+      "id": "protocol_stdio_lifecycle",
+      "direction": "protocol",
+      "warmups": 3,
+      "iterations": 30,
+      "description": "启动、初始化、请求和关闭真实 MCP stdio 子进程。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 }
+      }
+    }
+  ]
+}

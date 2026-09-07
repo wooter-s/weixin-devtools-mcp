@@ -1,149 +1,204 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { ValidationConnectionError } from './errors.js';
 import type {
+  BrowserUrlConnectionTarget,
+  ConnectionAttemptSpec,
   ConnectionRequest,
-  ConnectionStrategy,
+  ConnectionTarget,
+  DiscoverConnectionTarget,
+  ProjectConnectionTarget,
   ResolvedConnectionPlan,
   ResolvedConnectionRequest,
+  WsEndpointConnectionTarget,
 } from './types.js';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
-const DEFAULT_FALLBACK_FOR_LAUNCH: ConnectionStrategy[] = ['connect'];
-const DEFAULT_FALLBACK_FOR_CONNECT: ConnectionStrategy[] = ['launch'];
-const DEFAULT_FALLBACK_FOR_ENDPOINT: ConnectionStrategy[] = ['discover', 'launch', 'connect'];
 
-function uniqueStrategies(strategies: ConnectionStrategy[]): ConnectionStrategy[] {
-  const result: ConnectionStrategy[] = [];
-  for (const strategy of strategies) {
-    if (!result.includes(strategy)) {
-      result.push(strategy);
-    }
-  }
-  return result;
-}
-
-function resolvePrimaryStrategy(request: ConnectionRequest): ConnectionStrategy {
-  if (request.strategy) {
-    return request.strategy;
-  }
-
-  if (request.wsEndpoint) {
-    return 'wsEndpoint';
-  }
-
-  if (request.browserUrl) {
-    return 'browserUrl';
-  }
-
-  if (request.autoDiscover) {
-    return 'discover';
-  }
-
-  return 'auto';
-}
-
-function resolveFallbackStrategies(
-  primary: ConnectionStrategy,
-  request: ConnectionRequest,
-): ConnectionStrategy[] {
-  if (request.fallback && request.fallback.length > 0) {
-    return request.fallback.filter(strategy => strategy !== primary);
-  }
-
-  if (primary === 'launch') {
-    return [...DEFAULT_FALLBACK_FOR_LAUNCH];
-  }
-
-  if (primary === 'connect') {
-    return [...DEFAULT_FALLBACK_FOR_CONNECT];
-  }
-
-  if (primary === 'wsEndpoint' || primary === 'browserUrl') {
-    return [...DEFAULT_FALLBACK_FOR_ENDPOINT];
-  }
-
-  if (primary === 'discover') {
-    const fallback: ConnectionStrategy[] = [];
-    if (request.projectPath) {
-      fallback.push('launch', 'connect');
-    }
-    return fallback;
-  }
-
-  if (primary === 'auto') {
-    return request.projectPath ? ['launch', 'connect'] : ['discover'];
-  }
-
-  return [];
-}
-
-function validateRequest(request: ResolvedConnectionRequest): void {
-  if (request.wsHeaders !== undefined) {
+function validateObject(value: object, allowedKeys: string[], label: string): void {
+  const unexpectedKeys = Object.keys(value).filter(key => !allowedKeys.includes(key));
+  if (unexpectedKeys.length > 0) {
     throw new ValidationConnectionError(
-      '当前连接链路不支持 wsHeaders 参数',
-      ['请移除 wsHeaders 参数后重试'],
-      { strategy: request.strategy },
+      `${label} 包含不支持的字段: ${unexpectedKeys.join(', ')}`,
+      [`仅保留字段: ${allowedKeys.join(', ')}`],
+    );
+  }
+}
+
+function requireNonEmptyString(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new ValidationConnectionError(`${field} 不能为空`, [`为 ${field} 提供有效值`]);
+  }
+  return normalized;
+}
+
+function resolveProjectPath(projectPath: string): string {
+  const normalized = requireNonEmptyString(projectPath, 'target.projectPath');
+  const expanded = normalized.startsWith('@playground/')
+    ? path.resolve(process.cwd(), normalized.replace('@playground/', 'playground/'))
+    : path.resolve(process.cwd(), normalized);
+
+  let canonicalPath: string;
+  try {
+    canonicalPath = fs.realpathSync(expanded);
+  } catch {
+    throw new ValidationConnectionError(
+      `项目路径不存在: ${expanded}`,
+      ['检查 target.projectPath 后重试'],
+      { projectPath: expanded },
     );
   }
 
-  if (request.strategy === 'launch' || request.strategy === 'connect') {
-    if (!request.projectPath) {
+  if (!fs.statSync(canonicalPath).isDirectory()) {
+    throw new ValidationConnectionError(
+      `项目路径不是目录: ${canonicalPath}`,
+      ['将 target.projectPath 指向小程序项目目录'],
+      { projectPath: canonicalPath },
+    );
+  }
+
+  return canonicalPath;
+}
+
+function validatePort(port: number | undefined): number | undefined {
+  if (port === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new ValidationConnectionError(
+      'target.autoPort 必须是 1 到 65535 之间的整数',
+      ['设置一个有效且未被占用的自动化端口'],
+      { autoPort: port },
+    );
+  }
+  return port;
+}
+
+function validateUrl(value: string, field: string, protocols: string[]): string {
+  const normalized = requireNonEmptyString(value, field);
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new ValidationConnectionError(`${field} 不是有效 URL`, [`检查 ${field} 的格式`]);
+  }
+
+  if (!protocols.includes(url.protocol)) {
+    throw new ValidationConnectionError(
+      `${field} 仅支持 ${protocols.join('、')} 协议`,
+      [`修改 ${field} 的协议后重试`],
+      { protocol: url.protocol },
+    );
+  }
+  return url.toString();
+}
+
+function resolveProjectTarget(target: ProjectConnectionTarget): ProjectConnectionTarget {
+  validateObject(
+    target,
+    ['kind', 'projectPath', 'cliPath', 'autoPort', 'autoAudits'],
+    'project target',
+  );
+  return {
+    kind: 'project',
+    projectPath: resolveProjectPath(target.projectPath),
+    cliPath: target.cliPath === undefined
+      ? undefined
+      : requireNonEmptyString(target.cliPath, 'target.cliPath'),
+    autoPort: validatePort(target.autoPort),
+    autoAudits: target.autoAudits,
+  };
+}
+
+function resolveWsEndpointTarget(
+  target: WsEndpointConnectionTarget,
+): WsEndpointConnectionTarget {
+  validateObject(target, ['kind', 'endpoint'], 'wsEndpoint target');
+  return {
+    kind: 'wsEndpoint',
+    endpoint: validateUrl(target.endpoint, 'target.endpoint', ['ws:', 'wss:']),
+  };
+}
+
+function resolveBrowserUrlTarget(
+  target: BrowserUrlConnectionTarget,
+): BrowserUrlConnectionTarget {
+  validateObject(target, ['kind', 'url'], 'browserUrl target');
+  return {
+    kind: 'browserUrl',
+    url: validateUrl(target.url, 'target.url', ['http:', 'https:']),
+  };
+}
+
+function resolveDiscoverTarget(target: DiscoverConnectionTarget): DiscoverConnectionTarget {
+  validateObject(target, ['kind'], 'discover target');
+  return { kind: 'discover' };
+}
+
+function resolveTarget(target: ConnectionTarget | undefined): ConnectionTarget {
+  if (!target || typeof target !== 'object') {
+    throw new ValidationConnectionError(
+      'target 是必需的',
+      ['提供 project、wsEndpoint、browserUrl 或 discover target'],
+    );
+  }
+
+  switch (target.kind) {
+    case 'project':
+      return resolveProjectTarget(target);
+    case 'wsEndpoint':
+      return resolveWsEndpointTarget(target);
+    case 'browserUrl':
+      return resolveBrowserUrlTarget(target);
+    case 'discover':
+      return resolveDiscoverTarget(target);
+    default:
       throw new ValidationConnectionError(
-        `${request.strategy} 策略要求提供 projectPath`,
-        ['为 connect_devtools 传入 projectPath'],
-        { strategy: request.strategy },
+        'target.kind 无效',
+        ['target.kind 只能是 project、wsEndpoint、browserUrl 或 discover'],
       );
-    }
   }
+}
 
-  if (request.strategy === 'wsEndpoint' && !request.wsEndpoint) {
-    throw new ValidationConnectionError(
-      'wsEndpoint 策略要求提供 wsEndpoint',
-      ['设置 wsEndpoint，例如 ws://127.0.0.1:9420'],
-    );
-  }
-
-  if (request.strategy === 'browserUrl' && !request.browserUrl) {
-    throw new ValidationConnectionError(
-      'browserUrl 策略要求提供 browserUrl',
-      ['设置 browserUrl，例如 http://127.0.0.1:9222'],
-    );
-  }
-
-  if (request.timeoutMs <= 0) {
-    throw new ValidationConnectionError(
-      'timeoutMs 必须是正数',
-      ['设置一个大于 0 的超时时间'],
-      { timeoutMs: request.timeoutMs },
-    );
+function buildAttempts(target: ConnectionTarget): ConnectionAttemptSpec[] {
+  switch (target.kind) {
+    case 'project':
+      return [
+        { method: 'launch', target },
+        { method: 'connect', target },
+      ];
+    case 'wsEndpoint':
+      return [{ method: 'wsEndpoint', target }];
+    case 'browserUrl':
+      return [{ method: 'browserUrl', target }];
+    case 'discover':
+      return [{ method: 'discover', target }];
   }
 }
 
 export function resolveConnectionPlan(rawRequest: ConnectionRequest): ResolvedConnectionPlan {
-  const strategy = resolvePrimaryStrategy(rawRequest);
-  const fallback = uniqueStrategies(resolveFallbackStrategies(strategy, rawRequest));
+  validateObject(rawRequest, ['target', 'timeoutMs', 'healthCheck'], '连接请求');
 
+  const timeoutMs = rawRequest.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new ValidationConnectionError(
+      'timeoutMs 必须是正数',
+      ['设置一个大于 0 的总超时时间'],
+      { timeoutMs },
+    );
+  }
+
+  const target = resolveTarget(rawRequest.target);
   const request: ResolvedConnectionRequest = {
-    strategy,
-    projectPath: rawRequest.projectPath,
-    cliPath: rawRequest.cliPath,
-    autoPort: rawRequest.autoPort,
-    browserUrl: rawRequest.browserUrl,
-    wsEndpoint: rawRequest.wsEndpoint,
-    wsHeaders: rawRequest.wsHeaders,
-    timeoutMs: rawRequest.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    fallback,
+    target,
+    timeoutMs,
     healthCheck: rawRequest.healthCheck ?? true,
-    verbose: rawRequest.verbose ?? false,
-    autoAudits: rawRequest.autoAudits,
-    autoDiscover: rawRequest.autoDiscover ?? true,
   };
-
-  validateRequest(request);
-
-  const attempts = uniqueStrategies([request.strategy, ...request.fallback]);
 
   return {
     request,
-    attempts,
+    attempts: buildAttempts(target),
   };
 }

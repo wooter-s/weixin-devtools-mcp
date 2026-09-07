@@ -1,0 +1,10 @@
+{
+  "appid": "touristappid",
+  "projectname": "mcp-monitoring-regression",
+  "compileType": "miniprogram",
+  "libVersion": "2.32.2",
+  "setting": {
+    "urlCheck": false,
+    "es6": true
+  }
+}

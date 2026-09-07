@@ -1,6 +1,7 @@
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import {
@@ -12,12 +13,13 @@ import { TOOL_ERROR_CODES } from '../../src/tools/result.js';
 import { allTools } from '../../src/tools/tools.js';
 
 describe('工具输出契约', () => {
-  it('full profile 的全部工具都暴露对象根 outputSchema', () => {
+  it('full profile 的全部工具都使用 V2 成功/失败判别联合', () => {
     expect(allTools).toHaveLength(31);
 
     for (const tool of allTools) {
       const schema = zodToJsonSchema(tool.outputSchema, { strictUnions: true });
-      expect(schema, tool.name).toMatchObject({ type: 'object' });
+      const union = (schema as unknown as { anyOf?: unknown[] }).anyOf;
+      expect(union, tool.name).toHaveLength(2);
       expect(tool.dataSchema, tool.name).toBeDefined();
     }
   });
@@ -105,33 +107,32 @@ describe('工具输出契约', () => {
       'ok',
       'code',
       'data',
+      'error',
+      'partialData',
+      'observation',
       'warnings',
       'nextActions',
       'meta',
     ]);
     expect(schema.properties).toMatchObject({
-      schemaVersion: { type: 'string', const: '1.0' },
+      schemaVersion: { type: 'string', const: '2.0' },
       ok: { type: 'boolean' },
       code: { type: 'string', enum: ['OK', ...TOOL_ERROR_CODES] },
-      error: {
-        type: 'object',
-        required: ['message', 'retryable'],
-        additionalProperties: false,
-      },
-      observation: { type: 'object' },
+      observation: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       warnings: { type: 'array', items: { type: 'object' } },
       nextActions: { type: 'array', items: { type: 'object' } },
-      meta: {
-        type: 'object',
-        required: ['requestId', 'tool', 'durationMs'],
-        additionalProperties: false,
-      },
+      meta: { type: 'object' },
     });
 
-    const dataProperty = schema.properties?.data;
+    const branches = (schema as unknown as { oneOf?: Record<string, unknown>[] }).oneOf;
+    expect(branches).toHaveLength(2);
+    const successBranch = branches?.[0];
+    const failureBranch = branches?.[1];
+    const dataProperty = (successBranch?.properties as Record<string, unknown> | undefined)?.data;
     expect(dataProperty).toBeDefined();
     expect(JSON.stringify(dataProperty)).toContain('disconnected');
     expect(JSON.stringify(dataProperty)).toContain('pageRevision');
+    expect(JSON.stringify(failureBranch)).toContain('diagnostic');
   });
 
   it('递归 JSONValue 的空 schema 压缩与 wire JSON 语义等价', () => {
@@ -153,10 +154,13 @@ describe('工具输出契约', () => {
 
     for (const result of jsonValues) {
       const envelope = {
-        schemaVersion: '1.0',
+        schemaVersion: '2.0',
         ok: true,
         code: 'OK',
         data: { result },
+        error: null,
+        partialData: null,
+        observation: null,
         warnings: [],
         nextActions: [],
         meta: { requestId: 'req-1', tool: tool.name, durationMs: 0 },
@@ -164,6 +168,53 @@ describe('工具输出契约', () => {
       expect(tool.outputSchema.safeParse(envelope).success).toBe(true);
       expect(validateCompact(envelope).valid).toBe(true);
     }
+  });
+
+  it('公开 schema 精确区分全字段成功与失败信封', () => {
+    const tool = { dataSchema: z.object({ value: z.number() }) };
+    const validate = new AjvJsonSchemaValidator().getValidator(buildCompactOutputSchema(tool));
+    const meta = { requestId: 'req-1', tool: 'example', durationMs: 0 };
+
+    const success = {
+      schemaVersion: '2.0',
+      ok: true,
+      code: 'OK',
+      data: { value: 1 },
+      error: null,
+      partialData: null,
+      observation: null,
+      warnings: [],
+      nextActions: [],
+      meta,
+    };
+    const failure = {
+      schemaVersion: '2.0',
+      ok: false,
+      code: 'CONNECTION_FAILED',
+      data: null,
+      error: {
+        message: '连接失败',
+        retryable: true,
+        diagnostic: {
+          kind: 'connection',
+          phase: 'connect',
+          suggestions: [],
+          metadata: null,
+          attempts: [],
+        },
+      },
+      partialData: { attemptCount: 1 },
+      observation: null,
+      warnings: [],
+      nextActions: [],
+      meta,
+    };
+
+    expect(validate(success).valid).toBe(true);
+    expect(validate(failure).valid).toBe(true);
+    expect(validate({ ...success, error: failure.error }).valid).toBe(false);
+    const { observation: _observation, ...missingRequiredField } = failure;
+    expect(validate(missingRequiredField).valid).toBe(false);
   });
 
   it('描述符缓存复用同一结果，并支持显式失效', () => {

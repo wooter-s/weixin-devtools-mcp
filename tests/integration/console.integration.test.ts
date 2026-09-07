@@ -5,9 +5,9 @@
 import type { MiniProgram } from 'miniprogram-automator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import type { MiniProgramContext } from '../../src/MiniProgramContext.js';
 
-import { IntegrationHarness } from './helpers/integration-harness.js';
+import { createIntegrationContext, IntegrationHarness } from './helpers/integration-harness.js';
 import {
   handleIntegrationUnavailable,
   shouldRunIntegrationTests,
@@ -57,7 +57,7 @@ describe.skipIf(!shouldRun)('Console Integration Tests', () => {
     const status = await context.getConnectionStatus({ refreshHealth: false });
     if (!status.connected) {
       try {
-        await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
+        await harness.reconnect(context);
       } catch (error) {
         runtimeReady = false;
         handleIntegrationUnavailable('Console 重连失败', error);
@@ -77,10 +77,9 @@ describe.skipIf(!shouldRun)('Console Integration Tests', () => {
       return;
     }
 
-    context = MiniProgramContext.create();
+    context = createIntegrationContext();
     try {
       const connected = await harness.connect(context, {
-        strategy: 'auto',
         timeoutMs: 60_000,
         healthCheck: false,
       });

@@ -214,13 +214,14 @@ describe('getPageSnapshotTool', () => {
       expect(responseText).toContain('输出格式: json');
 
       // 提取JSON内容并验证
-      const jsonMatch = responseText.match(/\{[\s\S]*"path"[\s\S]*"elements"[\s\S]*\}/);
+      const jsonMatch = responseText.match(/\{[\s\S]*"path"[\s\S]*"scopes"[\s\S]*\}/);
       expect(jsonMatch).toBeTruthy();
 
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         expect(parsed.path).toBe('pages/test/test');
-        expect(parsed.elements).toHaveLength(2);
+        expect(parsed).not.toHaveProperty('elements');
+        expect(parsed.scopes[0].elements).toHaveLength(2);
       }
     });
   });
@@ -236,6 +237,9 @@ describe('getPageSnapshotTool', () => {
       const responseText = response.getResponseText();
       expect(responseText).not.toMatch(/pos=\[/);
       expect(responseText).not.toMatch(/size=\[/);
+      const structured = response.getStructuredContent();
+      const formatted = responseText.slice(responseText.indexOf('# Page:'));
+      expect(structured.tokenEstimate).toBe(Math.ceil(formatted.length / 4));
     });
 
     it('应该支持包含属性信息', async () => {
@@ -276,7 +280,12 @@ describe('getPageSnapshotTool', () => {
 
     it('应该支持限制元素数量', async () => {
       await getPageSnapshotTool.handler(
-        { params: { format: 'compact', maxElements: 1 } },
+        {
+          params: {
+            format: 'compact',
+            budget: { maxDepth: 4, maxExpandedScopes: 64, maxElements: 1 },
+          },
+        },
         response,
         context
       );
@@ -375,7 +384,7 @@ describe('getPageSnapshotTool', () => {
 
       await expect(
         getPageSnapshotTool.handler({ params: {} }, response, context)
-      ).rejects.toThrow('当前上下文不支持页面快照缓存接口');
+      ).rejects.toThrow('当前上下文不支持页面快照接口');
 
       expect(response.getResponseText()).toContain('❌ 获取页面快照失败');
     });

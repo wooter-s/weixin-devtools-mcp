@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import type { MiniProgramContext } from '../../src/MiniProgramContext.js';
 import { getConnectionStatusTool } from '../../src/tools/connection.js';
 import { listConsoleMessagesTool, getConsoleMessageTool } from '../../src/tools/console.js';
 import { clickTool } from '../../src/tools/input.js';
@@ -18,7 +18,11 @@ import { findElementsTool, waitForTool } from '../../src/tools/page.js';
 import { screenshotTool } from '../../src/tools/screenshot.js';
 import { getPageSnapshotTool } from '../../src/tools/snapshot.js';
 
-import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
+import {
+  createIntegrationContext,
+  IntegrationHarness,
+  runTool,
+} from './helpers/integration-harness.js';
 import {
   handleIntegrationUnavailable,
   shouldRunIntegrationTests,
@@ -65,7 +69,7 @@ describe.skipIf(!shouldRun)('MCP Real Environment Integration Tests', () => {
     }
 
     try {
-      await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
+      await harness.reconnect(context);
       return true;
     } catch (error) {
       runtimeReady = false;
@@ -81,10 +85,9 @@ describe.skipIf(!shouldRun)('MCP Real Environment Integration Tests', () => {
       return;
     }
 
-    context = MiniProgramContext.create();
+    context = createIntegrationContext();
     try {
       const connected = await harness.connect(context, {
-        strategy: 'auto',
         timeoutMs: 60_000,
         healthCheck: false,
       });
@@ -139,7 +142,7 @@ describe.skipIf(!shouldRun)('MCP Real Environment Integration Tests', () => {
     expect(queryResponse.getResponseText()).toContain('找到');
 
     const waitResponse = await runTool(context, waitForTool.handler, {
-      target: { kind: 'selector', value: 'view' },
+      target: { kind: 'path', path: [{ kind: 'selector', value: 'view', index: 0 }] },
       timeout: 10_000,
     });
     expect(waitResponse.getResponseText()).toContain('等待');

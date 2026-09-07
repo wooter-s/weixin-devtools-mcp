@@ -6,6 +6,7 @@
 import type { Element } from 'miniprogram-automator';
 
 import type {
+  ElementAddress,
   ElementFingerprint,
   LocatorStability,
   TextInputCommand,
@@ -77,12 +78,59 @@ export interface ElementSnapshot {
   text?: string;
   attributes?: Record<string, string>;
   locatorStability?: LocatorStability;
+  /** 当前元素是否是可继续查询其组件内部节点的 CustomElement 边界。 */
+  componentBoundary?: boolean;
   position?: {
     left: number;
     top: number;
     width: number;
     height: number;
   };
+}
+
+export type SnapshotScopeKind = 'page' | 'custom-component';
+
+export type SnapshotScopeStatus =
+  | 'complete'
+  | 'partial'
+  | 'truncated'
+  | 'unavailable';
+
+export type SnapshotScopeReason =
+  | 'MAX_DEPTH'
+  | 'MAX_SCOPES'
+  | 'MAX_ELEMENTS'
+  | 'QUERY_UNSUPPORTED'
+  | 'QUERY_FAILED'
+  | 'ELEMENT_READ_FAILED';
+
+export interface SnapshotBudget {
+  maxDepth: number;
+  maxExpandedScopes: number;
+  maxElements: number;
+}
+
+export interface SnapshotUsage {
+  expandedScopes: number;
+  elements: number;
+}
+
+/** Page 或 CustomElement 对应的标准化可查询作用域。 */
+export interface SnapshotScope {
+  scopeId: string;
+  kind: SnapshotScopeKind;
+  rootRef?: string;
+  depth: number;
+  status: SnapshotScopeStatus;
+  reason?: SnapshotScopeReason;
+  elements: ElementSnapshot[];
+}
+
+/** 自定义组件边界与其内部作用域之间的有向边。 */
+export interface SnapshotScopeEdge {
+  fromScopeId: string;
+  boundaryRef: string;
+  toScopeId: string;
 }
 
 /**
@@ -92,7 +140,18 @@ export interface PageSnapshot {
   snapshotId: string;
   pageRevision: number;
   path: string;
+  /**
+   * Context 内部用于兼容现有 observation diff 的 Page 根作用域别名。
+   * V2 公共契约只序列化 scopes/edges，不公开此字段。
+   */
   elements: ElementSnapshot[];
+  /** 以下图字段由 V2 capture 始终生成；optional 仅用于读取旧缓存/测试夹具。 */
+  rootScopeId?: string;
+  complete?: boolean;
+  budget?: SnapshotBudget;
+  usage?: SnapshotUsage;
+  scopes?: SnapshotScope[];
+  edges?: SnapshotScopeEdge[];
 }
 
 /**
@@ -126,6 +185,8 @@ export interface ElementMapInfo {
   pagePath?: string;
   element?: Element;
   fingerprint?: ElementFingerprint;
+  /** 从 Page 逐级进入自定义组件、最终抵达元素的完整内部地址链。 */
+  address?: ElementAddress;
 }
 
 /**

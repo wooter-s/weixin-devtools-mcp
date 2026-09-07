@@ -1,0 +1,220 @@
+{
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M3 Pro",
+    "cpuCount": 12,
+    "totalMemoryBytes": 19327352832,
+    "node": "22.14.0",
+    "devtoolsVersion": "36.6.0",
+    "npm": "10.9.2",
+    "devtoolsAppPath": "/Applications/wechatwebdevtools.app",
+    "comparisonFingerprint": "168119a3c63ca45a21f90c59bcf5d5fed95cf78187fad2275a4ae0603fb27b75"
+  },
+  "workload": {
+    "version": "protocol-static-1.1.0",
+    "fingerprint": "a8e3095f62e3f3adeaeae3d2cfc6e9f2b073604d702d6ac787ab3a993363095c",
+    "path": "benchmarks/workload.protocol-static.v1.json"
+  },
+  "fixtureFingerprint": "0504f2ffabdfa2cb7e307dee7e4ea84018bb57001411454e204a639c996ce9a8",
+  "harness": {
+    "version": "protocol-static-harness-1",
+    "root": "scripts/benchmarks",
+    "files": [
+      {
+        "path": "adapters/protocol-static.mjs",
+        "bytes": 9147,
+        "sha256": "5132cb96e46608843a37edb77e0c900687b43ecc4582fd619a7740c98cdef892"
+      },
+      {
+        "path": "aggregate.mjs",
+        "bytes": 1802,
+        "sha256": "61b6707d8a6456128c7dd7c138ff8605b82e44d3f6270f54262658a38fbe6ce3"
+      },
+      {
+        "path": "compare.mjs",
+        "bytes": 22130,
+        "sha256": "d2d73a925a6e6d31903086d0a8f4a9adb1eeb16b299763b1b1fc3470376c757d"
+      },
+      {
+        "path": "lib/core.mjs",
+        "bytes": 21108,
+        "sha256": "13a62ede4a6335687ba1fbd85ebe81859f757d7e8a4d6ec0608970ad9a3b4de6"
+      },
+      {
+        "path": "lib/recorder.mjs",
+        "bytes": 4301,
+        "sha256": "49924cc764686accc3c8b2b67da21031ff87c3ad8c4a1ba4df786274212bc24f"
+      },
+      {
+        "path": "protocol-static-pair.mjs",
+        "bytes": 29256,
+        "sha256": "b78af304d2bbbba4be7fdd4648695000023a4700cd6aa7eaf082e115a8313f82"
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "@modelcontextprotocol/sdk",
+        "version": "1.30.0",
+        "packageJsonSha256": "0690cbe02511a95d1ff199acf20b5a12ac4dfde1bbe30c82a0de73afa92dffc9",
+        "entrypoints": [
+          {
+            "specifier": "@modelcontextprotocol/sdk/client/index.js",
+            "path": "dist/esm/client/index.js",
+            "sha256": "db6cc643f5cc095b2fd0b70bf691d1775f07a317e97555e3928559e815f5e32a"
+          },
+          {
+            "specifier": "@modelcontextprotocol/sdk/client/stdio.js",
+            "path": "dist/esm/client/stdio.js",
+            "sha256": "298514feae7875117a119a2598b40f2346ef07c30152fa7ad2ffb6cfb51782bc"
+          },
+          {
+            "specifier": "@modelcontextprotocol/sdk/validation/ajv",
+            "path": "dist/esm/validation/ajv-provider.js",
+            "sha256": "1893726b2b43d0688e8c37ce48b3c5f87a55eb93ca370433f882ae81c09c491a"
+          }
+        ]
+      },
+      {
+        "name": "ajv",
+        "version": "8.20.0",
+        "packageJsonSha256": "1f9033ee5a6515e7d76938b7072941862d1ed228a6879cc7fe10cdeb75107989",
+        "entrypoints": [
+          {
+            "specifier": "ajv",
+            "path": "dist/ajv.js",
+            "sha256": "edaed56fc546f5551b0d6dc2ff2a9cc25c2d6c83318a086eaa8c3ad0b2479297"
+          }
+        ]
+      },
+      {
+        "name": "ajv-formats",
+        "version": "3.0.1",
+        "packageJsonSha256": "402fb4bcfa457f0226813f3976ac42839dd619907c075c108efba8600d7edb69",
+        "entrypoints": [
+          {
+            "specifier": "ajv-formats",
+            "path": "dist/index.js",
+            "sha256": "3f3014150293846086d11058bb8bf43e669e354a98b37adcf10281454d5e753b"
+          }
+        ]
+      },
+      {
+        "name": "cross-spawn",
+        "version": "7.0.6",
+        "packageJsonSha256": "2e106cd9b4ae4e34ead35218371a0d4e172da72515a4f8f97d69a2e1fe3dee82",
+        "entrypoints": [
+          {
+            "specifier": "cross-spawn",
+            "path": "index.js",
+            "sha256": "b8e01cb18ba87ee1b0e5eb2eb1ce6cbb25a2bdd229f9e08671f8a10ed7e3ad35"
+          }
+        ]
+      },
+      {
+        "name": "zod",
+        "version": "3.25.76",
+        "packageJsonSha256": "70eedbe34fd52385a4ae2f3e5759b19682189f0118ea73a6e7c32c677f61668e",
+        "entrypoints": [
+          {
+            "specifier": "zod/v4",
+            "path": "v4/index.js",
+            "sha256": "a4b634bb8c97cc700dbf165f3bb0095ec669042da72eaf28a7c5e2ddd98169ce"
+          }
+        ]
+      }
+    ],
+    "fingerprint": "fed4a7f3f550fbdaff696e77efe06665a105bfd1061f95251780be512800c086"
+  },
+  "baselineHarnessFingerprint": null,
+  "pairSession": {
+    "id": "de1a513a-d666-43e5-a8d2-cfe67e06ae0f",
+    "mode": "recorded-baseline-recovery"
+  },
+  "baselineSourceFingerprint": "7950bbc123fde35bfa3f62cda0c4ae72c67f26767cce8c6933d181f526eb511f",
+  "optimizedSourceFingerprint": "b5b8f97e4a07646c565ec355bddf54a0cda229939162a8e669c48f19ae43953c",
+  "baselinePackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "^0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "optimizedPackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "authority": "protocol-static/indicative-only-no-harness-provenance",
+  "authorityProfile": {
+    "mode": "indicative-only",
+    "fullyAuthoritative": false,
+    "deterministic": {
+      "authoritative": false,
+      "label": "indicative/non-authoritative",
+      "slices": [
+        "payload-bytes",
+        "schema-shape",
+        "contract",
+        "sample-completeness"
+      ],
+      "reason": "历史 baseline 未记录 harness 且未保留原始 MCP 响应，无法证明确定性指标的提取语义一致"
+    },
+    "latency": {
+      "authoritative": false,
+      "label": "indicative/non-authoritative",
+      "reason": "历史 baseline 未记录 benchmark harness 指纹"
+    },
+    "harness": {
+      "baselineStatus": "legacy-missing",
+      "baselineFingerprint": null,
+      "currentFingerprint": "fed4a7f3f550fbdaff696e77efe06665a105bfd1061f95251780be512800c086"
+    },
+    "pairSession": {
+      "status": "recorded-separate-session",
+      "baseline": null,
+      "optimized": {
+        "id": "de1a513a-d666-43e5-a8d2-cfe67e06ae0f",
+        "mode": "recorded-baseline-recovery"
+      }
+    }
+  },
+  "baselineAcquisition": {
+    "mode": "recorded-jsonl-reuse",
+    "sourceDirectory": "benchmarks/results/v0.6.0/phase2-protocol-before-after",
+    "baselineJsonlSha256": "7e01ddfd8007e7fb71d42bc068c12db7c734cd4b664d22509e38943b03fbfcec",
+    "sourceEnvironmentJsonSha256": "e6dc94bb176dc12e65b06e573a1eb6a851522d86d411bef99644196188ba4643",
+    "copiedVerbatim": true,
+    "aggregateRecomputed": true,
+    "harnessStatus": "legacy-missing"
+  },
+  "safety": {
+    "devtoolsAccess": false,
+    "devtoolsProcessesInspected": false,
+    "devtoolsProcessesTerminated": 0,
+    "ownedMcpChildrenOnly": true
+  }
+}

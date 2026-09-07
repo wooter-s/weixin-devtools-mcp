@@ -5,13 +5,12 @@
  * 继承自通用 Collector 基类
  */
 
-import type {
-  MiniProgram,
-  MockWxMethodContext,
-  WxMethodOptions,
-} from 'miniprogram-automator';
+import { randomUUID } from 'node:crypto';
+
+import type { MiniProgram } from 'miniprogram-automator';
 
 import { Collector, type CollectorOptions, type QueryOptions } from './Collector.js';
+import { networkRuntime } from './network-runtime.js';
 
 /**
  * 网络请求类型
@@ -90,36 +89,6 @@ export interface OriginalMethods {
   downloadFile?: WxNetworkMethod;
 }
 
-interface RemoteNetworkResult extends Record<string, unknown> {
-  statusCode?: number;
-  data?: unknown;
-  header?: Record<string, string>;
-  errMsg?: string;
-  tempFilePath?: string;
-  filePath?: string;
-}
-
-interface RemoteNetworkOptions extends Record<string, unknown> {
-  url?: string;
-  method?: string;
-  header?: Record<string, string>;
-  data?: unknown;
-  filePath?: string;
-  name?: string;
-  formData?: unknown;
-  success?: (result: RemoteNetworkResult) => void;
-  fail?: (result: RemoteNetworkResult) => void;
-}
-
-interface RemoteWxState {
-  __networkLogs: Array<Record<string, unknown>>;
-  __networkLogsLimit?: number;
-}
-
-interface RemoteOriginContext {
-  origin(options: RemoteNetworkOptions): unknown;
-}
-
 /**
  * 网络请求收集器
  */
@@ -139,6 +108,17 @@ export class NetworkCollector extends Collector<NetworkRequest> {
   /** 当前实例上仍由本 Collector 持有的 wx 方法拦截器。 */
   #installedRemoteMethods = new Set<string>();
 
+  #remoteOwner = randomUUID();
+
+  /** 远端会话所有权版本；迟到的旧 stop/start 不能修改新会话状态。 */
+  #remoteOwnerGeneration = 0;
+
+  /** 任一启动未收敛时禁止并发安装。 */
+  #pendingRemoteStart: Promise<void> | null = null;
+
+  /** stop 未收敛时禁止启动新会话；远端另外核对 owner token。 */
+  #pendingRemoteStop: Promise<number> | null = null;
+
   constructor(options?: CollectorOptions) {
     super(options);
   }
@@ -149,264 +129,131 @@ export class NetworkCollector extends Collector<NetworkRequest> {
    * 设置 MiniProgram 引用（用于远程同步）
    */
   setMiniProgram(miniProgram: MiniProgram | null): void {
+    if (this.#miniProgram === miniProgram) {
+      return;
+    }
     this.#miniProgram = miniProgram;
+    this.#remoteOwnerGeneration += 1;
+  }
+
+  #isRemoteOwner(generation: number, miniProgram: MiniProgram): boolean {
+    return this.#remoteOwnerGeneration === generation && this.#miniProgram === miniProgram;
+  }
+
+  #assertRemoteStartActive(
+    generation: number,
+    miniProgram: MiniProgram,
+    signal: AbortSignal | undefined,
+  ): void {
+    if (signal?.aborted) {
+      const reason = signal.reason;
+      throw reason instanceof Error ? reason : new Error('网络监听启动已取消');
+    }
+    if (!this.#isRemoteOwner(generation, miniProgram)) {
+      throw new Error('网络监听启动期间远端会话已切换');
+    }
   }
 
   /**
    * 在小程序运行时安装唯一一套网络拦截器。
    * 对同一个 MiniProgram 重复调用是幂等的；切换实例前必须先 stopRemoteMonitoring。
    */
-  async startRemoteMonitoring(miniProgram: MiniProgram = this.#requireMiniProgram()): Promise<void> {
+  startRemoteMonitoring(
+    miniProgram: MiniProgram = this.#requireMiniProgram(),
+    options: { signal?: AbortSignal } = {},
+  ): Promise<void> {
+    if (this.#pendingRemoteStart || this.#pendingRemoteStop) {
+      return Promise.reject(new Error('网络监听上次远端变更尚未收敛'));
+    }
     if (
       this.#miniProgram === miniProgram &&
-      this.#installedRemoteMethods.size === 3 &&
+      this.#installedRemoteMethods.size > 0 &&
       this.isMonitoring()
     ) {
-      return;
+      return Promise.resolve();
     }
+
+    const operation = this.#startRemoteMonitoring(miniProgram, options.signal);
+    this.#pendingRemoteStart = operation;
+    const clearPending = (): void => {
+      if (this.#pendingRemoteStart === operation) {
+        this.#pendingRemoteStart = null;
+      }
+    };
+    void operation.then(clearPending, clearPending);
+    return operation;
+  }
+
+  async #startRemoteMonitoring(
+    miniProgram: MiniProgram,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
 
     if (this.#installedRemoteMethods.size > 0) {
       await this.stopRemoteMonitoring();
     }
 
     this.#miniProgram = miniProgram;
-
+    const ownerGeneration = ++this.#remoteOwnerGeneration;
+    const owner = this.#remoteOwner = randomUUID();
     try {
-      await miniProgram.evaluate(function() {
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as RemoteWxState | null;
-        if (!wxObj) return;
-        wxObj.__networkLogs = [];
-        wxObj.__networkLogsLimit = 1000;
-      });
-
-      await miniProgram.mockWxMethod('request', function(
-        this: MockWxMethodContext,
-        rawOptions: WxMethodOptions,
-      ) {
-        const options = rawOptions as RemoteNetworkOptions;
-        const originContext = this as MockWxMethodContext & RemoteOriginContext;
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as RemoteWxState | null;
-        if (!wxObj) {
-          return originContext.origin(options);
-        }
-        wxObj.__networkLogs = wxObj.__networkLogs || [];
-        const id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-        const startedAt = Date.now();
-        const originalSuccess = options.success;
-        const originalFail = options.fail;
-        options.success = function(this: unknown, res: RemoteNetworkResult) {
-          wxObj.__networkLogs.push({
-            id,
-            type: 'request',
-            url: options.url,
-            method: options.method || 'GET',
-            headers: options.header,
-            data: options.data,
-            statusCode: res.statusCode,
-            response: res.data,
-            responseHeaders: res.header,
-            duration: Date.now() - startedAt,
-            timestamp: new Date(startedAt).toISOString(),
-            completedAt: new Date().toISOString(),
-            success: true,
-            pending: false,
-            source: 'wx.request',
-          });
-          while (wxObj.__networkLogs.length > (wxObj.__networkLogsLimit || 1000)) {
-            wxObj.__networkLogs.shift();
-          }
-          if (originalSuccess) originalSuccess.call(this, res);
-        };
-        options.fail = function(this: unknown, err: RemoteNetworkResult) {
-          wxObj.__networkLogs.push({
-            id,
-            type: 'request',
-            url: options.url,
-            method: options.method || 'GET',
-            headers: options.header,
-            data: options.data,
-            error: err.errMsg || String(err),
-            duration: Date.now() - startedAt,
-            timestamp: new Date(startedAt).toISOString(),
-            completedAt: new Date().toISOString(),
-            success: false,
-            pending: false,
-            source: 'wx.request',
-          });
-          while (wxObj.__networkLogs.length > (wxObj.__networkLogsLimit || 1000)) {
-            wxObj.__networkLogs.shift();
-          }
-          if (originalFail) originalFail.call(this, err);
-        };
-        return originContext.origin(options);
-      });
-      this.#installedRemoteMethods.add('request');
-
-      await miniProgram.mockWxMethod('uploadFile', function(
-        this: MockWxMethodContext,
-        rawOptions: WxMethodOptions,
-      ) {
-        const options = rawOptions as RemoteNetworkOptions;
-        const originContext = this as MockWxMethodContext & RemoteOriginContext;
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as RemoteWxState | null;
-        if (!wxObj) {
-          return originContext.origin(options);
-        }
-        wxObj.__networkLogs = wxObj.__networkLogs || [];
-        const id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-        const startedAt = Date.now();
-        const originalSuccess = options.success;
-        const originalFail = options.fail;
-        const finish = function(success: boolean, result: RemoteNetworkResult) {
-          wxObj.__networkLogs.push({
-            id,
-            type: 'uploadFile',
-            url: options.url,
-            headers: options.header,
-            data: {
-              filePath: options.filePath,
-              name: options.name,
-              formData: options.formData,
-            },
-            statusCode: result && result.statusCode,
-            response: success ? result && result.data : undefined,
-            error: success ? undefined : (result && result.errMsg) || String(result),
-            duration: Date.now() - startedAt,
-            timestamp: new Date(startedAt).toISOString(),
-            completedAt: new Date().toISOString(),
-            success,
-            pending: false,
-            source: 'wx.uploadFile',
-          });
-          while (wxObj.__networkLogs.length > (wxObj.__networkLogsLimit || 1000)) {
-            wxObj.__networkLogs.shift();
-          }
-        };
-        options.success = function(this: unknown, res: RemoteNetworkResult) {
-          finish(true, res);
-          if (originalSuccess) originalSuccess.call(this, res);
-        };
-        options.fail = function(this: unknown, err: RemoteNetworkResult) {
-          finish(false, err);
-          if (originalFail) originalFail.call(this, err);
-        };
-        return originContext.origin(options);
-      });
-      this.#installedRemoteMethods.add('uploadFile');
-
-      await miniProgram.mockWxMethod('downloadFile', function(
-        this: MockWxMethodContext,
-        rawOptions: WxMethodOptions,
-      ) {
-        const options = rawOptions as RemoteNetworkOptions;
-        const originContext = this as MockWxMethodContext & RemoteOriginContext;
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = (typeof wx !== 'undefined' ? wx : null) as RemoteWxState | null;
-        if (!wxObj) {
-          return originContext.origin(options);
-        }
-        wxObj.__networkLogs = wxObj.__networkLogs || [];
-        const id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-        const startedAt = Date.now();
-        const originalSuccess = options.success;
-        const originalFail = options.fail;
-        const finish = function(success: boolean, result: RemoteNetworkResult) {
-          wxObj.__networkLogs.push({
-            id,
-            type: 'downloadFile',
-            url: options.url,
-            headers: options.header,
-            statusCode: result && result.statusCode,
-            response: success
-              ? { tempFilePath: result && result.tempFilePath, filePath: result && result.filePath }
-              : undefined,
-            error: success ? undefined : (result && result.errMsg) || String(result),
-            duration: Date.now() - startedAt,
-            timestamp: new Date(startedAt).toISOString(),
-            completedAt: new Date().toISOString(),
-            success,
-            pending: false,
-            source: 'wx.downloadFile',
-          });
-          while (wxObj.__networkLogs.length > (wxObj.__networkLogsLimit || 1000)) {
-            wxObj.__networkLogs.shift();
-          }
-        };
-        options.success = function(this: unknown, res: RemoteNetworkResult) {
-          finish(true, res);
-          if (originalSuccess) originalSuccess.call(this, res);
-        };
-        options.fail = function(this: unknown, err: RemoteNetworkResult) {
-          finish(false, err);
-          if (originalFail) originalFail.call(this, err);
-        };
-        return originContext.origin(options);
-      });
-      this.#installedRemoteMethods.add('downloadFile');
-
+      this.#assertRemoteStartActive(ownerGeneration, miniProgram, signal);
+      this.#installedRemoteMethods.add('runtime');
+      await miniProgram.evaluate(networkRuntime, { action: 'install', owner });
+      this.#assertRemoteStartActive(ownerGeneration, miniProgram, signal);
       this.startMonitoring();
     } catch (error) {
-      await Promise.all(
-        Array.from(this.#installedRemoteMethods).map(async method => {
-          try {
-            await miniProgram.restoreWxMethod(method);
-            this.#installedRemoteMethods.delete(method);
-          } catch {
-            // 尽力回滚部分安装，保留原始安装错误。
-          }
-        }),
-      );
-      this.stopMonitoring();
+      try {
+        await miniProgram.evaluate(networkRuntime, { action: 'stop', owner });
+        if (this.#isRemoteOwner(ownerGeneration, miniProgram)) this.#installedRemoteMethods.clear();
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], '网络监听安装失败，且回滚未完成');
+      } finally {
+        if (this.#isRemoteOwner(ownerGeneration, miniProgram)) this.stopMonitoring();
+      }
       throw error;
     }
   }
 
-  /** 恢复由本 Collector 模拟的 wx 方法，并停止远程采集。 */
-  async stopRemoteMonitoring(options?: { clearLogs?: boolean }): Promise<number> {
-    const miniProgram = this.#miniProgram;
-    let clearedCount = 0;
-    const restoreFailures: string[] = [];
-
-    if (miniProgram && this.#installedRemoteMethods.size > 0) {
-      await Promise.all(
-        Array.from(this.#installedRemoteMethods).map(async method => {
-          try {
-            await miniProgram.restoreWxMethod(method);
-            this.#installedRemoteMethods.delete(method);
-          } catch {
-            restoreFailures.push(method);
-          }
-        }),
-      );
+  /** 恢复由本 Collector 包装的 wx 方法，并停止远程采集。 */
+  stopRemoteMonitoring(options?: { clearLogs?: boolean }): Promise<number> {
+    if (this.#pendingRemoteStop) {
+      return this.#pendingRemoteStop;
     }
 
-    if (miniProgram && options?.clearLogs) {
-      try {
-        clearedCount = await miniProgram.evaluate(function() {
-          // @ts-expect-error wx is available in WeChat miniprogram runtime
-          const wxObj = (typeof wx !== 'undefined' ? wx : null) as RemoteWxState | null;
-          if (!wxObj || !wxObj.__networkLogs) return 0;
-          const count = wxObj.__networkLogs.length;
-          wxObj.__networkLogs = [];
-          return count;
-        });
-      } catch {
-        // 远端可能已断开；本地状态仍然必须清理。
+    const pendingStart = this.#pendingRemoteStart;
+    const operation = pendingStart
+      ? pendingStart.catch(() => undefined).then(() => this.#stopRemoteMonitoring(options))
+      : this.#stopRemoteMonitoring(options);
+    this.#pendingRemoteStop = operation;
+    const clearPending = (): void => {
+      if (this.#pendingRemoteStop === operation) {
+        this.#pendingRemoteStop = null;
       }
-    }
+    };
+    void operation.then(clearPending, clearPending);
+    return operation;
+  }
 
-    this.stopMonitoring();
-    if (restoreFailures.length > 0) {
-      throw new Error(`恢复 wx 方法失败: ${restoreFailures.sort().join(', ')}`);
+  async #stopRemoteMonitoring(options?: { clearLogs?: boolean }): Promise<number> {
+    const miniProgram = this.#miniProgram;
+    const ownerGeneration = this.#remoteOwnerGeneration;
+    const owner = this.#remoteOwner;
+    try {
+      if (!miniProgram || !this.#installedRemoteMethods.size) return 0;
+      const rows = await miniProgram.evaluate(networkRuntime, { action: 'stop', owner });
+      if (!this.#isRemoteOwner(ownerGeneration, miniProgram)) return 0;
+      this.#installedRemoteMethods.clear();
+      if (!options?.clearLogs) for (const row of rows || []) this.addRequest(row);
+      return options?.clearLogs ? rows?.length ?? 0 : 0;
+    } finally {
+      if (!miniProgram || this.#isRemoteOwner(ownerGeneration, miniProgram)) this.stopMonitoring();
     }
-    return clearedCount;
   }
 
   /** 远端会话已经断开后，仅用于放弃无法再恢复的拦截器所有权。 */
   abandonRemoteMonitoring(): void {
+    this.#remoteOwnerGeneration += 1;
     this.#installedRemoteMethods.clear();
     this.stopMonitoring();
   }
@@ -437,22 +284,16 @@ export class NetworkCollector extends Collector<NetworkRequest> {
 
     try {
       // 从小程序环境拉取并清空远程日志
-      const remoteLogs = await this.#miniProgram.evaluate(function() {
-        // @ts-expect-error wx is available in WeChat miniprogram runtime
-        const wxObj = typeof wx !== 'undefined' ? wx : null;
-        if (!wxObj || !wxObj.__networkLogs) return [];
-
-        // 返回并清空（避免重复处理）
-        const logs = [...wxObj.__networkLogs];
-        wxObj.__networkLogs = [];
-        return logs;
-      }) as NetworkRequest[];
+      const miniProgram = this.#miniProgram;
+      const generation = this.#remoteOwnerGeneration;
+      const remoteLogs = await miniProgram.evaluate(networkRuntime, { action: 'read', owner: this.#remoteOwner });
+      if (!this.#isRemoteOwner(generation, miniProgram)) return 0;
 
       this.#lastSyncTimestamp = now;
 
       // 批量添加到本地存储
       let addedCount = 0;
-      for (const log of remoteLogs) {
+      for (const log of remoteLogs || []) {
         if (log && typeof log === 'object' && log.url) {
           this.addRequest(log);
           addedCount++;

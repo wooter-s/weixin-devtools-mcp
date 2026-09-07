@@ -39,6 +39,8 @@ describe('diagnose_connection tool', () => {
     const text = response.getResponseText();
     expect(text).toContain('✅ 已连接到微信开发者工具');
     expect(text).toContain('诊断总结');
+    expect(text).toContain('"target":{"kind":"project"');
+    expect(text).not.toContain('"strategy":"auto"');
   });
 
   it('未连接状态下应显示未连接提示', async () => {
@@ -206,6 +208,11 @@ describe('debug_page_elements tool', () => {
     const text = response.getResponseText();
     expect(text).toContain('开始调试页面元素获取');
     expect(text).toContain('诊断建议');
+    const selectors = vi.mocked(mockPage.$$).mock.calls.map(([selector]) => selector);
+    expect(selectors).toContain('view');
+    for (const unsupported of ['*', 'body *', 'html *', 'page > *', '[data-*]', '[wx:*]']) {
+      expect(selectors).not.toContain(unsupported);
+    }
   });
 
   it('自定义选择器应被测试', async () => {
@@ -243,6 +250,7 @@ describe('debug_connection_flow tool', () => {
       connectDevtools: vi.fn(async () =>
         createMockConnectResult({
           connectionId: 'conn_debug',
+          strategyUsed: 'launch',
           pagePath: '/pages/home/index',
           timing: { totalMs: 1200, connectMs: 900, healthMs: 300 },
         }),
@@ -253,7 +261,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: false,
           captureSnapshot: false,
           verbose: false,
@@ -264,13 +271,11 @@ describe('debug_connection_flow tool', () => {
     );
 
     expect(context.connectDevtools).toHaveBeenCalledWith({
-      strategy: 'auto',
-      projectPath,
+      target: { kind: 'project', projectPath },
       timeoutMs: 45000,
       healthCheck: true,
-      verbose: false,
     });
-    expect(response.getResponseText()).toContain('连接策略: auto');
+    expect(response.getResponseText()).toContain('连接策略: launch');
     expect(response.getResponseText()).toContain('连接状态: connected');
   });
 
@@ -286,7 +291,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: false,
           captureSnapshot: false,
           verbose: false,
@@ -314,7 +318,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: false,
           captureSnapshot: false,
           verbose: false,
@@ -341,7 +344,6 @@ describe('debug_connection_flow tool', () => {
         {
           params: {
             projectPath,
-            mode: 'auto',
             dryRun: false,
             captureSnapshot: false,
             verbose: false,
@@ -365,7 +367,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: true,
           captureSnapshot: false,
           verbose: false,
@@ -395,7 +396,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: false,
           captureSnapshot: true,
           verbose: false,
@@ -425,7 +425,6 @@ describe('debug_connection_flow tool', () => {
       {
         params: {
           projectPath,
-          mode: 'auto',
           dryRun: false,
           captureSnapshot: false,
           verbose: true,

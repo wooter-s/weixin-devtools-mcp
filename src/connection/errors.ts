@@ -1,4 +1,5 @@
 import type {
+  ConnectionAttemptRecord,
   ConnectionErrorSummary,
   ConnectionPhase,
   MetadataValue,
@@ -10,6 +11,7 @@ export type ConnectionErrorCode =
   | 'SESSION_CONFLICT'
   | 'PROTOCOL'
   | 'HEALTH_CHECK_FAILED'
+  | 'CONNECTION_TIMEOUT'
   | 'CONNECTION_FAILED'
   | 'DISCONNECTED';
 
@@ -130,6 +132,64 @@ export class HealthCheckConnectionError extends ConnectionError {
       cause,
     });
     this.name = 'HealthCheckConnectionError';
+  }
+}
+
+export class ConnectionTimeoutError extends ConnectionError {
+  constructor(
+    message: string,
+    phase: Extract<ConnectionPhase, 'startup' | 'connect' | 'health_check'> = 'connect',
+    metadata?: Record<string, MetadataValue>,
+    cause?: Error,
+  ) {
+    super(message, {
+      code: 'CONNECTION_TIMEOUT',
+      phase,
+      suggestions: ['增大 timeoutMs，或检查开发者工具是否可响应'],
+      metadata,
+      cause,
+    });
+    this.name = 'ConnectionTimeoutError';
+  }
+}
+
+export class ConnectionAttemptsExhaustedError extends ConnectionError {
+  readonly attempts: ConnectionAttemptRecord[];
+  readonly lastError: ConnectionError | null;
+
+  constructor(attempts: ConnectionAttemptRecord[], lastError: ConnectionError | null) {
+    const lastMethod = attempts.at(-1)?.method;
+    const suggestions = lastError?.suggestions.length
+      ? lastError.suggestions
+      : ['检查连接 target 与开发者工具状态后重试'];
+    super(
+      lastError
+        ? `所有连接尝试均失败: ${lastError.message}`
+        : '连接总超时已耗尽，未能完成连接尝试',
+      {
+        code: 'CONNECTION_FAILED',
+        phase: lastError?.phase ?? 'connect',
+        suggestions,
+        metadata: {
+          attemptCount: attempts.length,
+          ...(lastMethod ? { lastMethod } : {}),
+          ...(lastError ? { lastErrorCode: lastError.code } : {}),
+        },
+        cause: lastError ?? undefined,
+      },
+    );
+    this.name = 'ConnectionAttemptsExhaustedError';
+    this.attempts = attempts.map(attempt => ({
+      ...attempt,
+      error: attempt.error
+        ? {
+            ...attempt.error,
+            suggestions: [...attempt.error.suggestions],
+            metadata: attempt.error.metadata ? { ...attempt.error.metadata } : undefined,
+          }
+        : null,
+    }));
+    this.lastError = lastError;
   }
 }
 

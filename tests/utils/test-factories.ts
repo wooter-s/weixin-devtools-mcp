@@ -121,7 +121,7 @@ export function createMockConnectResult(
 ): ConnectionConnectResult {
   return {
     connectionId: 'mock_conn',
-    strategyUsed: 'auto',
+    strategyUsed: 'discover',
     endpoint: 'ws://127.0.0.1:9420',
     miniProgram: {} as MiniProgram,
     currentPage: {} as Page,
@@ -133,6 +133,7 @@ export function createMockConnectResult(
     },
     status: 'connected',
     timing: { totalMs: 100, connectMs: 80, healthMs: 20 },
+    attempts: [],
     warnings: [],
     ...overrides,
   };

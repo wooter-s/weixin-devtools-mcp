@@ -1,0 +1,1047 @@
+[
+  {
+    "tool": "profiles",
+    "scenario": "core ",
+    "status": "通过",
+    "evidence": {
+      "count": 20
+    }
+  },
+  {
+    "tool": "profiles",
+    "scenario": "minimal ",
+    "status": "通过",
+    "evidence": {
+      "count": 10
+    }
+  },
+  {
+    "tool": "profiles",
+    "scenario": "full ",
+    "status": "通过",
+    "evidence": {
+      "count": 31
+    }
+  },
+  {
+    "tool": "profiles",
+    "scenario": "core --enable-categories=console",
+    "status": "通过",
+    "evidence": {
+      "count": 22
+    }
+  },
+  {
+    "tool": "profiles",
+    "scenario": "full --disable-categories=console",
+    "status": "通过",
+    "evidence": {
+      "count": 29
+    }
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "business explicit endpoint before monitoring",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "network-contract",
+    "scenario": "before monitoring: native success/failure/timeout/abort/upload/download",
+    "status": "通过",
+    "evidence": [
+      {
+        "name": "success",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "request:ok",
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "name": "failure",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail "
+      },
+      {
+        "name": "timeout",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail timeout"
+      },
+      {
+        "name": "abort",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail abort"
+      },
+      {
+        "name": "upload",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "uploadFile:ok",
+        "data": {
+          "payloadMatched": true,
+          "formMatched": true
+        }
+      },
+      {
+        "name": "download",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "downloadFile:ok",
+        "content": "MCP-file-content-中文-2026"
+      }
+    ]
+  },
+  {
+    "tool": "mpx-contract",
+    "scenario": "before monitoring: success/failure/cancel",
+    "status": "通过",
+    "evidence": [
+      {
+        "kind": "success",
+        "ok": true,
+        "status": 200,
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "kind": "failure",
+        "ok": false,
+        "cancel": false,
+        "error": "request:fail "
+      },
+      {
+        "kind": "cancel",
+        "ok": false,
+        "cancel": true,
+        "error": "mcp cancel"
+      }
+    ]
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "business endpoint with full monitoring",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "network-contract",
+    "scenario": "during: native results equal baseline",
+    "status": "通过",
+    "evidence": [
+      {
+        "name": "success",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "request:ok",
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "name": "failure",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail "
+      },
+      {
+        "name": "timeout",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail timeout"
+      },
+      {
+        "name": "abort",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail abort"
+      },
+      {
+        "name": "upload",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "uploadFile:ok",
+        "data": {
+          "payloadMatched": true,
+          "formMatched": true
+        }
+      },
+      {
+        "name": "download",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "downloadFile:ok",
+        "content": "MCP-file-content-中文-2026"
+      }
+    ]
+  },
+  {
+    "tool": "mpx-contract",
+    "scenario": "during: original Promise success/failure/cancel",
+    "status": "通过",
+    "evidence": [
+      {
+        "kind": "success",
+        "ok": true,
+        "status": 200,
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "kind": "failure",
+        "ok": false,
+        "cancel": false,
+        "error": "request:fail "
+      },
+      {
+        "kind": "cancel",
+        "ok": false,
+        "cancel": true,
+        "error": "mcp cancel"
+      }
+    ]
+  },
+  {
+    "tool": "get_network_request",
+    "scenario": "detail matches collected request",
+    "status": "通过",
+    "evidence": {
+      "id": "0a724e96-b38f-4645-b015-1d879785bbdf_9"
+    }
+  },
+  {
+    "tool": "list_network_requests",
+    "scenario": "during: exactly one record per monitored request",
+    "status": "通过",
+    "evidence": {
+      "count": 9
+    }
+  },
+  {
+    "tool": "stop_network_monitoring",
+    "scenario": "restore native wrappers",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "network-contract",
+    "scenario": "after: native results equal baseline",
+    "status": "通过",
+    "evidence": [
+      {
+        "name": "success",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "request:ok",
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "name": "failure",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail "
+      },
+      {
+        "name": "timeout",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail timeout"
+      },
+      {
+        "name": "abort",
+        "callbacks": [
+          [
+            "fail",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "error": "request:fail abort"
+      },
+      {
+        "name": "upload",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "uploadFile:ok",
+        "data": {
+          "payloadMatched": true,
+          "formMatched": true
+        }
+      },
+      {
+        "name": "download",
+        "callbacks": [
+          [
+            "success",
+            1
+          ],
+          [
+            "complete",
+            1
+          ]
+        ],
+        "sameResult": true,
+        "sameContext": true,
+        "abort": "function",
+        "headers": "function",
+        "progress": "function",
+        "status": 200,
+        "error": "downloadFile:ok",
+        "content": "MCP-file-content-中文-2026"
+      }
+    ]
+  },
+  {
+    "tool": "mpx-contract",
+    "scenario": "after: original Promise success/failure/cancel",
+    "status": "通过",
+    "evidence": [
+      {
+        "kind": "success",
+        "ok": true,
+        "status": 200,
+        "data": {
+          "ok": true,
+          "text": "mcp-response"
+        }
+      },
+      {
+        "kind": "failure",
+        "ok": false,
+        "cancel": false,
+        "error": "request:fail "
+      },
+      {
+        "kind": "cancel",
+        "ok": false,
+        "cancel": true,
+        "error": "mcp cancel"
+      }
+    ]
+  },
+  {
+    "tool": "list_network_requests",
+    "scenario": "after: exactly one record per monitored request",
+    "status": "通过",
+    "evidence": {
+      "count": 0
+    }
+  },
+  {
+    "tool": "clear_network_requests",
+    "scenario": "clear local and remote records",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_console_message",
+    "scenario": "stable detail after reconnect 1",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "console reconnect 1",
+    "status": "通过",
+    "evidence": {
+      "identicalTextCount": 2
+    }
+  },
+  {
+    "tool": "get_console_message",
+    "scenario": "stable detail after reconnect 2",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "console reconnect 2",
+    "status": "通过",
+    "evidence": {
+      "identicalTextCount": 2
+    }
+  },
+  {
+    "tool": "get_console_message",
+    "scenario": "stable detail after reconnect 3",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "console reconnect 3",
+    "status": "通过",
+    "evidence": {
+      "identicalTextCount": 2
+    }
+  },
+  {
+    "tool": "get_console_message",
+    "scenario": "stable detail after reconnect 4",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "console reconnect 4",
+    "status": "通过",
+    "evidence": {
+      "identicalTextCount": 2
+    }
+  },
+  {
+    "tool": "get_console_message",
+    "scenario": "stable detail after reconnect 5",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "console reconnect 5",
+    "status": "通过",
+    "evidence": {
+      "identicalTextCount": 2
+    }
+  },
+  {
+    "tool": "list_console_messages",
+    "scenario": "filter, pagination, extended methods, async exception",
+    "status": "通过",
+    "evidence": {
+      "count": 9
+    }
+  },
+  {
+    "tool": "evaluate_script",
+    "scenario": "named async function declaration",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_current_page",
+    "scenario": "business page available",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_page_snapshot",
+    "scenario": "business snapshot scope graph",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "find_elements",
+    "scenario": "live page text query returns a usable opaque ref",
+    "status": "通过",
+    "evidence": {
+      "count": 9
+    }
+  },
+  {
+    "tool": "wait_for",
+    "scenario": "live target and missing-target timeout",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_value",
+    "scenario": "live attribute read",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_text",
+    "scenario": "live positive assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_attribute",
+    "scenario": "live positive assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_state",
+    "scenario": "live positive assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_text",
+    "scenario": "live negative assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_attribute",
+    "scenario": "live negative assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "assert_state",
+    "scenario": "live negative assertion",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "navigate_to",
+    "scenario": "existing business regression page",
+    "status": "环境阻塞",
+    "evidence": "navigate_to: DEVTOOLS_OPERATION_FAILED 页面跳转失败: page \"pages/mcp-fixture/index\" is not found\n\nfalse !== true\n"
+  },
+  {
+    "tool": "weixin://connection/status",
+    "scenario": "resource list and connected state",
+    "status": "通过",
+    "evidence": {
+      "schemaVersion": "2.0",
+      "state": "connected",
+      "connectionId": "conn_1788661554577_j64xxvdh",
+      "connected": true,
+      "hasCurrentPage": true,
+      "pagePath": "subpackages/login/pages/login/login-wechat",
+      "method": "wsEndpoint",
+      "endpoint": "ws://127.0.0.1:9420/",
+      "health": {
+        "level": "healthy",
+        "checks": [],
+        "checkedAt": "2026-09-06T02:25:54.577Z"
+      },
+      "lastError": null,
+      "lastConnectedAt": "2026-09-06T02:25:54.577Z",
+      "lastHealthCheckAt": "2026-09-06T02:25:54.577Z",
+      "elementCount": 54,
+      "consoleMessageCount": 9,
+      "networkRequestCount": 0,
+      "toolProfile": {
+        "profile": "full",
+        "activeToolCount": 31,
+        "disabledToolCount": 0,
+        "activeCategories": [
+          "core",
+          "console",
+          "network",
+          "debug"
+        ],
+        "inactiveCategories": []
+      },
+      "monitoring": {
+        "console": {
+          "enabled": true,
+          "state": "running",
+          "startedAt": "2026-09-06T02:25:54.580Z",
+          "lastError": null
+        },
+        "network": {
+          "enabled": true,
+          "state": "running",
+          "startedAt": "2026-09-06T02:25:54.584Z",
+          "lastError": null
+        }
+      }
+    }
+  },
+  {
+    "tool": "weixin://page/snapshot",
+    "scenario": "business snapshot nonempty scope graph",
+    "status": "通过",
+    "evidence": {
+      "scopes": 1,
+      "edges": 0
+    }
+  },
+  {
+    "tool": "navigate_to",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "find_elements",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "wait_for",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "click",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "get_value",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "input_text",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "assert_text",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "assert_attribute",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "assert_state",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "navigate_back",
+    "scenario": "business fixture prerequisite",
+    "status": "环境阻塞",
+    "evidence": "Disk fixture page is not present in the running compiled app; dependent assertions were not executed."
+  },
+  {
+    "tool": "screenshot",
+    "scenario": "business image has PNG bytes",
+    "status": "通过",
+    "evidence": {
+      "bytes": 52425
+    }
+  },
+  {
+    "tool": "switch_tab",
+    "scenario": "non-tab URL rejects (positive tabBar requires independent fixture)",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "list_console_messages",
+    "scenario": "live navigation history synchronized before split",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_value",
+    "scenario": "live stale ref after navigation",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "navigate_back",
+    "scenario": "return from existing home route",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "navigate_to",
+    "scenario": "existing home route and back",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "relaunch",
+    "scenario": "restore original business page",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_connection_status",
+    "scenario": "refresh health after navigation",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "evaluate_script",
+    "scenario": "Promise-returning script and thrown/rejected errors",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "diagnose_connection",
+    "scenario": "business diagnostic output",
+    "status": "通过",
+    "evidence": "🔍 开始诊断微信开发者工具连接问题...\n\n📋 1. 参数检查\n✅ projectPath 参数正常: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\n\n📁 2. 路径解析检查\n✅ 已是绝对路径: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\n\n🗂️ 3. 路径存在性检查\n✅ 项目路径存在: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\n\n📦 4. 小程序项目结构检查\n✅ 找到 app.json 文件: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx/app.json\n✅ 找到 project.config.json 文件: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx/project.config.json\n\n🔗 5. 当前连接状态检查\n✅ 已连接到微信开发者工具\n   当前页面: subpackages/login/pages/login/login-wechat\n\n📝 诊断总结\n✅ 项目配置检查通过，可以尝试连接\n\n💡 建议的连接命令:\n{\"name\":\"connect_devtools\",\"arguments\":{\"target\":{\"kind\":\"project\",\"projectPath\":\"/Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\"}}}\n\n🛠️ 常见问题解决方案\n1. 路径包含\"undefined\": 确保传递了有效的projectPath参数\n2. 项目路径不存在: 检查路径拼写和目录是否已创建\n3. 连接超时: 确保微信开发者工具已打开并启用自动化功能\n4. 权限问题: 在开发者工具中开启CLI/HTTP调用权限\n5. 端口冲突: 尝试指定不同的端口号"
+  },
+  {
+    "tool": "check_environment",
+    "scenario": "business diagnostic output",
+    "status": "通过",
+    "evidence": "🌍 检查微信开发者工具自动化环境...\n\n📦 依赖检查\n✅ miniprogram-automator 模块加载成功\n\n⚙️ MCP服务器配置建议\n1. 推荐使用模块化服务器：\n   \"command\": \"/path/to/weixin-devtools-mcp/build/server.js\"\n\n2. 如需全量工具，可追加参数：\n   \"args\": [\"--tools-profile=full\"]\n\n💡 配置文件位置:\n   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json\n   Windows: %APPDATA%/Claude/claude_desktop_config.json\n\n🔧 可用工具统计\n   总工具数量: MCP服务器已初始化\n   连接状态: 已连接\n\n✅ 环境检查完成"
+  },
+  {
+    "tool": "debug_page_elements",
+    "scenario": "business diagnostic output",
+    "status": "通过",
+    "evidence": "🔍 开始调试页面元素获取...\n\n📱 页面基本信息\n   页面路径: subpackages/login/pages/login/login-wechat\n\n⏱️ 等待页面加载...\n   页面加载等待完成\n\n🧪 测试各种选择器策略\n\n策略2: 小程序组件选择器\n   view: 33 个元素\n   text: 9 个元素\n   button: 2 个元素\n   image: 1 个元素\n   小程序组件总计: 45 个元素\n\n策略3: 层级选择器\n   view > text: 9 个元素\n   view text: 9 个元素\n   view button: 2 个元素\n\n策略4: 属性选择器\n   [class]: 39 个元素\n   [id]: 0 个元素\n   [data-testid]: 0 个元素\n   [data-id]: 0 个元素\n\n🎯 自定义选择器测试\n   view: 33 个元素\n\n💡 诊断建议\n1. 如果所有选择器都返回0个元素，请检查:\n   - 页面是否已完全加载\n   - 是否在正确的页面上\n   - 微信开发者工具的自动化权限是否正确设置\n\n2. 如果只有特定组件有效，建议:\n   - 使用具体的组件选择器而不是通用选择器\n   - 组合使用多个选择器获取完整的元素列表\n\n3. 优化建议:\n   - 为关键元素添加class或id属性\n   - 使用data-testid属性便于自动化测试"
+  },
+  {
+    "tool": "debug_connection_flow",
+    "scenario": "business diagnostic output",
+    "status": "通过",
+    "evidence": "🔍 连接流程调试器启动\n════════════════════════════════════════════════════════════\n\n📋 步骤1: 参数验证\n   ✅ 参数验证通过\n      项目路径: /Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\n      连接目标: project（固定 launch → connect）\n\n📦 步骤2: 项目结构验证\n   ✅ app.json: 存在\n   ✅ project.config.json: 存在\n\n🔗 步骤3: 检查已有连接\n   ⚠️ 检测到活跃连接\n      当前页面: subpackages/login/pages/login/login-wechat\n      操作: 复用现有连接（跳过新建连接）\n\n🔄 DryRun 模式: 跳过实际连接步骤\n\n---\n## 调试报告\n---\n\n📝 步骤摘要:\n\n✅ 参数验证 (0ms)\n   {\n     \"resolvedPath\": \"/Users/didi/workspace/wooPro/weixin-devtools-mcp/playground/wx\",\n     \"targetKind\": \"project\"\n   }\n✅ 项目结构验证 (0ms)\n   {\n     \"hasAppJson\": true,\n     \"hasProjectConfig\": true\n   }\n⚠️ 连接状态检查 (2ms)\n   {\n     \"reuseConnection\": true,\n     \"pagePath\": \"subpackages/login/pages/login/login-wechat\"\n   }\n\n总耗时: 3ms\n成功: 2 | 警告: 1 | 错误: 0\n\n📸 状态快照:\n\n快照 1: 参数验证完成 (+0ms)\n   连接状态: 已连接\n   当前页面: 已设置\n   元素映射: 45 个\n   Console监听: 已启动\n   网络监听: 已启动\n   导航会话: 3 个\n   Console消息: 0 条\n   网络请求: 0 个\n\n快照 2: 项目结构验证完成 (+1ms)\n   连接状态: 已连接\n   当前页面: 已设置\n   元素映射: 45 个\n   Console监听: 已启动\n   网络监听: 已启动\n   导航会话: 3 个\n   Console消息: 0 条\n   网络请求: 0 个\n\n快照 3: 连接状态检查完成 (+3ms)\n   连接状态: 已连接\n   当前页面: 已设置\n   元素映射: 45 个\n   Console监听: 已启动\n   网络监听: 已启动\n   导航会话: 3 个\n   Console消息: 0 条\n   网络请求: 0 个\n\n💡 诊断建议:\n\nℹ️ 发现警告,可能的优化点:\n   • 连接状态检查\n\n💡 使用 MCP Inspector 进行后续调试:\n   npm run inspector\n"
+  },
+  {
+    "tool": "debug_connection_flow",
+    "scenario": "actual diagnostic execution reuses the connected business session",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "disconnect_devtools",
+    "scenario": "business disconnected state",
+    "status": "通过",
+    "evidence": {
+      "schemaVersion": "2.0",
+      "state": "disconnected",
+      "connectionId": null,
+      "connected": false,
+      "hasCurrentPage": false,
+      "pagePath": null,
+      "method": null,
+      "endpoint": null,
+      "health": null,
+      "lastError": null,
+      "lastConnectedAt": null,
+      "lastHealthCheckAt": null,
+      "elementCount": 0,
+      "consoleMessageCount": 0,
+      "networkRequestCount": 0,
+      "toolProfile": {
+        "profile": "full",
+        "activeToolCount": 31,
+        "disabledToolCount": 0,
+        "activeCategories": [
+          "core",
+          "console",
+          "network",
+          "debug"
+        ],
+        "inactiveCategories": []
+      },
+      "monitoring": {
+        "console": {
+          "enabled": true,
+          "state": "stopped",
+          "startedAt": null,
+          "lastError": null
+        },
+        "network": {
+          "enabled": true,
+          "state": "stopped",
+          "startedAt": null,
+          "lastError": null
+        }
+      }
+    }
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "browserUrl controlled discovery to real DevTools",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "explicit target replaces browserUrl request and resets omitted defaults",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "discover real DevTools",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "independent fixture project launch",
+    "status": "环境阻塞",
+    "evidence": "connect_devtools: CONNECTION_FAILED 所有连接尝试均失败: 运行时就绪超时: SDKVersion 缺失，运行时未就绪\n\nfalse !== true\n"
+  },
+  {
+    "tool": "set_form_control",
+    "scenario": "independent fixture controls/tabBar/visibility/component scopes",
+    "status": "环境阻塞",
+    "evidence": "Fixture runtime unavailable; negative branches on business page do not replace positive acceptance."
+  },
+  {
+    "tool": "switch_tab",
+    "scenario": "independent fixture controls/tabBar/visibility/component scopes",
+    "status": "环境阻塞",
+    "evidence": "Fixture runtime unavailable; negative branches on business page do not replace positive acceptance."
+  },
+  {
+    "tool": "wait_for",
+    "scenario": "independent fixture controls/tabBar/visibility/component scopes",
+    "status": "环境阻塞",
+    "evidence": "Fixture runtime unavailable; negative branches on business page do not replace positive acceptance."
+  },
+  {
+    "tool": "weixin://page/snapshot",
+    "scenario": "independent fixture controls/tabBar/visibility/component scopes",
+    "status": "环境阻塞",
+    "evidence": "Fixture runtime unavailable; negative branches on business page do not replace positive acceptance."
+  },
+  {
+    "tool": "cleanup",
+    "scenario": "MCP disconnect status verified and transports closed",
+    "status": "通过",
+    "evidence": {
+      "closedConnections": 3
+    }
+  },
+  {
+    "tool": "cleanup",
+    "scenario": "local HTTP server closed; runtime temporary files removed by finally",
+    "status": "通过"
+  }
+]

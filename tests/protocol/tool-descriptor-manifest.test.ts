@@ -8,8 +8,11 @@ import {
   type ToolProfileConfig,
 } from '../../src/config/tool-profile.js';
 import {
+  assertToolDescriptorsMatchManifest,
   createToolDescriptorManifest,
   parseToolDescriptorManifest,
+  TOOL_DESCRIPTOR_MANIFEST_VERSION,
+  TOOL_RESULT_SCHEMA_VERSION,
 } from '../../src/protocol/tool-descriptor-manifest.js';
 import { buildToolDescriptors } from '../../src/protocol/tool-descriptors.js';
 import { allTools } from '../../src/tools/tools.js';
@@ -39,8 +42,23 @@ describe('构建期工具描述符 manifest', () => {
 
     expect(generated).toEqual(JSON.parse(JSON.stringify(expected)));
     expect(serialized).toBe(`${JSON.stringify(expected)}\n`);
+    expect(generated.formatVersion).toBe(TOOL_DESCRIPTOR_MANIFEST_VERSION);
+    expect(generated.resultSchemaVersion).toBe(TOOL_RESULT_SCHEMA_VERSION);
     expect(generated.toolCount).toBe(31);
     expect(generated.tools).toHaveLength(31);
+  });
+
+  it('拒绝旧 manifest 或结果 schema 版本', () => {
+    const current = createToolDescriptorManifest(buildToolDescriptors(allTools));
+
+    expect(() => parseToolDescriptorManifest(JSON.stringify({
+      ...current,
+      formatVersion: 1,
+    }))).toThrow('manifest 版本不受支持');
+    expect(() => parseToolDescriptorManifest(JSON.stringify({
+      ...current,
+      resultSchemaVersion: '1.0',
+    }))).toThrow('结果 schema 版本不受支持');
   });
 
   it('31 个描述符均保留 input/output schema 与分类元数据', () => {
@@ -56,6 +74,35 @@ describe('构建期工具描述符 manifest', () => {
         descriptor._meta.category,
       );
     }
+  });
+
+  it('同名工具的 schema、描述或分类漂移时拒绝运行时注册', () => {
+    const manifest = createToolDescriptorManifest(buildToolDescriptors(allTools));
+    const mutations: Array<(tools: typeof manifest.tools) => void> = [
+      tools => {
+        tools[0].description = `${tools[0].description} drift`;
+      },
+      tools => {
+        tools[0].inputSchema = {
+          ...tools[0].inputSchema,
+          properties: {
+            ...tools[0].inputSchema.properties,
+            drift: { type: 'boolean' },
+          },
+        };
+      },
+      tools => {
+        tools[0]._meta.category = ToolCategory.DEBUG;
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const runtimeDescriptors = JSON.parse(JSON.stringify(manifest.tools)) as typeof manifest.tools;
+      mutate(runtimeDescriptors);
+      expect(() => assertToolDescriptorsMatchManifest(manifest, runtimeDescriptors))
+        .toThrow('descriptor manifest 不一致');
+    }
+    expect(() => assertToolDescriptorsMatchManifest(manifest, manifest.tools)).not.toThrow();
   });
 
   it('静态描述符沿用 full/core/minimal 与类别开关语义', () => {

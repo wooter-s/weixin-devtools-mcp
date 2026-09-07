@@ -1,0 +1,76 @@
+{
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M3 Pro",
+    "cpuCount": 12,
+    "totalMemoryBytes": 19327352832,
+    "node": "22.14.0",
+    "devtoolsVersion": "36.6.0",
+    "npm": "10.9.2",
+    "devtoolsAppPath": "/Applications/wechatwebdevtools.app",
+    "comparisonFingerprint": "168119a3c63ca45a21f90c59bcf5d5fed95cf78187fad2275a4ae0603fb27b75"
+  },
+  "workload": {
+    "version": "protocol-static-1.1.0",
+    "fingerprint": "a8e3095f62e3f3adeaeae3d2cfc6e9f2b073604d702d6ac787ab3a993363095c",
+    "path": "benchmarks/workload.protocol-static.v1.json"
+  },
+  "fixtureFingerprint": "0504f2ffabdfa2cb7e307dee7e4ea84018bb57001411454e204a639c996ce9a8",
+  "baselineSourceFingerprint": "7950bbc123fde35bfa3f62cda0c4ae72c67f26767cce8c6933d181f526eb511f",
+  "optimizedSourceFingerprint": "ef5f873bab2b0674859fb4b30566a4b37b157e0ede70bf5240470cf907991e29",
+  "baselinePackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "^0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "optimizedPackage": {
+    "packageVersion": "0.6.0",
+    "nodeEngine": ">=22.0.0",
+    "declaredDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "^0.12.1",
+      "zod": "^3.25.76",
+      "zod-to-json-schema": "^3.24.6"
+    },
+    "resolvedDependencies": {
+      "@modelcontextprotocol/sdk": "1.30.0",
+      "miniprogram-automator": "0.12.1",
+      "zod": "3.25.76",
+      "zod-to-json-schema": "3.25.2"
+    },
+    "lockfilePresent": true
+  },
+  "baselineAcquisition": {
+    "mode": "recorded-jsonl-reuse",
+    "sourceDirectory": "benchmarks/results/v0.6.0/phase2-protocol-before-after",
+    "baselineJsonlSha256": "7e01ddfd8007e7fb71d42bc068c12db7c734cd4b664d22509e38943b03fbfcec",
+    "sourceEnvironmentJsonSha256": "e6dc94bb176dc12e65b06e573a1eb6a851522d86d411bef99644196188ba4643",
+    "copiedVerbatim": true,
+    "aggregateRecomputed": true
+  },
+  "safety": {
+    "devtoolsAccess": false,
+    "devtoolsProcessesInspected": false,
+    "devtoolsProcessesTerminated": 0,
+    "ownedMcpChildrenOnly": true
+  },
+  "superseded": {
+    "status": true,
+    "reason": "legacy baseline lacks current benchmark harness provenance",
+    "replacement": "../phase2-protocol-final-indicative/environment.json"
+  }
+}

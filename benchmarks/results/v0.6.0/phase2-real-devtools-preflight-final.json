@@ -1,0 +1,415 @@
+{
+  "schemaVersion": "1.0",
+  "recordType": "preflight",
+  "phase": "optimized",
+  "createdAt": "2026-08-08T03:30:24.764Z",
+  "valid": true,
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M3 Pro",
+    "cpuCount": 12,
+    "totalMemoryBytes": 19327352832,
+    "node": "22.14.0",
+    "devtoolsVersion": "36.6.0",
+    "npm": "10.9.2",
+    "devtoolsAppPath": "/Applications/wechatwebdevtools.app",
+    "comparisonFingerprint": "168119a3c63ca45a21f90c59bcf5d5fed95cf78187fad2275a4ae0603fb27b75"
+  },
+  "workload": {
+    "version": "1.1.0",
+    "fingerprint": "982bc42db4fa404aaabfdb0b624b7fcfaf73034ce948c1aee2afb097376accb1",
+    "path": "benchmarks/workload.v1.json"
+  },
+  "fixture": {
+    "fingerprint": "0504f2ffabdfa2cb7e307dee7e4ea84018bb57001411454e204a639c996ce9a8",
+    "files": [
+      {
+        "path": "playground/benchmark-wx/app.js",
+        "bytes": 58,
+        "sha256": "7b2bcb486b36d16e77a9bb7290e363dd9ede5e02b9ecef8f1d07fed2f8392c53"
+      },
+      {
+        "path": "playground/benchmark-wx/app.json",
+        "bytes": 296,
+        "sha256": "fc577dc69102797b58bc3ad278f653948222590005961249dc571586c0829b37"
+      },
+      {
+        "path": "playground/benchmark-wx/app.wxss",
+        "bytes": 107,
+        "sha256": "5448c27af41a7c8d5b05367a84acf56db70a73fbafde7b6599ed201b6d31eb53"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/index/index.js",
+        "bytes": 4161,
+        "sha256": "d470725009763eb11f6bb6a565a15d713bd960bc6da2bb96c79b1e773c7f98c8"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/index/index.json",
+        "bytes": 52,
+        "sha256": "ecdab85a686ce48d44b36f413ee847d1e5554653356e2ac859fb9891c0b32de2"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/index/index.wxml",
+        "bytes": 2615,
+        "sha256": "d84c42e2036a449cb1cf1266da65b6804fd9212acb4c8900ac37e7624e84bf6c"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/index/index.wxss",
+        "bytes": 620,
+        "sha256": "50b9ffbaee0e6487823639b7b3024848da26696fbbaab5fbeb09e00541ba206c"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/secondary/index.js",
+        "bytes": 921,
+        "sha256": "9ff65c7d8198681f2718926b185a85da389dc5013e7c17af9d1808a4463564b6"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/secondary/index.json",
+        "bytes": 54,
+        "sha256": "1a70fa181d05333ad5ee49d7f709859998c79987b99012f94bddfbceb509820e"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/secondary/index.wxml",
+        "bytes": 530,
+        "sha256": "187d439d7872e6154687d79cd3fa434ee46609f49a97416e73563896528a69fc"
+      },
+      {
+        "path": "playground/benchmark-wx/pages/secondary/index.wxss",
+        "bytes": 215,
+        "sha256": "1cf79ccc21ccb1fc8d1843eee3f33c59e1c710be6f9158214056c3c21fc4df74"
+      },
+      {
+        "path": "playground/benchmark-wx/project.config.json",
+        "bytes": 376,
+        "sha256": "ba38ed3742577e6996d7d090e82068bc4911c85ea70425c5680e76115f68bff8"
+      },
+      {
+        "path": "playground/benchmark-wx/sitemap.json",
+        "bytes": 83,
+        "sha256": "3a71324fc3b3392db54ff6f4b2f6b4f83d364ba4547bc5f73342b850d603e032"
+      }
+    ]
+  },
+  "source": {
+    "fingerprint": "16fc433a3b64f57d56a1881f077d1d92712671bf02750810b98656949c57d3e3",
+    "files": [
+      {
+        "path": "package-lock.json",
+        "bytes": 258150,
+        "sha256": "ba6141137e78807236d2818db859ca826372b45a73f20c7bccda48324ceae979"
+      },
+      {
+        "path": "package.json",
+        "bytes": 4532,
+        "sha256": "d4555d12fc1af8698fbd4ca63e389f622957609c32d90faacbbedc07e9daa9c5"
+      },
+      {
+        "path": "src/collectors/Collector.ts",
+        "bytes": 7633,
+        "sha256": "b69d2ce49353436b1df857164c48e113b3e8b00022f65d6e845ddef2d6213051"
+      },
+      {
+        "path": "src/collectors/ConsoleCollector.ts",
+        "bytes": 5408,
+        "sha256": "c6e4bbf56adf263ac8284a45b25e6d203da1c387e99af59475f9b0746acf69fb"
+      },
+      {
+        "path": "src/collectors/index.ts",
+        "bytes": 907,
+        "sha256": "0282ba66230042ee625d72441af3698c4cf42ff77833bffc920734d09cf2a88f"
+      },
+      {
+        "path": "src/collectors/NetworkCollector.ts",
+        "bytes": 21231,
+        "sha256": "008e99defec50ea303361ff6d832a9bb43bbe413ad805bf18c786571f161f1f1"
+      },
+      {
+        "path": "src/config/tool-category.ts",
+        "bytes": 283,
+        "sha256": "0f8a338babb66893df7b08334ab79b290c4ba7c03c18aa3ddc1eafcf1be52b57"
+      },
+      {
+        "path": "src/config/tool-profile.ts",
+        "bytes": 5729,
+        "sha256": "5bd26f3c1d9511bd87b23d1cf953237483c4992ad1a91ac5e14eaf8c4f52257a"
+      },
+      {
+        "path": "src/connection/adapters.ts",
+        "bytes": 7099,
+        "sha256": "63bd9cd45ff1cf8e26f14f8fd972f031d40f33021672730ff16b6ff7eef43734"
+      },
+      {
+        "path": "src/connection/errors.ts",
+        "bytes": 3723,
+        "sha256": "d02c429e2b808c918c809ccd6e0b9ec651b8f7a8639d435b20551983f6edca94"
+      },
+      {
+        "path": "src/connection/health-probe.ts",
+        "bytes": 2086,
+        "sha256": "ebfefd7d5272db14ca796047371b94d406e176a2032e44618fd42f8165edb88b"
+      },
+      {
+        "path": "src/connection/index.ts",
+        "bytes": 221,
+        "sha256": "18461f62daeac100674724a636f5512a28e1b444815cedcb69de619eea5e573c"
+      },
+      {
+        "path": "src/connection/manager.ts",
+        "bytes": 3736,
+        "sha256": "233eebb8ecb9cefddfeed0a92141b84671ec3b4e468ea888873e0d68b7473beb"
+      },
+      {
+        "path": "src/connection/resolver.ts",
+        "bytes": 4124,
+        "sha256": "11e8fcf411fadc9f3172308aa1da0f5c9db395860be977a6722d8537ba3e8aa8"
+      },
+      {
+        "path": "src/connection/types.ts",
+        "bytes": 3203,
+        "sha256": "18fdf1a4412e8577a972d81d33c7198e38f773210d53ba5686a6a98631ccc9de"
+      },
+      {
+        "path": "src/core/assertion.ts",
+        "bytes": 9781,
+        "sha256": "88cbfe5f0e7171bb1e62e2b5630579b1539fea89da2ff57f2c0cc91a19ad36e5"
+      },
+      {
+        "path": "src/core/connection.ts",
+        "bytes": 19322,
+        "sha256": "b8e8f351ed3c58fadc9ba4732274086a562ee47d02feb609917cc8f53609df1f"
+      },
+      {
+        "path": "src/core/index.ts",
+        "bytes": 2043,
+        "sha256": "f491af66c533d1c28822488c242ba5561f8fc354af7ec041b6c9da6b040591a5"
+      },
+      {
+        "path": "src/core/interaction.ts",
+        "bytes": 6381,
+        "sha256": "9f763d8fd9dbab038aa7889fa1e8abe2a4ac65c8f8257d0e112b6f4ab1889520"
+      },
+      {
+        "path": "src/core/navigation.ts",
+        "bytes": 7634,
+        "sha256": "f3c315a4ecc4293e8e33ef6c408c615d5cc2e4c3d64dbb1edcb9e56c1e9e0e46"
+      },
+      {
+        "path": "src/core/query.ts",
+        "bytes": 6252,
+        "sha256": "90fa28d7283d49045ccf68ddbd20879b9b518de2b9d6133f15c723e87d5c44d3"
+      },
+      {
+        "path": "src/core/screenshot.ts",
+        "bytes": 3386,
+        "sha256": "7bd8eb4a7de89835e485f068897e011c9b45c0803e99ce9523af9234f8d7ec03"
+      },
+      {
+        "path": "src/core/snapshot.ts",
+        "bytes": 15105,
+        "sha256": "e61c8a4c6a5f6c5f6c08a251f1730e125ae1cc74d2b2713d925c8d4cf250c4f0"
+      },
+      {
+        "path": "src/core/types.ts",
+        "bytes": 5437,
+        "sha256": "d07b49c25d6e3a67c28ff8c36fa3083e105c80d578907f96da0dff45ed58285a"
+      },
+      {
+        "path": "src/elements/identity.ts",
+        "bytes": 873,
+        "sha256": "bd05129507f6f19576900268796a1bd3b6a0543e757ca33fe2eb87cfd31b09d1"
+      },
+      {
+        "path": "src/elements/index.ts",
+        "bytes": 642,
+        "sha256": "f87a8186f2f02d4aebd6a4c8f5c8804b9a24395879368e34b3155a33da146e7f"
+      },
+      {
+        "path": "src/elements/input.ts",
+        "bytes": 1437,
+        "sha256": "86dbcd316f6ef51ad94c267066a0b248f81e2c34676d39bc428ebe611b49ccdf"
+      },
+      {
+        "path": "src/elements/locator.ts",
+        "bytes": 7840,
+        "sha256": "6e834e0e8ea508ae61ea93b1980a2cb9ecfd173d030ad3b6c74a879e32cbe945"
+      },
+      {
+        "path": "src/elements/schema.ts",
+        "bytes": 1184,
+        "sha256": "7becad1d33fc258291541e77e096d39a93427400e470297094286d41ebb9b77e"
+      },
+      {
+        "path": "src/elements/types.ts",
+        "bytes": 762,
+        "sha256": "5fa7260ad0755283b555abb891e437cb2081020108b3c017cc458922307718c0"
+      },
+      {
+        "path": "src/formatters/consoleFormatter.ts",
+        "bytes": 3622,
+        "sha256": "7f47bb9e6181c405204bc310d815463822909fd46f52291927cdfdbab2137ccd"
+      },
+      {
+        "path": "src/formatters/snapshotFormatter.ts",
+        "bytes": 5824,
+        "sha256": "263cc7872f21251cfeb8073fce3ba620ec8bfa24c2b4013de47b751fe9347295"
+      },
+      {
+        "path": "src/MiniProgramContext.ts",
+        "bytes": 50850,
+        "sha256": "eda956de74961f5d436cbbd0c1e9a1f12ec8f725d10c0520ef4a324942a2041d"
+      },
+      {
+        "path": "src/protocol/lean-server.ts",
+        "bytes": 7049,
+        "sha256": "7ba6d4497de9c252815357517ec4444c3a94a6b91d6f0662b944a98ba4b2faf9"
+      },
+      {
+        "path": "src/protocol/tool-descriptor-manifest.ts",
+        "bytes": 2645,
+        "sha256": "8cbbe0c1cc1720dbbaf6dcd9df0c58685491273046cbd5a471c07f25e0c04f69"
+      },
+      {
+        "path": "src/protocol/tool-descriptors.ts",
+        "bytes": 6556,
+        "sha256": "79508a5d9727f9b89ae4162e894ce8c63004cd7e51c05d22114038ba8f2b406d"
+      },
+      {
+        "path": "src/protocol/tool-result.ts",
+        "bytes": 2818,
+        "sha256": "e03546301821adc9faa57d009320a6c852b62e43fa93d61a9c52cad03eb555f5"
+      },
+      {
+        "path": "src/server.ts",
+        "bytes": 16572,
+        "sha256": "4e634239c2f199fed3878e8b942b7200801b26f4b047a018b87eebd9367f1303"
+      },
+      {
+        "path": "src/tools.ts",
+        "bytes": 249,
+        "sha256": "6a7a011b884145549545fe19e206297162a7cd820cf1eed03160026748648f2c"
+      },
+      {
+        "path": "src/tools/assert.ts",
+        "bytes": 11536,
+        "sha256": "d9be8f4c38b9c69eed7c44a039978421736f72eb83cccdb13165471b176acb0b"
+      },
+      {
+        "path": "src/tools/connection.ts",
+        "bytes": 11970,
+        "sha256": "5cca66ef87595c70e952a22d469e8df63d2f1dd58fcb14d34550cdc454336b71"
+      },
+      {
+        "path": "src/tools/console.ts",
+        "bytes": 8375,
+        "sha256": "1f66661561156a04a369c7a8b864c40ca032b02e4be2b5c2e62543f79ebe5171"
+      },
+      {
+        "path": "src/tools/diagnose.ts",
+        "bytes": 35777,
+        "sha256": "acff09647e2e118bcbe256e0dd08dbdc581b91c7c92188d541239d31715dd246"
+      },
+      {
+        "path": "src/tools/index.ts",
+        "bytes": 182,
+        "sha256": "4ebc1f48c1cadac422a2f53d93bc30ef0a1823d032f7bf5e2717284d9321352b"
+      },
+      {
+        "path": "src/tools/input.ts",
+        "bytes": 11828,
+        "sha256": "1eeb04f337a0c7abc1ed15cfe5ab72accd712984ccd6858bb55ddc99a11f9b53"
+      },
+      {
+        "path": "src/tools/navigate.ts",
+        "bytes": 12236,
+        "sha256": "23fef93e75b26939d967aba919b3b72c990ebb068a5ee34bef4a6d4273946638"
+      },
+      {
+        "path": "src/tools/network.ts",
+        "bytes": 13627,
+        "sha256": "9337f8e2aa1d0f1daced39359bd8b529a2c47c1c1b32146a982f28c865a8cda0"
+      },
+      {
+        "path": "src/tools/page.ts",
+        "bytes": 13172,
+        "sha256": "631bceb87492fb1c2429d3ae9f5cfc8757a3347727c5ec44bc4a24e76c698b99"
+      },
+      {
+        "path": "src/tools/result.ts",
+        "bytes": 6407,
+        "sha256": "2614cd2f859d87f2380012294da814295b6f92cdcd4aa9c0091f5787013e12fb"
+      },
+      {
+        "path": "src/tools/runtime-loader.ts",
+        "bytes": 1517,
+        "sha256": "ff9cfa9ea68f22d164227944eedd795e1bcb24247c963df1c068f43e709fe8de"
+      },
+      {
+        "path": "src/tools/screenshot.ts",
+        "bytes": 2399,
+        "sha256": "4d8c014a2a6b5a8a63643d8e5656eca33d78fd7d04005e276f75e57799f72502"
+      },
+      {
+        "path": "src/tools/script.ts",
+        "bytes": 3199,
+        "sha256": "51b437842cd9ba98709421ae64552a96bed8af19c6a83a5f42d29feaf9f380a0"
+      },
+      {
+        "path": "src/tools/snapshot.ts",
+        "bytes": 5863,
+        "sha256": "bda21d1d02fa5e5fe6fad8e31e2938204cb9eaa0d8ac4e4137cb237999095027"
+      },
+      {
+        "path": "src/tools/ToolDefinition.ts",
+        "bytes": 15852,
+        "sha256": "863432b64271e728f8e2004902b329b9052aafb22272c55cf879fa1cdbfe8b0e"
+      },
+      {
+        "path": "src/tools/tools.ts",
+        "bytes": 2264,
+        "sha256": "8e993657d55afa81335e0aba1bb4e094dc6afe765c7ba48e21f9405188d53db2"
+      },
+      {
+        "path": "src/types/errors.ts",
+        "bytes": 7811,
+        "sha256": "d1c4971cee6993fcc8520ae5d7374127f53d2078be6edb806b5c0d8481f54945"
+      },
+      {
+        "path": "src/types/miniprogram-automator.d.ts",
+        "bytes": 9917,
+        "sha256": "b6a37e6110134a04cc614c6d1f495b825b332a20bab3550a64e1ba51de74cbb9"
+      },
+      {
+        "path": "src/types/wx-runtime.d.ts",
+        "bytes": 3274,
+        "sha256": "ce71dad9efcec78f960f5bb4569ce4cae0433780c974bc049a901007e210edc9"
+      },
+      {
+        "path": "src/utils/automator-loader.ts",
+        "bytes": 1389,
+        "sha256": "a0bf1f64d3923a451f29d44a7a08b90bb7739a3a05d576505e04cc87455fcb4c"
+      },
+      {
+        "path": "src/utils/error.ts",
+        "bytes": 269,
+        "sha256": "7d648d151cbad931b41aa112bbc8b776d8826448e8450f80b56397928b987d38"
+      },
+      {
+        "path": "src/utils/idGenerator.ts",
+        "bytes": 627,
+        "sha256": "a0b40a1c0a0c43c3e93a0f01286069f45918f67a359d5a9dead0ab5e13f818b1"
+      },
+      {
+        "path": "src/version.ts",
+        "bytes": 401,
+        "sha256": "28bcdfd7d37a177484930262ee05e901cb4cf024df7640f488e3929c191db1bc"
+      }
+    ]
+  },
+  "issues": [],
+  "safety": {
+    "existingDevtoolsAllowed": false,
+    "processesTerminated": 0
+  }
+}

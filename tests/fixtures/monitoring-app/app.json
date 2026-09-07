@@ -1,0 +1,22 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/tab/index",
+    "pages/detail/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "MCP Regression"
+  },
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "Home"
+      },
+      {
+        "pagePath": "pages/tab/index",
+        "text": "Tab"
+      }
+    ]
+  }
+}

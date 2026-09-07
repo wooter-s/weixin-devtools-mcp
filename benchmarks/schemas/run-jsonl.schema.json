@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/weixin-devtools-mcp/benchmark-run-jsonl.schema.json",
+  "title": "A single record in a benchmark JSONL run",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "recordType",
+        "runId",
+        "phase",
+        "valid",
+        "environment",
+        "workload",
+        "fixture",
+        "source"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "recordType": { "const": "run" },
+        "runId": { "type": "string", "minLength": 1 },
+        "phase": { "enum": ["baseline", "optimized"] },
+        "valid": { "const": true },
+        "environment": {
+          "type": "object",
+          "required": ["comparisonFingerprint"],
+          "properties": {
+            "comparisonFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "workload": {
+          "type": "object",
+          "required": ["fingerprint"],
+          "properties": { "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+        },
+        "fixture": {
+          "type": "object",
+          "required": ["fingerprint"],
+          "properties": { "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+        },
+        "source": {
+          "type": "object",
+          "required": ["fingerprint"],
+          "properties": { "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "recordType",
+        "runId",
+        "phase",
+        "scenarioId",
+        "direction",
+        "iteration",
+        "warmup",
+        "startedAt",
+        "durationMs",
+        "status"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "recordType": { "const": "sample" },
+        "runId": { "type": "string", "minLength": 1 },
+        "phase": { "enum": ["baseline", "optimized"] },
+        "scenarioId": { "type": "string", "minLength": 1 },
+        "direction": { "enum": ["runtime", "locator", "protocol"] },
+        "iteration": { "type": "integer", "minimum": 1 },
+        "warmup": { "type": "boolean" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "status": { "enum": ["success", "failure"] },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": { "type": ["number", "boolean"] }
+        },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "message": { "type": "string" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "failure" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+=== Original failing tests ===
+
+ RUN  v1.6.1 /Users/didi/workspace/wooPro/weixin-devtools-mcp
+
+ ❯ tests/utils/runtime-monitoring.test.ts  (2 tests | 2 failed) 7ms
+   ❯ tests/utils/runtime-monitoring.test.ts > runtime monitoring transparency > installs configurable read-only methods without SDK mock and returns the native task
+     → SDK mock changes request semantics
+   ❯ tests/utils/runtime-monitoring.test.ts > runtime monitoring transparency > automatic console collection does not subscribe to SDK console events
+     → expected [ 'console', 'exception' ] to not include 'console'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/utils/runtime-monitoring.test.ts > runtime monitoring transparency > installs configurable read-only methods without SDK mock and returns the native task
+Error: SDK mock changes request semantics
+ ❯ Object.<anonymous> tests/utils/runtime-monitoring.test.ts:28:45
+     26|       return vm.runInContext(`(${fn.toString()})(...__args)`, sandbox);
+     27|     }),
+     28|     mockWxMethod: vi.fn(async () => { throw new Error('SDK mock change…
+       |                                             ^
+     29|     restoreWxMethod: vi.fn(async () => {}),
+     30|     on: vi.fn(), off: vi.fn(), currentPage: vi.fn(async () => null),
+ ❯ NetworkCollector.#startRemoteMonitoring src/collectors/NetworkCollector.ts:253:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/utils/runtime-monitoring.test.ts > runtime monitoring transparency > automatic console collection does not subscribe to SDK console events
+AssertionError: expected [ 'console', 'exception' ] to not include 'console'
+ ❯ tests/utils/runtime-monitoring.test.ts:62:60
+     60|     await context.setMiniProgram(r.mini);
+     61|     await context.startAutomaticMonitoring();
+     62|     expect(r.calls.on.mock.calls.map(call => call[0])).not.toContain('…
+       |                                                            ^
+     63|     context.disconnect();
+     64|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:46:03
+   Duration  440ms (transform 130ms, setup 0ms, collect 163ms, tests 7ms, environment 0ms, prepare 75ms)
+
+
+
+=== Production typecheck ===
+
+> weixin-devtools-mcp@0.6.0 typecheck
+> tsc --noEmit
+
+
+
+=== Test typecheck ===
+
+> weixin-devtools-mcp@0.6.0 typecheck:test
+> tsc -p tsconfig.test.json --noEmit
+
+
+
+=== Build ===
+
+> weixin-devtools-mcp@0.6.0 build
+> tsc && node scripts/generate-tool-descriptors.mjs && node scripts/set-executable.mjs
+
+✓ 已生成 31 个工具描述符
+设置构建文件权限...
+
+✓ server.js 已设置可执行权限
+
+✓ 所有文件处理完成
+
+
+=== Independent project launch over stdio ===
+connect_devtools {"schemaVersion":"2.0","ok":false,"code":"CONNECTION_FAILED","data":null,"error":{"message":"所有连接尝试均失败: 端口 9431 已被现有进程占用，无法验证其项目归属","retryable":true,"diagnostic":{"kind":"connection","phase":"startup","suggestions":["关闭当前微信开发者工具窗口后重试","切换到 wsEndpoint 或 discover 策略复用现有会话"],"metadata":null,"attempts":[{"index":1,"method":"launch","startedAt":"2026-09-05T12:57:19.235Z","durationMs":4615,"outcome":"failed","endpoint":null,"error":{"code":"ENVIRONMENT","message":"连接微信开发者工具失败: Cannot read properties of undefined (reading 'split')","phase":"startup"}},{"index":2,"method":"connect","startedAt":"2026-09-05T12:57:23.850Z","durationMs":5,"outcome":"failed","endpoint":null,"error":{"code":"SESSION_CONFLICT","message":"端口 9431 已被现有进程占用，无法验证其项目归属","phase":"startup"}}]}},"partialData":null,"observation":null,"warnings":[],"nextActions":[{"tool":"connect_devtools","reason":"建立或恢复微信开发者工具连接"}],"meta":{"requestId":"connect_devtools_1788613039194_snv4nzrd","tool":"connect_devtools","durationMs":4668.663542}}
+evaluate_script {"schemaVersion":"2.0","ok":false,"code":"NOT_CONNECTED","data":null,"error":{"message":"请先连接到微信开发者工具。使用 connect_devtools 工具建立连接。","retryable":true,"diagnostic":{"kind":"connection","phase":null,"suggestions":[],"metadata":null,"attempts":[]}},"partialData":null,"observation":null,"warnings":[],"nextActions":[{"tool":"connect_devtools","reason":"建立或恢复微信开发者工具连接"}],"meta":{"requestId":"evaluate_script_1788613043881_2cfeq5d7","tool":"evaluate_script","durationMs":0.7955409999995027}}
+list_console_messages {"schemaVersion":"2.0","ok":true,"code":"OK","data":{"monitoring":false,"startedAt":null,"total":0,"pageSize":5,"pageIdx":0,"messages":[]},"error":null,"partialData":null,"observation":null,"warnings":[],"nextActions":[],"meta":{"requestId":"list_console_messages_1788613043884_h3t5kmoi","tool":"list_console_messages","durationMs":0.6747919999997976}}
+
+
+=== Cleanup verification ===
+{"consoleActive":false,"consolePatches":0,"networkActive":false,"networkPatches":0,"temporaryFiles":0}
+
+
+=== Unit tests ===
+ ✓ tests/tools/screenshot.test.ts  (8 tests) 3513ms
+
+ Test Files  40 passed (40)
+      Tests  467 passed (467)
+   Start at  21:14:38
+   Duration  5.17s (transform 1.98s, setup 1ms, collect 5.22s, tests 16.73s, environment 4ms, prepare 4.71s)
+
+
+=== Lint (exit 0; empty output means no diagnostics) ===
+
+
+=== Strict integration ===
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  2 failed | 9 passed (11)
+      Tests  2 failed | 58 passed (60)
+   Start at  21:17:03
+   Duration  81.96s (transform 305ms, setup 0ms, collect 724ms, tests 79.71s, environment 1ms, prepare 565ms)
+
+
+=== Final stdio capability regression ===
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:24:58
+   Duration  25.16s (transform 19ms, setup 0ms, collect 14ms, tests 24.99s, environment 0ms, prepare 53ms)
+
+
+=== Unfixed findings ===
+[
+  {
+    "tool": "evaluate_script",
+    "scenario": "named async function declaration",
+    "status": "发现缺陷",
+    "evidence": "evaluate_script: DEVTOOLS_OPERATION_FAILED 脚本执行失败: await is only valid in async functions and the top level bodies of modules\n\nfalse !== true\n"
+  },
+  {
+    "tool": "get_value",
+    "scenario": "live stale ref after navigation",
+    "status": "发现缺陷",
+    "evidence": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'ELEMENT_NOT_FOUND'\n- 'STALE_ELEMENT'\n"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "discover real DevTools",
+    "status": "发现缺陷",
+    "evidence": "connect_devtools: CONNECTION_FAILED 所有连接尝试均失败: 自动发现失败：未检测到可用的微信开发者工具自动化端口\n\nfalse !== true\n"
+  }
+]
+
+=== Read-only fixture protocol observation ===
+Tool.getInfo on ws://127.0.0.1:9431 returned {"version":"2.02.2607271"}; SDKVersion was absent.
+The corresponding DevTools log line included: routeTo appLaunch timeout.
+These observations diagnose fixture setup only; acceptance used the MCP stdio client.
+
+=== Scope and cleanup ===
+Independent fixture project closed by CLI; no TCP listener remained on 9431.
+Business 9420 DevTools and application-managed MCP server processes were retained.
+No production files outside the two collectors, their runtime helpers, Context synchronization and console/diagnostic/navigation synchronization were intentionally changed in this turn.

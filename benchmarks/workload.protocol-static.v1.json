@@ -1,0 +1,153 @@
+{
+  "$schema": "./schemas/workload.schema.json",
+  "version": "protocol-static-1.1.0",
+  "fixture": {
+    "project": "playground/benchmark-wx",
+    "entryRoute": "/pages/index/index",
+    "secondaryRoute": "/pages/secondary/index",
+    "localRequestOnly": true
+  },
+  "rules": {
+    "protocolWarmups": 10,
+    "lifecycleWarmups": 3,
+    "percentiles": [0.5, 0.95],
+    "successInterval": "wilson-95",
+    "failedSamplesAreRetained": true,
+    "automaticRetries": 0,
+    "devtoolsAccess": false
+  },
+  "scenarios": [
+    {
+      "id": "protocol_tools_list",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "真实 stdio Client 冷/热获取 full profile tools/list，并校验 31 个对象根 outputSchema、内容寻址 ID 与响应体积。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          { "name": "toolsTotal", "statistic": "sum", "operator": "eq", "value": 3100 },
+          {
+            "name": "toolsWithOutputSchema",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "toolsWithContentAddressedSchemaId",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "coldSchemaValidatorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "hotSchemaValidatorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 3100
+          },
+          {
+            "name": "responseBytes",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 95000
+          },
+          {
+            "name": "coldListMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 50.7432
+          },
+          {
+            "name": "hotListMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_success",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "调用无需 DevTools 的 get_connection_status，验证成功 structuredContent。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredContentCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_invalid_arguments",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "向 connect_devtools 传入 schema 不接受的 mode；请求不得越过校验或接触 DevTools。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredErrorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_business_error",
+      "direction": "protocol",
+      "warmups": 10,
+      "iterations": 100,
+      "description": "在未连接状态调用 get_current_page，验证稳定结构化业务错误。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "structuredErrorCount",
+            "statistic": "sum",
+            "operator": "eq",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "protocol_stdio_lifecycle",
+      "direction": "protocol",
+      "warmups": 3,
+      "iterations": 30,
+      "description": "每个样本启动、初始化、tools/list 并关闭一个 runner 自己拥有的 MCP stdio 子进程。",
+      "acceptance": {
+        "successRateMin": 1,
+        "p95Regression": { "maxRelative": 0.1, "minBudgetMs": 50 },
+        "metrics": [
+          {
+            "name": "lifecycleMs",
+            "statistic": "p95",
+            "operator": "lte",
+            "value": 209.6435
+          }
+        ]
+      }
+    }
+  ]
+}

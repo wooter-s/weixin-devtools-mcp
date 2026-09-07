@@ -107,6 +107,7 @@ export const listConsoleMessagesTool = defineTool({
       throw new Error('Console存储未初始化');
     }
 
+    await context.syncConsoleFromRemote?.();
     initializeConsoleStorage(context);
 
     // 收集消息
@@ -222,6 +223,7 @@ export const getConsoleMessageTool = defineTool({
       throw new Error('Console存储未初始化');
     }
 
+    await context.syncConsoleFromRemote?.();
     initializeConsoleStorage(context);
 
     // 从 ID 映射表查找

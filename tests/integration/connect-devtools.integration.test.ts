@@ -8,10 +8,14 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import type { MiniProgramContext } from '../../src/MiniProgramContext.js';
 import { getConnectionStatusTool, getCurrentPageTool } from '../../src/tools/connection.js';
 
-import { IntegrationHarness, runTool } from './helpers/integration-harness.js';
+import {
+  createIntegrationContext,
+  IntegrationHarness,
+  runTool,
+} from './helpers/integration-harness.js';
 import {
   handleIntegrationUnavailable,
   shouldRunIntegrationTests,
@@ -41,7 +45,7 @@ describe.skipIf(!shouldRun)('connect_devtools 集成测试', () => {
     }
 
     try {
-      await harness.reconnect(context, { timeoutMs: 60_000, healthCheck: false });
+      await harness.reconnect(context);
       return true;
     } catch (error) {
       runtimeReady = false;
@@ -57,10 +61,9 @@ describe.skipIf(!shouldRun)('connect_devtools 集成测试', () => {
       return;
     }
 
-    context = MiniProgramContext.create();
+    context = createIntegrationContext();
     try {
       const connected = await harness.connect(context, {
-        strategy: 'auto',
         timeoutMs: 60_000,
         healthCheck: false,
       });
@@ -111,10 +114,7 @@ describe.skipIf(!shouldRun)('connect_devtools 集成测试', () => {
       return;
     }
 
-    const response = await harness.reconnect(context, {
-      timeoutMs: 60_000,
-      healthCheck: false,
-    });
+    const response = await harness.reconnect(context);
     expect(response.getResponseText()).toContain('重连成功');
 
     const status = await context.getConnectionStatus({ refreshHealth: false });
@@ -128,7 +128,6 @@ describe.skipIf(!shouldRun)('connect_devtools 集成测试', () => {
     }
 
     const connected = await harness.connect(context, {
-      strategy: 'auto',
       timeoutMs: 60_000,
       healthCheck: false,
     });

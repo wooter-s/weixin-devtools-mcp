@@ -1,0 +1,278 @@
+{
+  "schemaVersion": "1.0",
+  "recordType": "phase2-dom-epoch-before-after",
+  "authority": "synthetic/non-authoritative",
+  "synthetic": true,
+  "authoritative": false,
+  "generatedAt": "2026-08-08T00:12:49.326Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "node": "22.14.0"
+  },
+  "safety": {
+    "devtoolsAccess": false,
+    "devtoolsProcessesInspected": false,
+    "devtoolsProcessesTerminated": 0,
+    "subprocessesSpawned": 0,
+    "networkAccess": false
+  },
+  "workload": {
+    "samples": 100,
+    "warmups": 5,
+    "sampleConcurrency": 1,
+    "pagePath": "/pages/synthetic/dom-epoch",
+    "nodesPerGeneration": 2,
+    "rebuild": "same-page/same-visible-metadata/new-element-identities",
+    "weakLocator": "button[class~=\"repeated-item\"] + text",
+    "stableLocator": "button[data-testid=\"stable-target\"]",
+    "action": "tap",
+    "phaseOrder": [
+      "baseline",
+      "optimized"
+    ],
+    "consoleOutputSuppressed": true,
+    "fingerprint": "dee6d61788d5c3678c73e6cfc3be89675ccbaaa0a77400e336cc533eb1057f8e"
+  },
+  "statistics": {
+    "durationUnit": "milliseconds",
+    "percentileMethod": "nearest-rank",
+    "successInterval": "Wilson 95%"
+  },
+  "metricDefinitions": {
+    "wrongAction": "tap() executed on an old Element handle that is no longer in the active DOM generation",
+    "safeOutcome": "weak ref rejected with STALE_ELEMENT, stable data-testid ref clicked the replacement, no wrong action, and revision state consistent",
+    "revisionConsistency": "revision advances exactly once and final snapshot/ref mappings share that revision and point to active replacement nodes"
+  },
+  "requestedEntries": {
+    "baseline": "/tmp/weixin-mcp-phase2-baseline.dcSWSu/build/MiniProgramContext.js",
+    "optimized": "build/MiniProgramContext.js"
+  },
+  "baseline": {
+    "entry": "/private/tmp/weixin-mcp-phase2-baseline.dcSWSu/build/MiniProgramContext.js",
+    "sourceFingerprint": "0a101419478b610f4c331a76b292b6cbd1683f7c4e0057a617461e4494d72d05",
+    "samples": 100,
+    "safeOutcomes": 0,
+    "safeOutcomeRate": 0,
+    "safeOutcomeWilson95": {
+      "low": 3.469446951953614e-18,
+      "high": 0.03699349820698568
+    },
+    "wrongActionCount": 200,
+    "wrongActionSampleCount": 100,
+    "wrongActionSampleRate": 1,
+    "weakRefRejectionCount": 0,
+    "weakRefRejectionRate": 0,
+    "stableRefCorrectClickCount": 0,
+    "stableRefCorrectClickRate": 0,
+    "revisionAdvanceCount": 0,
+    "revisionAdvanceRate": 0,
+    "revisionConsistencyCount": 0,
+    "revisionConsistencyRate": 0,
+    "revisionDeltaHistogram": {
+      "0": 100
+    },
+    "actionCounts": {
+      "total": 200,
+      "active": 0,
+      "wrong": 200
+    },
+    "invariants": {
+      "weakRefSafelyRejected": {
+        "successes": 0,
+        "failures": 100,
+        "rate": 0,
+        "wilson95": {
+          "low": 3.469446951953614e-18,
+          "high": 0.03699349820698568
+        }
+      },
+      "stableDataTestIdCorrectlyReboundAndClicked": {
+        "successes": 0,
+        "failures": 100,
+        "rate": 0,
+        "wilson95": {
+          "low": 3.469446951953614e-18,
+          "high": 0.03699349820698568
+        }
+      },
+      "atomicEpochRevisionConsistency": {
+        "successes": 0,
+        "failures": 100,
+        "rate": 0,
+        "wilson95": {
+          "low": 3.469446951953614e-18,
+          "high": 0.03699349820698568
+        }
+      }
+    },
+    "latencyMs": {
+      "setup": {
+        "min": 0.002957999999978256,
+        "max": 0.07795799999996689,
+        "mean": 0.008120860000005906,
+        "p50": 0.0036249999999995453,
+        "p95": 0.03674999999998363
+      },
+      "scenario": {
+        "min": 0.05612500000000864,
+        "max": 1.2645410000000084,
+        "mean": 0.114013309999998,
+        "p50": 0.06545799999997826,
+        "p95": 0.3590409999999906
+      },
+      "weakRefAttempt": {
+        "min": 0.0038329999999859865,
+        "max": 0.9592499999999973,
+        "mean": 0.018062920000003826,
+        "p50": 0.0050420000000030996,
+        "p95": 0.03812500000003638
+      },
+      "stableRefAttempt": {
+        "min": 0.0017080000000078144,
+        "max": 0.07375000000001819,
+        "mean": 0.004472139999999172,
+        "p50": 0.0023329999999646134,
+        "p95": 0.00570799999997007
+      },
+      "finalCommit": {
+        "min": 0.024292000000002645,
+        "max": 0.34791699999999537,
+        "mean": 0.04639542000000176,
+        "p50": 0.028332999999975073,
+        "p95": 0.1960409999999797
+      }
+    },
+    "wallClockMs": 12.756332999999984,
+    "unexpectedErrorCount": 0,
+    "unexpectedErrors": []
+  },
+  "optimized": {
+    "entry": "<REPO>/build/MiniProgramContext.js",
+    "sourceFingerprint": "adcaff4f7804c6aeb46c98b716d6308c885764901b2e1a98c3c32452271ef60a",
+    "samples": 100,
+    "safeOutcomes": 100,
+    "safeOutcomeRate": 1,
+    "safeOutcomeWilson95": {
+      "low": 0.9630065017930143,
+      "high": 1
+    },
+    "wrongActionCount": 0,
+    "wrongActionSampleCount": 0,
+    "wrongActionSampleRate": 0,
+    "weakRefRejectionCount": 100,
+    "weakRefRejectionRate": 1,
+    "stableRefCorrectClickCount": 100,
+    "stableRefCorrectClickRate": 1,
+    "revisionAdvanceCount": 100,
+    "revisionAdvanceRate": 1,
+    "revisionConsistencyCount": 100,
+    "revisionConsistencyRate": 1,
+    "revisionDeltaHistogram": {
+      "1": 100
+    },
+    "actionCounts": {
+      "total": 100,
+      "active": 100,
+      "wrong": 0
+    },
+    "invariants": {
+      "weakRefSafelyRejected": {
+        "successes": 100,
+        "failures": 0,
+        "rate": 1,
+        "wilson95": {
+          "low": 0.9630065017930143,
+          "high": 1
+        }
+      },
+      "stableDataTestIdCorrectlyReboundAndClicked": {
+        "successes": 100,
+        "failures": 0,
+        "rate": 1,
+        "wilson95": {
+          "low": 0.9630065017930143,
+          "high": 1
+        }
+      },
+      "atomicEpochRevisionConsistency": {
+        "successes": 100,
+        "failures": 0,
+        "rate": 1,
+        "wilson95": {
+          "low": 0.9630065017930143,
+          "high": 1
+        }
+      }
+    },
+    "latencyMs": {
+      "setup": {
+        "min": 0.003165999999964697,
+        "max": 0.0777079999999728,
+        "mean": 0.007933770000002482,
+        "p50": 0.003917000000001281,
+        "p95": 0.027749999999969077
+      },
+      "scenario": {
+        "min": 0.11466700000005403,
+        "max": 0.8014170000000149,
+        "mean": 0.20425330000000144,
+        "p50": 0.14208299999995688,
+        "p95": 0.5913330000000201
+      },
+      "weakRefAttempt": {
+        "min": 0.036291000000005624,
+        "max": 0.41941700000006676,
+        "mean": 0.06377954999999816,
+        "p50": 0.04295799999999872,
+        "p95": 0.17145800000002964
+      },
+      "stableRefAttempt": {
+        "min": 0.026292000000012195,
+        "max": 0.4515830000000278,
+        "mean": 0.054029550000001904,
+        "p50": 0.031999999999982265,
+        "p95": 0.18079199999999673
+      },
+      "finalCommit": {
+        "min": 0.024959000000023934,
+        "max": 0.3792500000000132,
+        "mean": 0.041040030000008866,
+        "p50": 0.029375000000015916,
+        "p95": 0.07612499999999045
+      }
+    },
+    "wallClockMs": 21.691583000000037,
+    "unexpectedErrorCount": 0,
+    "unexpectedErrors": []
+  },
+  "comparison": {
+    "wrongActionsAvoided": 200,
+    "wrongActionSampleRateDeltaPercentagePoints": -100,
+    "safeOutcomeRateDeltaPercentagePoints": 100,
+    "weakRefRejectionRateDeltaPercentagePoints": 100,
+    "stableRefCorrectClickRateDeltaPercentagePoints": 100,
+    "revisionConsistencyRateDeltaPercentagePoints": 100,
+    "scenarioP50DeltaMs": 0.07662499999997863,
+    "scenarioP95DeltaMs": 0.23229200000002947
+  },
+  "acceptance": {
+    "passed": true,
+    "criteria": {
+      "baselineExposesRisk": true,
+      "optimizedWrongActionCountIsZero": true,
+      "optimizedSafeOutcomeRateIs100Percent": true,
+      "optimizedWeakRefRejectionRateIs100Percent": true,
+      "optimizedStableRefCorrectClickRateIs100Percent": true,
+      "optimizedRevisionAdvanceRateIs100Percent": true,
+      "optimizedRevisionConsistencyRateIs100Percent": true
+    }
+  },
+  "limitations": [
+    "synthetic/non-authoritative：不连接真实微信开发者工具，也不经过 MCP transport。",
+    "mock Element 的 tap() 可记录已脱离活动 DOM 的旧 handle，用于确定性暴露错误动作风险；真实 DevTools 对 detached handle 可能报错或表现不同。",
+    "100 个正式样本顺序执行以降低调度噪声；延迟主要用于同机同进程相对比较，不能代表真实 RPC 延迟。",
+    "baseline 与 optimized 顺序执行，未随机交错，也未强制垃圾回收。"
+  ]
+}

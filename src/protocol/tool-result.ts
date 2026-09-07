@@ -5,9 +5,11 @@ import {
   createRequestId,
   isRetryableToolError,
   normalizeToolErrorCode,
+  serializeToolDiagnostic,
   toolFailureSchema,
   type JsonObject,
   type NextAction,
+  type ToolDiagnostic,
   type ToolErrorCode,
   type ToolFailure,
   type ToolMeta,
@@ -15,6 +17,8 @@ import {
   type ToolObservation,
   type ToolSuccess,
 } from '../tools/result.js';
+
+import { sanitizePublicValue } from './public-sanitizer.js';
 
 export interface ToolInvocationMeta {
   requestId: string;
@@ -47,11 +51,13 @@ export function buildToolSuccess(
   nextActions: NextAction[] = [],
 ): ToolSuccess<JsonObject> {
   const result: ToolSuccess<JsonObject> = {
-    schemaVersion: '1.0',
+    schemaVersion: '2.0',
     ok: true,
     code: 'OK',
     data,
-    ...(observation ? { observation } : {}),
+    error: null,
+    partialData: null,
+    observation: observation ?? null,
     warnings,
     nextActions,
     meta: finishMeta(invocation),
@@ -77,13 +83,98 @@ function nextActionsForError(code: ToolErrorCode): NextAction[] {
   }
 }
 
+function readProperty(value: object, key: PropertyKey): unknown {
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
+}
+
+function readRecordProperty(value: object, key: PropertyKey): Record<string, unknown> | null {
+  const property = readProperty(value, key);
+  return property !== null && typeof property === 'object' && !Array.isArray(property)
+    ? property as Record<string, unknown>
+    : null;
+}
+
+function createDefaultDiagnostic(error: Error, code: ToolErrorCode): ToolDiagnostic | null {
+  const explicitDiagnostic = serializeToolDiagnostic(readProperty(error, 'diagnostic'));
+  if (explicitDiagnostic) return explicitDiagnostic;
+
+  if (error instanceof ZodError) {
+    return serializeToolDiagnostic({
+      kind: 'validation',
+      issues: error.issues.map(issue => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })),
+    });
+  }
+
+  const context = readRecordProperty(error, 'context');
+  if (code === 'CONNECTION_FAILED' || code === 'CONNECTION_LOST' || code === 'NOT_CONNECTED') {
+    return serializeToolDiagnostic({
+      kind: 'connection',
+      phase: readProperty(error, 'phase'),
+      suggestions: readProperty(error, 'suggestions'),
+      metadata: readProperty(error, 'metadata'),
+      attempts: readProperty(error, 'attempts'),
+    });
+  }
+
+  if (
+    code === 'STALE_ELEMENT' ||
+    code === 'ELEMENT_NOT_FOUND' ||
+    code === 'AMBIGUOUS_ELEMENT' ||
+    code === 'ELEMENT_NOT_INTERACTABLE'
+  ) {
+    return serializeToolDiagnostic({
+      kind: 'element',
+      target: context?.selector ?? context?.elementUid,
+      pagePath: context?.pagePath,
+      pageRevision: context?.pageRevision,
+    });
+  }
+
+  if (code === 'ASSERTION_FAILED') {
+    return serializeToolDiagnostic({
+      kind: 'assertion',
+      expected: readProperty(error, 'expected'),
+      actual: readProperty(error, 'actual'),
+      matcher: readProperty(error, 'matcher'),
+    });
+  }
+
+  if (code === 'TIMEOUT') {
+    return serializeToolDiagnostic({
+      kind: 'timeout',
+      operation: context?.operation,
+      timeoutMs: context?.timeout ?? readProperty(error, 'timeoutMs'),
+      elapsedMs: readProperty(error, 'elapsedMs'),
+    });
+  }
+
+  const operation = context?.operation;
+  const phase = readProperty(error, 'phase');
+  if (typeof operation === 'string' || typeof phase === 'string') {
+    return serializeToolDiagnostic({ kind: 'operation', operation, phase });
+  }
+
+  return null;
+}
+
 export function buildToolFailure(
   invocation: ToolInvocationMeta,
   error: Error,
   options?: {
     code?: ToolErrorCode;
-    details?: JsonObject;
+    diagnostic?: unknown;
+    partialData?: JsonObject;
     observation?: ToolObservation;
+    warnings?: ToolNotice[];
+    nextActions?: NextAction[];
   },
 ): ToolFailure {
   const code = options?.code ?? (error instanceof ZodError
@@ -91,20 +182,23 @@ export function buildToolFailure(
     : normalizeToolErrorCode(error));
 
   const result: ToolFailure = {
-    schemaVersion: '1.0',
+    schemaVersion: '2.0',
     ok: false,
     code,
     data: null,
     error: {
       message: error.message,
       retryable: isRetryableToolError(code),
-      ...(options?.details ? { details: options.details } : {}),
+      diagnostic: options?.diagnostic === undefined
+        ? createDefaultDiagnostic(error, code)
+        : serializeToolDiagnostic(options.diagnostic),
     },
-    ...(options?.observation ? { observation: options.observation } : {}),
-    warnings: [],
-    nextActions: nextActionsForError(code),
+    partialData: options?.partialData ?? null,
+    observation: options?.observation ?? null,
+    warnings: options?.warnings ?? [],
+    nextActions: options?.nextActions ?? nextActionsForError(code),
     meta: finishMeta(invocation),
   };
 
-  return toolFailureSchema.parse(result);
+  return toolFailureSchema.parse(sanitizePublicValue(result));
 }

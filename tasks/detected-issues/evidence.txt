@@ -1,0 +1,301 @@
+检测问题修复证据 — 2026-09-06
+保留现有 DevTools 安装；不将环境阻塞算通过。
+
+
+=== baseline-unit.log ===
+
+ RUN  v1.6.1 /Users/didi/workspace/wooPro/weixin-devtools-mcp
+
+ ❯ tests/tools/script.test.ts  (27 tests | 1 failed) 16ms
+   ❯ tests/tools/script.test.ts > Script Tool Unit Tests > F3 executes named async declarations across the DevTools parser boundary
+     → 脚本执行失败: SyntaxError: await is only valid in async functions and the top level bodies of modules
+ ❯ tests/utils/automation-readiness.test.ts  (4 tests | 3 failed) 34ms
+   ❯ tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F2 recognizes a valid automation WebSocket despite HTTP 426
+     → expected false to be true // Object.is equality
+   ❯ tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F1 waits for SDKVersion and current page, not just a listening socket
+     → expected 0 to be greater than or equal to 3
+   ❯ tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F1 reports runtime readiness timeout when SDKVersion remains absent
+     → promise resolved "undefined" instead of rejecting
+ ❯ tests/utils/mini-program-context.test.ts  (47 tests | 1 failed) 42ms
+   ❯ tests/utils/mini-program-context.test.ts > MiniProgramContext runtime ownership > F4 distinguishes refs retired by navigation from unknown refs
+     → expected ElementResolutionError: 找不到 ref：ref_b1512… { code: '…' } to match object { code: 'STALE_ELEMENT' }
+(1 matching property omitted from actual)
+ ❯ tests/tools/diagnose.test.ts  (19 tests | 1 failed) 2275ms
+   ❯ tests/tools/diagnose.test.ts > debug_page_elements tool > 已连接时应执行元素调试
+     → expected [ '*', 'body *', 'html *', …(28) ] to not include '*'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tools/diagnose.test.ts > debug_page_elements tool > 已连接时应执行元素调试
+AssertionError: expected [ '*', 'body *', 'html *', …(28) ] to not include '*'
+ ❯ tests/tools/diagnose.test.ts:214:29
+    212|     expect(selectors).toContain('view');
+    213|     for (const unsupported of ['*', 'body *', 'html *', 'page > *', '[…
+    214|       expect(selectors).not.toContain(unsupported);
+       |                             ^
+    215|     }
+    216|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/tools/script.test.ts > Script Tool Unit Tests > F3 executes named async declarations across the DevTools parser boundary
+Error: 脚本执行失败: SyntaxError: await is only valid in async functions and the top level bodies of modules
+ ❯ Object.handler src/tools/script.ts:114:13
+    112|       // 错误处理
+    113|       const errorMessage = extractErrorMessage(error);
+    114|       throw new Error(`脚本执行失败: ${errorMessage}`);
+       |             ^
+    115|     }
+    116|   },
+ ❯ tests/tools/script.test.ts:90:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F2 recognizes a valid automation WebSocket despite HTTP 426
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/utils/automation-readiness.test.ts:13:53
+     11|   it('F2 recognizes a valid automation WebSocket despite HTTP 426', as…
+     12|     const server = await automationServer(); servers.push(server);
+     13|     expect(await checkDevToolsRunning(server.port)).toBe(true);
+       |                                                     ^
+     14|     expect(server.methods).toContain('Tool.getInfo');
+     15|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F1 waits for SDKVersion and current page, not just a listening socket
+AssertionError: expected 0 to be greater than or equal to 3
+ ❯ tests/utils/automation-readiness.test.ts:24:23
+     22|     servers.push(server);
+     23|     await waitForWebSocketReady(server.port, 3000);
+     24|     expect(infoReads).toBeGreaterThanOrEqual(3);
+       |                       ^
+     25|     expect(server.methods).toContain('App.getCurrentPage');
+     26|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > F1 reports runtime readiness timeout when SDKVersion remains absent
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected: 
+[Error: rejected promise]
+
++ Received: 
+undefined
+
+ ❯ tests/utils/automation-readiness.test.ts:30:57
+     28|   it('F1 reports runtime readiness timeout when SDKVersion remains abs…
+     29|     const server = await automationServer(() => ({ version: '2.02.2607…
+     30|     await expect(waitForWebSocketReady(server.port, 150)).rejects.toTh…
+       |                                                         ^
+     31|   });
+     32| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/utils/mini-program-context.test.ts > MiniProgramContext runtime ownership > F4 distinguishes refs retired by navigation from unknown refs
+AssertionError: expected ElementResolutionError: 找不到 ref：ref_b1512… { code: '…' } to match object { code: 'STALE_ELEMENT' }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "code": "STALE_ELEMENT",
++   "code": "ELEMENT_NOT_FOUND",
+  }
+
+ ❯ tests/utils/mini-program-context.test.ts:105:5
+    103|     mini.currentPage.mockResolvedValue(next);
+    104|     await context.syncCurrentPage();
+    105|     await expect(context.getElementByTarget({ kind: 'ref', ref })).rej…
+       |     ^
+    106|     await expect(context.getElementByTarget({ kind: 'ref', ref: 'never…
+    107|     await context.disconnectDevtools();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+ Test Files  4 failed (4)
+      Tests  6 failed | 91 passed (97)
+   Start at  10:02:23
+   Duration  2.75s (transform 427ms, setup 0ms, collect 730ms, tests 2.37s, environment 0ms, prepare 417ms)
+
+
+
+=== numeric-page-id-red.log ===
+
+ RUN  v1.6.1 /Users/didi/workspace/wooPro/weixin-devtools-mcp
+
+ ❯ tests/utils/automation-readiness.test.ts  (5 tests | 1 failed) 585ms
+   ❯ tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > accepts numeric page IDs returned by real DevTools, including zero
+     → promise rejected "ConnectionTimeoutError: 运行时就绪超时: 当前页面未就绪 { …(4) }" instead of resolving
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/utils/automation-readiness.test.ts > automation protocol readiness regressions F1/F2 > accepts numeric page IDs returned by real DevTools, including zero
+AssertionError: promise rejected "ConnectionTimeoutError: 运行时就绪超时: 当前页面未就绪 { …(4) }" instead of resolving
+ ❯ tests/utils/automation-readiness.test.ts:38:57
+     36|       : { pageId: 0, path: 'pages/home/index', query: {} });
+     37|     servers.push(server);
+     38|     await expect(waitForWebSocketReady(server.port, 200)).resolves.toB…
+       |                                                         ^
+     39|   });
+     40| 
+
+Caused by: Error: 运行时就绪超时: 当前页面未就绪
+ ❯ Module.waitForAutomation src/connection/automation-probe.ts:80:9
+ ❯ Module.waitForWebSocketReady src/core/connection.ts:111:3
+ ❯ tests/utils/automation-readiness.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  10:16:19
+   Duration  1.06s (transform 53ms, setup 0ms, collect 85ms, tests 585ms, environment 0ms, prepare 60ms)
+
+
+
+=== 旧构建的真实 MCP 缺陷 ===
+[
+  {
+    "tool": "evaluate_script",
+    "scenario": "named async function declaration",
+    "status": "发现缺陷",
+    "evidence": "evaluate_script: DEVTOOLS_OPERATION_FAILED 脚本执行失败: await is only valid in async functions and the top level bodies of modules\n\nfalse !== true\n"
+  },
+  {
+    "tool": "get_value",
+    "scenario": "live stale ref after navigation",
+    "status": "发现缺陷",
+    "evidence": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'ELEMENT_NOT_FOUND'\n- 'STALE_ELEMENT'\n"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "discover real DevTools",
+    "status": "发现缺陷",
+    "evidence": "connect_devtools: CONNECTION_FAILED 所有连接尝试均失败: 自动发现失败：未检测到可用的微信开发者工具自动化端口\n\nfalse !== true\n"
+  }
+]
+
+=== project 启动最新真实响应（15000ms 参数） ===
+connect_devtools {"schemaVersion":"2.0","ok":false,"code":"CONNECTION_FAILED","data":null,"error":{"message":"所有连接尝试均失败: 运行时就绪超时: SDKVersion 缺失，运行时未就绪","retryable":true,"diagnostic":{"kind":"connection","phase":"startup","suggestions":["增大 timeoutMs，或检查开发者工具是否可响应"],"metadata":null,"attempts":[{"index":1,"method":"launch","startedAt":"2026-09-06T02:12:41.080Z","durationMs":14977,"outcome":"failed","endpoint":null,"error":{"code":"CONNECTION_TIMEOUT","message":"运行时就绪超时: SDKVersion 缺失，运行时未就绪","phase":"startup"}}]}},"partialData":null,"observation":null,"warnings":[],"nextActions":[{"tool":"connect_devtools","reason":"建立或恢复微信开发者工具连接"}],"meta":{"requestId":"connect_devtools_1788660761050_1z7pe3qx","tool":"connect_devtools","durationMs":15203.507209000001}}
+
+
+=== typecheck.log ===
+
+> weixin-devtools-mcp@0.6.0 typecheck
+> tsc --noEmit
+
+
+
+=== lint.log ===
+(命令成功；无诊断输出)
+
+
+=== build.log ===
+
+> weixin-devtools-mcp@0.6.0 build
+> tsc && node scripts/generate-tool-descriptors.mjs && node scripts/set-executable.mjs
+
+✓ 已生成 31 个工具描述符
+设置构建文件权限...
+
+✓ server.js 已设置可执行权限
+
+✓ 所有文件处理完成
+
+
+=== test-types.log ===
+
+> weixin-devtools-mcp@0.6.0 typecheck:test
+> tsc -p tsconfig.test.json --noEmit
+
+
+
+=== all-test-types.log ===
+
+Checked 128 TypeScript files, including integration tests; 0 diagnostics.
+
+
+=== cleanup.log ===
+{"consoleActive":false,"consolePatches":0,"networkActive":false,"networkPatches":0,"temporaryFiles":0}
+
+
+=== unit.log 摘要 ===
+ Test Files  42 passed (42)
+      Tests  488 passed (488)
+   Start at  10:22:44
+   Duration  5.54s (transform 2.82s, setup 0ms, collect 6.63s, tests 20.74s, environment 5ms, prepare 5.83s)
+
+
+=== integration.log 摘要 ===
+ Test Files  2 failed | 9 passed (11)
+      Tests  2 failed | 58 passed (60)
+   Start at  10:17:33
+   Duration  188.01s (transform 3.06s, setup 1ms, collect 8.41s, tests 167.13s, environment 2ms, prepare 5.19s)
+
+
+=== stdio-final.log 摘要 ===
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:25:49
+   Duration  45.75s (transform 24ms, setup 0ms, collect 19ms, tests 45.52s, environment 0ms, prepare 61ms)
+
+
+=== 最新 stdio 场景统计 ===
+{"通过": 63, "环境阻塞": 16}
+
+
+=== 本轮关键场景 ===
+[
+  {
+    "tool": "evaluate_script",
+    "scenario": "named async function declaration",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "get_value",
+    "scenario": "live stale ref after navigation",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "debug_connection_flow",
+    "scenario": "actual diagnostic execution reuses the connected business session",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "reconnect_devtools",
+    "scenario": "explicit target replaces browserUrl request and resets omitted defaults",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "discover real DevTools",
+    "status": "通过",
+    "evidence": "assertions passed"
+  },
+  {
+    "tool": "connect_devtools",
+    "scenario": "independent fixture project launch",
+    "status": "环境阻塞",
+    "evidence": "connect_devtools: CONNECTION_FAILED 所有连接尝试均失败: 运行时就绪超时: SDKVersion 缺失，运行时未就绪\n\nfalse !== true\n"
+  }
+]
+
+=== 端口清理 ===
+9431: lsof -nP -iTCP:9431 -sTCP:LISTEN 无输出，退出码 1（无监听）。
+9420: 保留用户原有 DevTools。
+测试客户端均执行 disconnect 并关闭 transport；本地 HTTP 服务在 finally 关闭。

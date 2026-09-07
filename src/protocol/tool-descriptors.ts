@@ -17,8 +17,10 @@ import {
   TOOL_ERROR_CODES,
 } from '../tools/result.js';
 
+import { canonicalJson } from './canonical-json.js';
+
 const OUTPUT_SCHEMA_ID_PREFIX = 'urn:weixin-devtools-mcp:schema:output:sha256:';
-const DATA_SCHEMA_BASE_PATH = ['#', 'properties', 'data', 'anyOf', '0'];
+const DATA_SCHEMA_BASE_PATH = ['#', 'oneOf', '0', 'properties', 'data'];
 const ANY_JSON_SCHEMA: JsonSchema7AnyType = {};
 const JSON_OBJECT_SCHEMA: JsonSchema7RecordType = {
   type: 'object',
@@ -30,27 +32,6 @@ type McpOutputSchema = NonNullable<Tool['outputSchema']>;
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(item => canonicalJson(item)).join(',')}]`;
-  }
-
-  if (isJsonObject(value)) {
-    const entries = Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
-    return `{${entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
-      .join(',')}}`;
-  }
-
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) {
-    throw new TypeError('JSON Schema 包含不可序列化的值');
-  }
-  return serialized;
 }
 
 function requireObjectRoot(schema: ReturnType<typeof zodToJsonSchema>, toolName: string): McpInputSchema {
@@ -114,45 +95,68 @@ export function buildCompactOutputSchema(tool: Pick<ToolDefinition, 'dataSchema'
   });
   delete dataSchema.$schema;
 
+  const failureErrorSchema = {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      retryable: { type: 'boolean' },
+      // 深层字段由运行时严格判别联合校验，避免 31 个工具重复携带同一份大型诊断 schema。
+      diagnostic: {
+        anyOf: [
+          { type: 'object' },
+          { type: 'null' },
+        ],
+      },
+    },
+    required: ['message', 'retryable', 'diagnostic'],
+    additionalProperties: false,
+  };
+
   return withContentAddressedSchemaId({
     type: 'object',
     properties: {
-      schemaVersion: { type: 'string', const: '1.0' },
+      schemaVersion: { type: 'string', const: '2.0' },
       ok: { type: 'boolean' },
       code: { type: 'string', enum: ['OK', ...TOOL_ERROR_CODES] },
-      data: { anyOf: [dataSchema, { type: 'null' }] },
-      error: {
-        type: 'object',
-        properties: {
-          message: { type: 'string' },
-          retryable: { type: 'boolean' },
-          details: { type: 'object' },
-        },
-        required: ['message', 'retryable'],
-        additionalProperties: false,
-      },
-      observation: { type: 'object' },
+      data: ANY_JSON_SCHEMA,
+      error: ANY_JSON_SCHEMA,
+      partialData: ANY_JSON_SCHEMA,
+      observation: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       warnings: { type: 'array', items: { type: 'object' } },
       nextActions: { type: 'array', items: { type: 'object' } },
-      meta: {
-        type: 'object',
-        properties: {
-          requestId: { type: 'string' },
-          tool: { type: 'string' },
-          durationMs: { type: 'number', minimum: 0 },
-        },
-        required: ['requestId', 'tool', 'durationMs'],
-        additionalProperties: false,
-      },
+      meta: { type: 'object' },
     },
     required: [
       'schemaVersion',
       'ok',
       'code',
       'data',
+      'error',
+      'partialData',
+      'observation',
       'warnings',
       'nextActions',
       'meta',
+    ],
+    oneOf: [
+      {
+        properties: {
+          ok: { const: true },
+          code: { const: 'OK' },
+          data: dataSchema,
+          error: { type: 'null' },
+          partialData: { type: 'null' },
+        },
+      },
+      {
+        properties: {
+          ok: { const: false },
+          code: { not: { const: 'OK' } },
+          data: { type: 'null' },
+          error: failureErrorSchema,
+          partialData: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+        },
+      },
     ],
     additionalProperties: false,
   });

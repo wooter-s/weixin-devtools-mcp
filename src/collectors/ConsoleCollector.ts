@@ -5,9 +5,14 @@
  * 继承自通用 Collector 基类
  */
 
+import { randomUUID } from 'node:crypto';
+
+import type { MiniProgram } from 'miniprogram-automator';
+
 import type { ConsoleMessageType } from '../tools/ToolDefinition.js';
 
 import { Collector, type CollectorOptions, type QueryOptions } from './Collector.js';
+import { consoleRuntime, type RuntimeConsoleEvent } from './console-runtime.js';
 
 /**
  * Console 消息接口
@@ -74,6 +79,89 @@ export function isExceptionMessage(entry: ConsoleEntry): entry is ExceptionMessa
  * Console 消息收集器
  */
 export class ConsoleCollector extends Collector<ConsoleEntry> {
+  #miniProgram: MiniProgram | null = null;
+  #owner = randomUUID();
+  #lastSequence = 0;
+  #remoteQueue: Promise<void> = Promise.resolve();
+
+  #enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const task = this.#remoteQueue.then(operation);
+    this.#remoteQueue = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  startRemoteMonitoring(miniProgram: MiniProgram, signal?: AbortSignal): Promise<void> {
+    return this.#enqueue(async () => {
+      if (this.#miniProgram === miniProgram && this.isMonitoring()) return;
+      await this.#stopRemoteMonitoring();
+      const owner = randomUUID();
+      this.#miniProgram = miniProgram;
+      this.#owner = owner;
+      this.#lastSequence = 0;
+      try {
+        signal?.throwIfAborted();
+        await miniProgram.evaluate(consoleRuntime, { action: 'install', owner });
+        signal?.throwIfAborted();
+        if (this.#owner !== owner || this.#miniProgram !== miniProgram) throw new Error('Console监听会话已切换');
+        this.startMonitoring();
+      } catch (error) {
+        await miniProgram.evaluate(consoleRuntime, { action: 'stop', owner });
+        if (this.#owner === owner) this.stopMonitoring();
+        throw error;
+      }
+    });
+  }
+
+  #ingest(events: RuntimeConsoleEvent[]): number {
+    let count = 0;
+    for (const event of events || []) {
+      if (event.sequence <= this.#lastSequence) continue;
+      this.addMessage(event);
+      this.#lastSequence = event.sequence;
+      count++;
+    }
+    return count;
+  }
+
+  syncFromRemote(): Promise<number> {
+    return this.#enqueue(async () => {
+      if (!this.#miniProgram || !this.isMonitoring()) return 0;
+      const miniProgram = this.#miniProgram;
+      const owner = this.#owner;
+      const events = await miniProgram.evaluate(consoleRuntime, {
+        action: 'read', owner, after: this.#lastSequence,
+      });
+      return this.#owner === owner && this.#miniProgram === miniProgram ? this.#ingest(events) : 0;
+    });
+  }
+
+  stopRemoteMonitoring(): Promise<void> {
+    return this.#enqueue(() => this.#stopRemoteMonitoring());
+  }
+
+  async #stopRemoteMonitoring(): Promise<void> {
+    const miniProgram = this.#miniProgram;
+    const owner = this.#owner;
+    try {
+      if (!miniProgram) return;
+      const events = await miniProgram.evaluate(consoleRuntime, {
+        action: 'stop', owner, after: this.#lastSequence,
+      });
+      if (this.#owner !== owner || this.#miniProgram !== miniProgram) return;
+      this.#ingest(events);
+      this.#miniProgram = null;
+    } finally {
+      if (this.#owner === owner) this.stopMonitoring();
+    }
+  }
+
+  /** Invalidate late reads/restores after the transport has been released. */
+  abandonRemoteMonitoring(): void {
+    this.#owner = randomUUID();
+    this.#miniProgram = null;
+    this.stopMonitoring();
+  }
+
   constructor(options?: CollectorOptions) {
     super(options);
   }

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,14 +97,12 @@ describe('MCP Resources Tests', () => {
 
     it('读取不存在的资源应该返回错误', async () => {
       await withClient(async (client) => {
-        try {
-          await client.readResource({
-            uri: 'weixin://nonexistent/resource'
-          });
-          expect.fail('应该抛出错误');
-        } catch (error) {
-          expect(error).toBeDefined();
-        }
+        const read = client.readResource({
+          uri: 'weixin://nonexistent/resource'
+        });
+
+        await expect(read).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+        await expect(read).rejects.toThrow('未知的资源: weixin://nonexistent/resource');
       });
     });
   });

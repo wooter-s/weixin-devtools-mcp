@@ -2,21 +2,21 @@
 
 > 强大的微信小程序自动化测试解决方案，基于 Model Context Protocol 实现
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 
 ## ✨ 核心特性
 
 - 🚀 **31个专业工具（full profile）** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
-- 🤖 **智能连接** - 支持 auto/launch/connect 三种模式，自动端口检测，无需手动配置
-- 🔍 **自动网络监控** - 连接时自动启动，实时拦截 wx.request/uploadFile/downloadFile
+- 🤖 **可预期连接** - 通过 `project` / `wsEndpoint` / `browserUrl` / `discover` 判别式 target 明确指定连接对象
+- 🔍 **按需监控** - 仅在启用 `console` / `network` 类别时启动对应监听，避免默认连接引入额外开销
 - ✅ **完整断言体系** - 3类断言工具（`assert_text`/`assert_attribute`/`assert_state`），覆盖文本、属性与状态校验
 - 📸 **丰富调试能力** - 支持页面截图、Console 监听、网络请求追踪、诊断工具
 - 🏗️ **模块化架构** - 基于 chrome-devtools-mcp 架构模式，易于扩展和维护
 - 🧩 **可配置工具暴露** - 默认 core profile（20个工具），支持按类别开启 Console/Network/Debug
-- 🧭 **可靠元素定位** - 使用 opaque `ref` 与显式 `target`，通过页面 revision 和指纹校验拒绝误操作
-- 📐 **结构化协议结果** - 全部工具公开 `outputSchema`，成功与失败都返回版本化 `structuredContent`
+- 🧭 **可靠元素定位** - action target 仅接受 opaque `ref` 或逐级进入自定义组件的 locator `path`
+- 📐 **结构化结果** - 全部工具统一返回 `schemaVersion: "2.0"` 的成功/失败 envelope，字段形状稳定
 - ⚡ **轻量协议启动** - `tools/list` 使用构建期静态 descriptor，工具实现和 automator 在首次有效调用时懒加载
 - 🧪 **全面测试覆盖** - 单元测试 + 集成测试，测试覆盖率 >80%
 
@@ -119,6 +119,10 @@ npm run build
 - `--enable-categories=console,network,debug`
 - `--disable-categories=console,network,debug,core`
 
+Profile 也决定运行时监听策略：只有启用 `console` 类别才会启动 Console 监听，只有启用 `network` 类别才会启动 Network 监听。连接状态中会分别报告 `disabled` / `idle` / `running` / `stopped` / `failed`，方便区分“未启用”与“启动失败”。
+
+网络监听通过运行时包装透传 `request` / `uploadFile` / `downloadFile` 的任务对象和回调，同时覆盖当前应用 `$xfetch.requestAdapter` 缓存原始 request 的情况。日志监听使用独立有界队列，在列表、详情、诊断读取及导航分段、停止、断开前同步；相同文本的多次输出分别保留。停止或断开会恢复本次拥有的包装，不覆盖第三方后续修改。详见 [监听回归说明](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/monitoring-regression.md)。
+
 `npx` 配置示例（启用 full）：
 
 ```json
@@ -148,16 +152,129 @@ npm run build
 }
 ```
 
+## 🔄 当前公开接口与版本说明
+
+软件版本由 `package.json.version` 管理，当前为 `0.7.0`；工具返回数据的格式版本由 `schemaVersion` 标识，当前为 `"2.0"`。两者独立演进，`schemaVersion` 也不是 MCP 标准协议的版本号。
+
+本次 0.7.0 接口变更不兼容旧的扁平连接参数、直接 `selector` / `id` target 和 `schemaVersion: "1.0"` 结果格式；不提供旧接口兼容模式。工具数量保持不变：`minimal` 10 个、`core` 20 个、`full` 31 个。
+
+### 统一结果 envelope
+
+每次调用的 `structuredContent` 都含有以下必填字段：
+
+```typescript
+// 成功：MCP isError === false
+{
+  schemaVersion: "2.0",
+  ok: true,
+  code: "OK",
+  data: { /* 工具数据 */ },
+  error: null,
+  partialData: null,
+  observation: null,
+  warnings: [],
+  nextActions: [],
+  meta: { /* 调用元数据 */ }
+}
+
+// 失败：MCP isError === true
+{
+  schemaVersion: "2.0",
+  ok: false,
+  code: "ELEMENT_NOT_FOUND",
+  data: null,
+  error: {
+    message: "未找到元素",
+    retryable: false,
+    diagnostic: null
+  },
+  partialData: null,
+  observation: null,
+  warnings: [],
+  nextActions: [],
+  meta: { /* 调用元数据 */ }
+}
+```
+
+失败时文本内容以 `[CODE] message` 开头；处理器在失败前已产生的结构化上下文会保留在 `partialData`，已提交的页面观察会保留在 `observation`。
+
+### 连接 target
+
+`connect_devtools` 使用判别式 `target`：
+
+```typescript
+// 指定项目：固定尝试 launch → connect，两次使用同一个规范化真实路径
+connect_devtools({
+  target: {
+    kind: "project",
+    projectPath: "/path/to/miniprogram",
+    cliPath: "/optional/path/to/cli",
+    autoPort: 9420,
+    autoAudits: false
+  },
+  timeoutMs: 45000,
+  healthCheck: true
+})
+
+connect_devtools({ target: { kind: "wsEndpoint", endpoint: "ws://127.0.0.1:9420" } })
+connect_devtools({ target: { kind: "browserUrl", url: "http://127.0.0.1:9222" } })
+connect_devtools({ target: { kind: "discover" } })
+```
+
+`project` target 不会回退到端口发现，因此不会误连其他已运行项目。`wsEndpoint`、`browserUrl` 和 `discover` 各只执行一个逻辑尝试。`timeoutMs` 是整个连接过程的总预算，默认 45 秒；返回值会列出完整 attempt history。无参数调用 `reconnect_devtools` 会复用上一次成功连接的完整规格；一旦传入新 target，它就是完整替换而非字段合并。
+
+启动会等待自动化协议、`SDKVersion` 与当前页面就绪；超时指出具体阶段。自动发现通过 WebSocket 协议识别端点，不依赖 HTTP 根路径响应。项目启动失败只清理本次拥有的项目与连接。
+
+`evaluate_script` 支持命名 async 函数。导航或注册表淘汰的 ref 在当前连接的最近 10,000 条失效记录内返回 `STALE_ELEMENT`；未知、超出记录上限或断开前的 ref 返回 `ELEMENT_NOT_FOUND`。同页稳定地址仍可重新定位。最新修复与环境限制见 [检测问题回归报告](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/detected-issues-regression.md)。
+
+
+### 元素 target 与作用域 path
+
+所有元素 action 的 `target` 只有两种形状：
+
+```typescript
+type ElementTarget =
+  | { kind: "ref"; ref: string }
+  | { kind: "path"; path: LocatorSegment[] }
+
+type LocatorSegment =
+  | { kind: "testId"; value: string }
+  | { kind: "id"; value: string }
+  | { kind: "dataId"; value: string }
+  | { kind: "selector"; value: string; index?: number }
+  | { kind: "text"; value: string; exact?: boolean; tagName?: string; index?: number }
+```
+
+`path` 从 Page 开始查询，非末段必须唯一命中可查询的自定义组件，下一段才在该组件作用域内查询。单层页面元素也使用只有一段的 `path`。
+
+### 页面快照作用域图
+
+`get_page_snapshot` 返回规范化作用域图：`scopes` 保存 Page 和自定义组件作用域，`edges` 保存跨作用域边界；不会伪造普通 DOM 的全局父子树。采集按广度优先执行，可通过 `budget` 限制工作量：
+
+```typescript
+get_page_snapshot({
+  format: "json",
+  budget: {
+    maxDepth: 4,
+    maxExpandedScopes: 64,
+    maxElements: 1000
+  }
+})
+```
+
+上述三项也是默认值。结果包含 `rootScopeId`、`complete`、`budget`、`usage`、`scopes`、`edges`、`format`、`tokenEstimate` 和 `filePath`；作用域状态会明确标记完整、部分、截断或不可用。
+
 ## 🚀 快速开始
 
 ### 第一个自动化测试
 
 ```typescript
-// 1. 连接微信开发者工具（auto 策略）
+// 1. 连接指定小程序项目
 connect_devtools({
-  projectPath: "/path/to/your/miniprogram",
-  strategy: "auto",
-  verbose: true
+  target: {
+    kind: "project",
+    projectPath: "/path/to/your/miniprogram"
+  }
 })
 
 // 2. 查找登录按钮，得到当前快照内的 opaque ref
@@ -170,13 +287,19 @@ click({ target: { kind: "ref", ref: result.data.elements[0].ref } })
 
 // 4. 等待登录成功
 wait_for({
-  target: { kind: "selector", value: ".welcome-message" },
+  target: {
+    kind: "path",
+    path: [{ kind: "selector", value: ".welcome-message" }]
+  },
   timeout: 5000
 })
 
 // 5. 验证登录成功
 assert_text({
-  target: { kind: "selector", value: ".welcome-message" },
+  target: {
+    kind: "path",
+    path: [{ kind: "selector", value: ".welcome-message" }]
+  },
   text: "欢迎回来"
 })
 
@@ -207,33 +330,35 @@ screenshot({ path: "/tmp/login-success.png" })
 ```typescript
 // 连接到开发者工具
 connect_devtools({
-  projectPath: "/path/to/miniprogram",
-  strategy: "auto"
+  target: { kind: "project", projectPath: "/path/to/miniprogram" }
 })
 
 // 输入用户名
 input_text({
-  target: { kind: "id", value: "username" },
+  target: { kind: "path", path: [{ kind: "id", value: "username" }] },
   mode: "replace",
   text: "testuser"
 })
 
 // 输入密码
 input_text({
-  target: { kind: "id", value: "password" },
+  target: { kind: "path", path: [{ kind: "id", value: "password" }] },
   mode: "replace",
   text: "password123"
 })
 
 // 点击登录按钮
-click({ target: { kind: "selector", value: "button.login" } })
+click({ target: { kind: "path", path: [{ kind: "selector", value: "button.login" }] } })
 
 // 等待登录成功
-wait_for({ target: { kind: "selector", value: ".welcome" }, timeout: 5000 })
+wait_for({
+  target: { kind: "path", path: [{ kind: "selector", value: ".welcome" }] },
+  timeout: 5000
+})
 
 // 验证欢迎消息
 assert_text({
-  target: { kind: "selector", value: ".welcome" },
+  target: { kind: "path", path: [{ kind: "selector", value: ".welcome" }] },
   textContains: "欢迎"
 })
 
@@ -246,27 +371,48 @@ get_network_request({ reqid: requests[0].reqid })
 
 ```typescript
 // 填写文本输入框
-input_text({ target: { kind: "id", value: "name" }, mode: "replace", text: "张三" })
-input_text({ uid: "input#email", text: "zhangsan@example.com" })
+input_text({
+  target: { kind: "path", path: [{ kind: "id", value: "name" }] },
+  mode: "replace",
+  text: "张三"
+})
 
 // 选择下拉框
-set_form_control({ target: { kind: "id", value: "city" }, value: "北京" })
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "city" }] },
+  value: "北京"
+})
 
 // 切换开关
-set_form_control({ target: { kind: "id", value: "agree" }, value: true })
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "agree" }] },
+  value: true
+})
 
 // 设置滑块
-set_form_control({ target: { kind: "id", value: "age" }, value: 25 })
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "age" }] },
+  value: 25
+})
 
 // 提交表单
-click({ target: { kind: "selector", value: "button.submit" } })
+click({ target: { kind: "path", path: [{ kind: "selector", value: "button.submit" }] } })
 
 // 等待提交成功
-wait_for({ target: { kind: "selector", value: ".success-toast" }, timeout: 3000 })
+wait_for({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  timeout: 3000
+})
 
 // 验证提交结果
-assert_state({ target: { kind: "selector", value: ".success-toast" }, visible: true })
-assert_text({ target: { kind: "selector", value: ".success-toast" }, text: "提交成功" })
+assert_state({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  visible: true
+})
+assert_text({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  text: "提交成功"
+})
 
 // 截图保存结果
 screenshot({ path: "/tmp/form-submit-success.png" })
@@ -331,7 +477,7 @@ npm run inspector
 
 - 诊断类脚本统一放在 `scripts/diagnostics/`
 - 手工验证脚本主要放在 `tests/manual/` 的能力子目录下，另有少量根级脚本用于通用验证
-- 集成测试夹具项目固定为 `playground/wx/`，请勿移动或删除目录
+- 业务集成工程为 `playground/wx/`；独立控件、tabBar 夹具为 `tests/fixtures/monitoring-app/`，请勿移动或删除目录
 - 夹具关键文件白名单：`playground/wx/app.json`、`playground/wx/project.config.json`
 
 ### 添加新工具
@@ -382,7 +528,7 @@ npm run bench:protocol:compare -- \
 
 若只保留了完整历史 JSONL，可用 `--recorded-baseline-dir` 只重跑 optimized。恢复模式不会伪造证据：跨时段延迟只作 indicative 对比；旧结果缺 benchmark harness 指纹时整体结论为 `PARTIAL/INDICATIVE`，不能充当发布门禁。`coldListMs` 是服务器已启动后客户端重建 schema 校验器的耗时；真正的进程冷启动使用 `protocol_stdio_lifecycle.lifecycleMs`。
 
-当前实现的最终观察结果：完整 `tools/list` 响应体从 126,879 B 降至 80,173 B，client-validator-cold p95 从 137.5788 ms 降至 16.6693 ms；stdio `lifecycleMs` p95 从 601.2568 ms 降至 103.2416 ms，五个协议切片成功率均为 100%。这些 before/after 数字来自 legacy recorded baseline recovery，证据等级是 indicative/non-authoritative，严格结论仍为 `PARTIAL`，详见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
+历史 0.6.0 基准的观察结果：完整 `tools/list` 响应体从 126,879 B 降至 80,173 B，client-validator-cold p95 从 137.5788 ms 降至 16.6693 ms；stdio `lifecycleMs` p95 从 601.2568 ms 降至 103.2416 ms，五个协议切片成功率均为 100%。这些 before/after 数字来自 legacy recorded baseline recovery，证据等级是 indicative/non-authoritative，严格结论仍为 `PARTIAL`，详见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
 
 同页异步重建的错误动作和 revision/ref 一致性提供独立合成回归：
 
@@ -415,7 +561,7 @@ npm run bench:runtime:synthetic -- \
   --optimized-entry build/MiniProgramContext.js
 ```
 
-当前版本的完整结果与权威边界见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
+历史 0.6.0 基准的完整结果与权威边界见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
 
 涉及连接、页面、元素、Console 和 Network 的完整真实基准，需要先预检，再通过对应版本的 adapter 执行：
 

@@ -2,8 +2,7 @@ import type { MiniProgram, Page } from 'miniprogram-automator';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'degraded';
 
-export type ConnectionStrategy =
-  | 'auto'
+export type ConnectionAttemptMethod =
   | 'launch'
   | 'connect'
   | 'wsEndpoint'
@@ -28,41 +27,68 @@ export interface ConnectionErrorSummary {
   timestamp: string;
 }
 
-export interface ConnectionRequest {
-  strategy?: ConnectionStrategy;
-  projectPath?: string;
+export interface ProjectConnectionTarget {
+  kind: 'project';
+  projectPath: string;
   cliPath?: string;
   autoPort?: number;
-  browserUrl?: string;
-  wsEndpoint?: string;
-  wsHeaders?: Record<string, string>;
-  timeoutMs?: number;
-  fallback?: ConnectionStrategy[];
-  healthCheck?: boolean;
-  verbose?: boolean;
   autoAudits?: boolean;
-  autoDiscover?: boolean;
+}
+
+export interface WsEndpointConnectionTarget {
+  kind: 'wsEndpoint';
+  endpoint: string;
+}
+
+export interface BrowserUrlConnectionTarget {
+  kind: 'browserUrl';
+  url: string;
+}
+
+export interface DiscoverConnectionTarget {
+  kind: 'discover';
+}
+
+export type ConnectionTarget =
+  | ProjectConnectionTarget
+  | WsEndpointConnectionTarget
+  | BrowserUrlConnectionTarget
+  | DiscoverConnectionTarget;
+
+export interface ConnectionRequest {
+  target: ConnectionTarget;
+  timeoutMs?: number;
+  healthCheck?: boolean;
 }
 
 export interface ResolvedConnectionRequest {
-  strategy: ConnectionStrategy;
-  projectPath?: string;
-  cliPath?: string;
-  autoPort?: number;
-  browserUrl?: string;
-  wsEndpoint?: string;
-  wsHeaders?: Record<string, string>;
+  target: ConnectionTarget;
   timeoutMs: number;
-  fallback: ConnectionStrategy[];
   healthCheck: boolean;
-  verbose: boolean;
-  autoAudits?: boolean;
-  autoDiscover: boolean;
 }
+
+export type ConnectionAttemptSpec =
+  | { method: 'launch'; target: ProjectConnectionTarget }
+  | { method: 'connect'; target: ProjectConnectionTarget }
+  | { method: 'wsEndpoint'; target: WsEndpointConnectionTarget }
+  | { method: 'browserUrl'; target: BrowserUrlConnectionTarget }
+  | { method: 'discover'; target: DiscoverConnectionTarget };
 
 export interface ResolvedConnectionPlan {
   request: ResolvedConnectionRequest;
-  attempts: ConnectionStrategy[];
+  attempts: ConnectionAttemptSpec[];
+}
+
+export type ConnectionAttemptOutcome = 'connected' | 'failed';
+
+export interface ConnectionAttemptRecord {
+  index: number;
+  method: ConnectionAttemptMethod;
+  startedAt: string;
+  durationMs: number;
+  outcome: ConnectionAttemptOutcome;
+  endpoint: string | null;
+  error: ConnectionErrorSummary | null;
 }
 
 export type HealthCheckName = 'transport' | 'session' | 'page';
@@ -84,7 +110,7 @@ export interface ConnectionHealth {
 }
 
 export interface AdapterConnectionResult {
-  strategyUsed: ConnectionStrategy;
+  strategyUsed: ConnectionAttemptMethod;
   endpoint: string | null;
   miniProgram: MiniProgram;
   currentPage: Page;
@@ -102,13 +128,14 @@ export interface ConnectionConnectResult extends AdapterConnectionResult {
   health: ConnectionHealth;
   status: Extract<ConnectionState, 'connected' | 'degraded'>;
   timing: ConnectionTiming;
+  attempts: ConnectionAttemptRecord[];
   warnings: string[];
 }
 
 export interface ConnectionStatusSnapshot {
   connectionId: string | null;
   state: ConnectionState;
-  strategyUsed: ConnectionStrategy | null;
+  strategyUsed: ConnectionAttemptMethod | null;
   endpoint: string | null;
   connected: boolean;
   hasCurrentPage: boolean;

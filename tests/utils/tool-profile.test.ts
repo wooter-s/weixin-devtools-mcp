@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseToolProfileConfig,
   resolveToolsByProfile,
+  summarizeToolProfile,
 } from '../../src/config/tool-profile.js';
 import { ToolCategory } from '../../src/tools/ToolDefinition.js';
 import { allTools } from '../../src/tools/tools.js';
@@ -31,6 +32,28 @@ describe('tool-profile 配置测试', () => {
     expect(config.profile).toBe('full');
     expect(config.enabledCategories.has(ToolCategory.DEBUG)).toBe(true);
     expect(config.enabledCategories.has(ToolCategory.NETWORK)).toBe(false);
+  });
+
+  it('无效 profile 和类别应直接拒绝，而不是静默回退', () => {
+    expect(() => parseToolProfileConfig({ argv: ['--tools-profile=ful'], env: {} }))
+      .toThrow('无效的 tools profile');
+    expect(() => parseToolProfileConfig({ argv: ['--enable-categories=netwrok'], env: {} }))
+      .toThrow('无效的 enable-categories');
+  });
+
+  it.each([
+    'tools-profile',
+    'enable-categories',
+    'disable-categories',
+  ])('CLI 选项 --%s 显式缺值时应直接拒绝', optionName => {
+    expect(() => parseToolProfileConfig({ argv: [`--${optionName}`], env: {} }))
+      .toThrow(`缺少 --${optionName} 的值`);
+    expect(() => parseToolProfileConfig({ argv: [`--${optionName}=`], env: {} }))
+      .toThrow(`缺少 --${optionName} 的值`);
+    expect(() => parseToolProfileConfig({
+      argv: [`--${optionName}`, '--unrelated-option=value'],
+      env: {},
+    })).toThrow(`缺少 --${optionName} 的值`);
   });
 
   it('full profile 应返回全部 31 个工具', () => {
@@ -68,5 +91,27 @@ describe('tool-profile 配置测试', () => {
     expect(toolNames).toContain('diagnose_connection');
     expect(toolNames).toContain('check_environment');
     expect(toolNames).toContain('debug_page_elements');
+  });
+
+  it('应从最终启用结果生成 profile 摘要', () => {
+    const config = {
+      profile: 'core' as const,
+      enabledCategories: new Set([ToolCategory.NETWORK]),
+      disabledCategories: new Set<ToolCategory>(),
+    };
+    const activation = resolveToolsByProfile(allTools, config);
+    const summary = summarizeToolProfile(
+      config,
+      activation,
+      tool => tool.annotations?.category ?? ToolCategory.CORE,
+    );
+
+    expect(summary).toMatchObject({
+      profile: 'core',
+      activeToolCount: 24,
+      disabledToolCount: 7,
+      activeCategories: [ToolCategory.CORE, ToolCategory.NETWORK],
+      inactiveCategories: [ToolCategory.CONSOLE, ToolCategory.DEBUG],
+    });
   });
 });

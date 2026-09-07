@@ -25,6 +25,7 @@ export const diagnoseConnectionTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
+    await context.syncConsoleFromRemote?.();
     const { projectPath, verbose } = request.params;
 
     response.appendResponseLine('🔍 开始诊断微信开发者工具连接问题...');
@@ -147,8 +148,10 @@ export const diagnoseConnectionTool = defineTool({
       response.appendResponseLine(JSON.stringify({
         name: 'connect_devtools',
         arguments: {
-          projectPath: resolvedPath,
-          strategy: 'auto',
+          target: {
+            kind: 'project',
+            projectPath: resolvedPath,
+          },
         },
       }));
     } else {
@@ -181,6 +184,7 @@ export const debugPageElementsTool = defineTool({
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
+    await context.syncConsoleFromRemote?.();
     const { testAllStrategies, customSelector } = request.params;
 
     if (!context.currentPage) {
@@ -212,20 +216,6 @@ export const debugPageElementsTool = defineTool({
         response.appendResponseLine('');
         response.appendResponseLine('🧪 测试各种选择器策略');
 
-        // 策略1: 通用选择器
-        response.appendResponseLine('');
-        response.appendResponseLine('策略1: 通用选择器');
-        const universalSelectors = ['*', 'body *', 'html *'];
-
-        for (const selector of universalSelectors) {
-          try {
-            const elements = await page.$$(selector);
-            response.appendResponseLine(`   ${selector}: ${elements.length} 个元素`);
-          } catch (error) {
-            response.appendResponseLine(`   ${selector}: 失败 - ${extractErrorMessage(error)}`);
-          }
-        }
-
         // 策略2: 小程序组件选择器
         response.appendResponseLine('');
         response.appendResponseLine('策略2: 小程序组件选择器');
@@ -253,7 +243,7 @@ export const debugPageElementsTool = defineTool({
         // 策略3: 层级选择器
         response.appendResponseLine('');
         response.appendResponseLine('策略3: 层级选择器');
-        const hierarchySelectors = ['page > *', 'page view', 'page text', 'page button'];
+        const hierarchySelectors = ['view > text', 'view text', 'view button'];
 
         for (const selector of hierarchySelectors) {
           try {
@@ -267,7 +257,7 @@ export const debugPageElementsTool = defineTool({
         // 策略4: 属性选择器
         response.appendResponseLine('');
         response.appendResponseLine('策略4: 属性选择器');
-        const attributeSelectors = ['[class]', '[id]', '[data-*]', '[wx:*]'];
+        const attributeSelectors = ['[class]', '[id]', '[data-testid]', '[data-id]'];
 
         for (const selector of attributeSelectors) {
           try {
@@ -391,21 +381,20 @@ export const checkEnvironmentTool = defineTool({
  */
 export const debugConnectionFlowTool = defineTool({
   name: 'debug_connection_flow',
-  description: '实时追踪和调试连接流程的详细步骤，记录每个阶段的状态和耗时',
+  description: '实时追踪 project 目标连接流程的详细步骤，记录每个阶段的状态和耗时',
   schema: z.object({
     projectPath: z.string().describe('小程序项目的绝对路径'),
-    mode: z.enum(['auto', 'launch', 'connect']).optional().default('auto')
-      .describe('连接模式: auto(智能), launch(传统), connect(两阶段)'),
     dryRun: z.boolean().optional().default(false).describe('仅模拟连接流程,不实际连接'),
     captureSnapshot: z.boolean().optional().default(true).describe('捕获每个步骤的状态快照'),
     verbose: z.boolean().optional().default(true).describe('显示详细的调试信息'),
-  }),
+  }).strict(),
   annotations: {
     category: ToolCategory.DEBUG,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { projectPath, mode, dryRun, captureSnapshot, verbose } = request.params;
+    await context.syncConsoleFromRemote?.();
+    const { projectPath, dryRun, captureSnapshot, verbose } = request.params;
 
     // 调试追踪器
     const debugTracker = {
@@ -498,10 +487,10 @@ export const debugConnectionFlowTool = defineTool({
         response.appendResponseLine(`      解析: ${resolvedPath}`);
       }
 
-      trackStep('参数验证', 'success', { resolvedPath, mode });
+      trackStep('参数验证', 'success', { resolvedPath, targetKind: 'project' });
       response.appendResponseLine(`   ${ResponseFormatter.success('参数验证通过')}`);
       response.appendResponseLine(`      项目路径: ${resolvedPath}`);
-      response.appendResponseLine(`      连接模式: ${mode}`);
+      response.appendResponseLine('      连接目标: project（固定 launch → connect）');
       response.appendResponseLine('');
       captureStateSnapshot('参数验证完成');
 
@@ -575,17 +564,18 @@ export const debugConnectionFlowTool = defineTool({
         response.appendResponseLine('⚙️ 步骤4: 准备连接参数');
 
         const connectOptions = {
-          strategy: mode,
-          projectPath: resolvedPath,
+          target: {
+            kind: 'project' as const,
+            projectPath: resolvedPath,
+          },
           timeoutMs: 45000,
           healthCheck: true,
-          verbose,
         };
 
         trackStep('准备连接参数', 'success', connectOptions);
         response.appendResponseLine(`   ${ResponseFormatter.success('连接参数准备完成')}`);
         if (verbose) {
-          response.appendResponseLine(`      连接策略: ${connectOptions.strategy}`);
+          response.appendResponseLine('      连接计划: launch → connect');
           response.appendResponseLine(`      超时设置: ${connectOptions.timeoutMs}ms`);
           response.appendResponseLine(`      健康检查: ${connectOptions.healthCheck ? '启用' : '禁用'}`);
         }
@@ -596,7 +586,7 @@ export const debugConnectionFlowTool = defineTool({
         trackStep('执行连接', 'running');
         response.appendResponseLine('🚀 步骤5: 执行连接');
         response.appendResponseLine(`   ⏳ 正在连接到微信开发者工具...`);
-        response.appendResponseLine(`      模式: ${mode}`);
+        response.appendResponseLine('      目标: project');
 
         const connectionStartTime = Date.now();
 
@@ -612,8 +602,6 @@ export const debugConnectionFlowTool = defineTool({
             status: result.status,
           });
 
-          const miniProgramResult = result.miniProgram;
-
           response.appendResponseLine(`   ${ResponseFormatter.success(`连接成功 (耗时: ${connectionDuration}ms)`)}`);
           response.appendResponseLine(`      当前页面: ${result.pagePath}`);
           response.appendResponseLine(`      连接策略: ${result.strategyUsed}`);
@@ -624,22 +612,17 @@ export const debugConnectionFlowTool = defineTool({
           response.appendResponseLine('');
           captureStateSnapshot('连接执行完成');
 
-          // 步骤6: 初始化监听器（必须在连接成功的 try 块内执行）
-          trackStep('初始化监听器', 'running');
-          response.appendResponseLine('📡 步骤6: 初始化监听器');
-
-          // Console监听
-          try {
-            miniProgramResult.removeAllListeners('console');
-            miniProgramResult.removeAllListeners('exception');
-            context.consoleStorage.isMonitoring = true;
-            context.consoleStorage.startTime = new Date().toISOString();
-
-            response.appendResponseLine(`   ${ResponseFormatter.success('Console监听器已启动')}`);
-          } catch (error) {
-            trackStep('初始化监听器', 'warning', undefined, 'Console监听器启动失败');
-            response.appendResponseLine(`   ${ResponseFormatter.warning(`Console监听器启动失败: ${extractErrorMessage(error)}`)}`);
-          }
+          // 监听器只允许由 MiniProgramContext 的连接生命周期启动；调试工具仅观察。
+          trackStep('检查监听器', 'running');
+          response.appendResponseLine('📡 步骤6: 检查监听器');
+          const runtimeStatus = context.getRuntimeStatus?.();
+          response.appendResponseLine(
+            `   Console: ${runtimeStatus?.monitoring.console.state ?? 'unknown'}`
+          );
+          response.appendResponseLine(
+            `   Network: ${runtimeStatus?.monitoring.network.state ?? 'unknown'}`
+          );
+          trackStep('检查监听器', 'success');
 
         } catch (error) {
           const connectionDuration = Date.now() - connectionStartTime;
@@ -652,23 +635,8 @@ export const debugConnectionFlowTool = defineTool({
           throw error;
         }
 
-        // 网络监听
-        try {
-          if (!context.networkStorage.isMonitoring) {
-            context.networkStorage.isMonitoring = true;
-            context.networkStorage.startTime = new Date().toISOString();
-            response.appendResponseLine(`   ${ResponseFormatter.success('网络监听器已启动')}`);
-          } else {
-            response.appendResponseLine(`   ℹ️ 网络监听器已在运行中`);
-          }
-        } catch (error) {
-          trackStep('初始化监听器', 'warning', undefined, '网络监听器启动失败');
-          response.appendResponseLine(`   ${ResponseFormatter.warning(`网络监听器启动失败: ${extractErrorMessage(error)}`)}`);
-        }
-
-        trackStep('初始化监听器', 'success');
         response.appendResponseLine('');
-        captureStateSnapshot('监听器初始化完成');
+        captureStateSnapshot('监听器检查完成');
       }
 
       // 生成调试报告

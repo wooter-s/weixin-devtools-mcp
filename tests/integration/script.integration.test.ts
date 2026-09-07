@@ -5,9 +5,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import { MiniProgramContext } from '../../src/MiniProgramContext.js';
+import type { MiniProgramContext } from '../../src/MiniProgramContext.js';
 
-import { IntegrationHarness } from './helpers/integration-harness.js';
+import { createIntegrationContext, IntegrationHarness } from './helpers/integration-harness.js';
 import {
   handleIntegrationUnavailable,
   shouldRunIntegrationTests,
@@ -33,10 +33,9 @@ describe.skipIf(!shouldRun)('Script Integration Tests', () => {
       return;
     }
 
-    context = MiniProgramContext.create();
+    context = createIntegrationContext();
     try {
       const connected = await harness.connect(context, {
-        strategy: 'auto',
         timeoutMs: 60_000,
         healthCheck: false,
       });

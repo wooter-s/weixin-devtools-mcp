@@ -36,29 +36,33 @@ describe('find_elements', () => {
     expect(
       findElementsTool.schema.safeParse({ locator: { kind: 'selector', value: 'button' } }).success
     ).toBe(true);
-    expect(findElementsTool.schema.safeParse({ locator: refTarget }).success).toBe(true);
+    expect(findElementsTool.schema.safeParse({ locator: refTarget }).success).toBe(false);
     expect(findElementsTool.schema.safeParse({ selector: 'button' }).success).toBe(false);
   });
 
-  it('ref 查询通过统一 target 解析器返回结构化结果', async () => {
-    const element = {
+  it('Page 根 locator 查询返回结构化结果', async () => {
+    const element = createMockElement({
       tagName: 'button',
       text: vi.fn(async () => '提交'),
-    };
+    });
+    const page = createMockPage({ $$: vi.fn(async () => [element]) });
     const context = createMockContext({
-      currentPage: createMockPage(),
-      getElementByTarget: vi.fn(async () => element as unknown as Element),
+      currentPage: page,
       getPageRevision: vi.fn(() => 5),
     });
     const response = createMockResponse();
 
-    await findElementsTool.handler({ params: { locator: refTarget } }, response, context);
+    await findElementsTool.handler(
+      { params: { locator: { kind: 'selector', value: 'button' } } },
+      response,
+      context
+    );
 
-    expect(context.getElementByTarget).toHaveBeenCalledWith(refTarget);
+    expect(page.$$).toHaveBeenCalledWith('button');
     expect(response.getStructuredContent()).toMatchObject({
       pageRevision: 5,
       count: 1,
-      elements: [{ ref: 'ref_result', tagName: 'button', text: '提交' }],
+      elements: [{ ref: expect.any(String), tagName: 'button', text: '提交' }],
     });
   });
 
@@ -174,6 +178,11 @@ describe('wait_for target API', () => {
   it('schema 接受 delay 或 target，并移除 selector', () => {
     expect(waitForTool.schema.safeParse({ delay: 10 }).success).toBe(true);
     expect(waitForTool.schema.safeParse({ target: refTarget }).success).toBe(true);
+    expect(
+      waitForTool.schema.safeParse({
+        target: { kind: 'selector', value: 'button' },
+      }).success
+    ).toBe(false);
     const legacyResult = waitForTool.schema.safeParse({ selector: 'button' });
     expect(legacyResult.success).toBe(true);
     if (legacyResult.success) {
@@ -279,7 +288,10 @@ describe('wait_for target API', () => {
       waitForTool.handler(
         {
           params: {
-            target: { kind: 'selector', value: '.repeated' },
+            target: {
+              kind: 'path',
+              path: [{ kind: 'selector', value: '.repeated' }],
+            },
             timeout: 100,
             disappear: true,
           },

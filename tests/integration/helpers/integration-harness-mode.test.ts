@@ -21,6 +21,7 @@ import { IntegrationHarness } from './integration-harness.js';
 
 describe('IntegrationHarness strict preflight', () => {
   beforeEach(() => {
+    vi.stubEnv('INTEGRATION_WS_ENDPOINT', '');
     vi.mocked(checkIntegrationTestEnvironment).mockResolvedValue({
       isReady: false,
       issues: ['CLI 不存在'],
@@ -60,4 +61,14 @@ describe('IntegrationHarness strict preflight', () => {
       reason: '环境检查失败: CLI 不存在',
     });
   });
+  it('显式端点无需 project 启动环境，null 可强制验证 project 路径', async () => {
+    vi.stubEnv('RUN_INTEGRATION_TESTS', 'true');
+    vi.stubEnv('INTEGRATION_STRICT', 'true');
+    vi.stubEnv('INTEGRATION_WS_ENDPOINT', 'ws://127.0.0.1:9420');
+    const existing = new IntegrationHarness();
+    await expect(existing.prepare()).resolves.toMatchObject({ ready: true });
+    const launch = new IntegrationHarness({ wsEndpoint: null });
+    await expect(launch.prepare()).rejects.toThrow('CLI 不存在');
+  });
+
 });

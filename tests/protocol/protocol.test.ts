@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect } from 'vitest';
 
 // 通过 createRequire 读取 package.json，避免 import attributes（Node16 module 不支持）
@@ -21,6 +22,54 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 interface WithClientOptions {
   serverArgs?: string[];
   env?: Record<string, string>;
+}
+
+const V2_ENVELOPE_KEYS = [
+  'code',
+  'data',
+  'error',
+  'meta',
+  'nextActions',
+  'observation',
+  'ok',
+  'partialData',
+  'schemaVersion',
+  'warnings',
+].sort();
+
+function expectV2Envelope(
+  structuredContent: unknown,
+  expected: { ok: boolean; code: string },
+): Record<string, unknown> {
+  expect(structuredContent).toBeDefined();
+  const envelope = structuredContent as Record<string, unknown>;
+
+  expect(Object.keys(envelope).sort()).toEqual(V2_ENVELOPE_KEYS);
+  expect(envelope).toMatchObject({
+    schemaVersion: '2.0',
+    ok: expected.ok,
+    code: expected.code,
+    warnings: expect.any(Array),
+    nextActions: expect.any(Array),
+    meta: expect.objectContaining({
+      requestId: expect.any(String),
+      tool: expect.any(String),
+      durationMs: expect.any(Number),
+    }),
+  });
+
+  if (expected.ok) {
+    expect(envelope.error).toBeNull();
+    expect(envelope.partialData).toBeNull();
+  } else {
+    expect(envelope.data).toBeNull();
+    expect(envelope.error).toEqual(expect.objectContaining({
+      message: expect.any(String),
+      retryable: expect.any(Boolean),
+    }));
+  }
+
+  return envelope;
 }
 
 function getSpawnEnv(overrides?: Record<string, string>): Record<string, string> {
@@ -92,6 +141,53 @@ describe('MCP Protocol Tests', () => {
         expect(serverInfo).toBeDefined();
         expect(serverInfo?.name).toBe(packageJson.name);
         expect(serverInfo?.version).toBe(packageJson.version);
+      });
+    });
+  });
+
+  describe('Resources', () => {
+    it('断开连接时仍应列出页面资源，但读取页面快照应返回协议错误', async () => {
+      await withClient(async (client) => {
+        const { resources } = await client.listResources();
+        expect(resources.map(resource => resource.uri)).toEqual([
+          'weixin://connection/status',
+          'weixin://page/snapshot',
+        ]);
+
+        const read = client.readResource({
+          uri: 'weixin://page/snapshot',
+        });
+        await expect(read).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+        await expect(read).rejects.toThrow('获取页面快照失败: 请先连接微信开发者工具');
+      });
+    });
+
+    it('连接状态资源应该返回 V2 profile 与监听状态', async () => {
+      await withClient(async (client) => {
+        const result = await client.readResource({
+          uri: 'weixin://connection/status',
+        });
+        const content = result.contents[0] as { text?: string };
+        expect(content.text).toBeDefined();
+
+        const status = JSON.parse(content.text ?? '{}') as Record<string, unknown>;
+        expect(status).toMatchObject({
+          schemaVersion: '2.0',
+          state: 'disconnected',
+          connected: false,
+          method: null,
+          toolProfile: {
+            profile: 'core',
+            activeToolCount: 20,
+            disabledToolCount: 11,
+            activeCategories: ['core'],
+            inactiveCategories: ['console', 'network', 'debug'],
+          },
+          monitoring: {
+            console: { enabled: false, state: 'disabled' },
+            network: { enabled: false, state: 'disabled' },
+          },
+        });
       });
     });
   });
@@ -177,7 +273,7 @@ describe('MCP Protocol Tests', () => {
   });
 
   describe('Tool Schema Validation', () => {
-    it('connect_devtools 应该有正确的 schema', async () => {
+    it('connect_devtools 应该只暴露 V2 判别式 target schema', async () => {
       await withClient(async (client) => {
         const { tools } = await client.listTools();
         const tool = tools.find(t => t.name === 'connect_devtools');
@@ -188,14 +284,57 @@ describe('MCP Protocol Tests', () => {
         }
 
         const props = tool.inputSchema.properties ?? {};
-        expect(props.strategy).toBeDefined();
-        expect(props.projectPath).toBeDefined();
+        expect(props.target).toBeDefined();
+        expect(props.strategy).toBeUndefined();
+        expect(props.projectPath).toBeUndefined();
 
         const required = tool.inputSchema.required || [];
-        expect(required).not.toContain('projectPath');
+        expect(required).toEqual(['target']);
 
-        const strategySchema = props.strategy as { enum?: unknown };
-        expect(strategySchema.enum).toEqual(['auto', 'launch', 'connect', 'wsEndpoint', 'browserUrl', 'discover']);
+        const targetSchema = props.target as {
+          anyOf?: Array<{
+            properties?: Record<string, { const?: string }>;
+            required?: string[];
+            additionalProperties?: boolean;
+          }>;
+        };
+        const variants = targetSchema.anyOf ?? [];
+        expect(variants.map(variant => variant.properties?.kind?.const)).toEqual([
+          'project',
+          'wsEndpoint',
+          'browserUrl',
+          'discover',
+        ]);
+        expect(variants.map(variant => variant.required)).toEqual([
+          ['kind', 'projectPath'],
+          ['kind', 'endpoint'],
+          ['kind', 'url'],
+          ['kind'],
+        ]);
+        expect(variants.every(variant => variant.additionalProperties === false)).toBe(true);
+      });
+    });
+
+    it('元素动作 target 应该只接受 ref 或 locator path', async () => {
+      await withClient(async (client) => {
+        const { tools } = await client.listTools();
+        const tool = tools.find(t => t.name === 'click');
+
+        expect(tool).toBeDefined();
+        if (!tool) {
+          throw new Error('click tool not found');
+        }
+
+        const targetSchema = tool.inputSchema.properties?.target as {
+          anyOf?: Array<{ properties?: Record<string, { const?: string }> }>;
+        };
+        const kinds = (targetSchema.anyOf ?? [])
+          .map(variant => variant.properties?.kind?.const);
+
+        expect(kinds).toEqual(['ref', 'path']);
+        expect(kinds).not.toContain('selector');
+        expect(kinds).not.toContain('id');
+        expect(kinds).not.toContain('text');
       });
     });
 
@@ -283,6 +422,7 @@ describe('MCP Protocol Tests', () => {
         });
 
         expect(result.isError).toBe(true);
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'TOOL_DISABLED' });
 
         const content = result.content as Array<{ type: string; text?: string }>;
         const text = content
@@ -294,17 +434,66 @@ describe('MCP Protocol Tests', () => {
       });
     });
 
-    it('调用需要连接的工具应该返回错误', async () => {
+    it('get_connection_status 应该返回统一成功信封以及 profile/monitoring', async () => {
       await withClient(async (client) => {
-        try {
-          await client.callTool({
-            name: 'get_page_snapshot',
-            arguments: {}
-          });
-          expect.fail('应该抛出错误');
-        } catch (error) {
-          expect(error).toBeDefined();
-        }
+        const result = await client.callTool({
+          name: 'get_connection_status',
+          arguments: { refreshHealth: false },
+        });
+
+        expect(result.isError).toBe(false);
+        const envelope = expectV2Envelope(result.structuredContent, { ok: true, code: 'OK' });
+        expect(envelope.data).toMatchObject({
+          state: 'disconnected',
+          connected: false,
+          method: null,
+          toolProfile: {
+            profile: 'core',
+            activeToolCount: 20,
+            disabledToolCount: 11,
+            activeCategories: ['core'],
+            inactiveCategories: ['console', 'network', 'debug'],
+          },
+          monitoring: {
+            console: {
+              enabled: false,
+              state: 'disabled',
+              startedAt: null,
+              lastError: null,
+            },
+            network: {
+              enabled: false,
+              state: 'disabled',
+              startedAt: null,
+              lastError: null,
+            },
+          },
+        });
+      });
+    });
+
+    it('handler 失败时应该保留原始文本、isError 和统一失败信封', async () => {
+      await withClient(async (client) => {
+        const result = await client.callTool({
+          name: 'get_page_snapshot',
+          arguments: {},
+        });
+
+        expect(result.isError).toBe(true);
+        const envelope = expectV2Envelope(result.structuredContent, {
+          ok: false,
+          code: 'NOT_CONNECTED',
+        });
+        expect(envelope.partialData).toBeNull();
+        expect(envelope.observation).toBeNull();
+
+        const text = (result.content as Array<{ type: string; text?: string }>)
+          .filter(item => item.type === 'text')
+          .map(item => item.text ?? '')
+          .join('\n');
+        expect(text).toContain('[NOT_CONNECTED] 请先连接微信开发者工具');
+        expect(text).toContain('❌ 获取页面快照失败: 请先连接微信开发者工具');
+        expect(text).toContain('💡 检查连接状态、root target 和快照预算后重试');
       });
     });
   });
@@ -319,45 +508,36 @@ describe('MCP Protocol Tests', () => {
         });
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({
-          schemaVersion: '1.0',
-          ok: false,
-          code: 'NOT_CONNECTED',
-          data: null,
-        });
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'NOT_CONNECTED' });
       });
     });
 
     it('调用不存在的工具应该返回错误', async () => {
       await withClient(async (client) => {
-        try {
-          await client.callTool({
-            name: 'non_existent_tool',
-            arguments: {}
-          });
-          expect.fail('应该抛出错误');
-        } catch (error) {
-          expect(error).toBeDefined();
-        }
+        const result = await client.callTool({
+          name: 'non_existent_tool',
+          arguments: {},
+        });
+
+        expect(result.isError).toBe(true);
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'UNKNOWN_TOOL' });
       });
     });
 
-    it('传递错误的参数类型应该返回错误', async () => {
+    it('V2 连接 target 参数类型错误应该返回 INVALID_ARGUMENT', async () => {
       await withClient(async (client) => {
         const result = await client.callTool({
           name: 'connect_devtools',
           arguments: {
-            projectPath: 123,
-            strategy: 'auto'
-          }
+            target: {
+              kind: 'project',
+              projectPath: 123,
+            },
+          },
         });
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({
-          ok: false,
-          code: 'INVALID_ARGUMENT',
-          data: null,
-        });
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'INVALID_ARGUMENT' });
       });
     });
 
@@ -366,31 +546,28 @@ describe('MCP Protocol Tests', () => {
         const result = await client.callTool({
           name: 'input_text',
           arguments: {
-            target: { kind: 'selector', value: 'input' },
+            target: {
+              kind: 'path',
+              path: [{ kind: 'selector', value: 'input' }],
+            },
             mode: 'replace',
           },
         });
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({
-          ok: false,
-          code: 'INVALID_ARGUMENT',
-          data: null,
-        });
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'INVALID_ARGUMENT' });
       });
     });
 
     it('缺少必需参数应该返回错误', async () => {
       await withClient(async (client) => {
-        try {
-          await client.callTool({
-            name: 'click',
-            arguments: {}
-          });
-          expect.fail('应该抛出错误');
-        } catch (error) {
-          expect(error).toBeDefined();
-        }
+        const result = await client.callTool({
+          name: 'click',
+          arguments: {},
+        });
+
+        expect(result.isError).toBe(true);
+        expectV2Envelope(result.structuredContent, { ok: false, code: 'INVALID_ARGUMENT' });
       });
     });
   });

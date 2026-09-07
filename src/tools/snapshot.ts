@@ -1,159 +1,239 @@
-/**
- * 页面快照工具
- * 负责获取页面元素快照和 opaque ref 映射
- */
+/** 页面作用域图快照工具。 */
 
-import { writeFile } from 'fs/promises';
+import { writeFile } from 'node:fs/promises';
 
 import { z } from 'zod';
 
+import type { PageStateCommit } from '../core/types.js';
+import { elementTargetSchema } from '../elements/index.js';
 import {
   formatSnapshot,
-  estimateTokens,
   type SnapshotFormat,
 } from '../formatters/snapshotFormatter.js';
 
 import {
   defineTool,
-  ToolCategory,
   ensureCurrentPage,
-  extractErrorMessage,
   ResponseFormatter,
+  ToolCategory,
 } from './ToolDefinition.js';
 import { jsonValueSchema, toJsonValue } from './result.js';
 
-/**
- * 获取页面快照
- */
+const snapshotBudgetSchema = z
+  .object({
+    maxDepth: z.number().int().min(0).max(8).optional().default(4),
+    maxExpandedScopes: z.number().int().min(1).max(256).optional().default(64),
+    maxElements: z.number().int().min(1).max(5000).optional().default(1000),
+  })
+  .strict();
+
+const snapshotScopeSchema = z.object({
+  scopeId: z.string(),
+  kind: z.enum(['page', 'custom-component']),
+  rootRef: z.string().nullable(),
+  depth: z.number().int().nonnegative(),
+  status: z.enum(['complete', 'partial', 'truncated', 'unavailable']),
+  reason: z
+    .enum([
+      'MAX_DEPTH',
+      'MAX_SCOPES',
+      'MAX_ELEMENTS',
+      'QUERY_UNSUPPORTED',
+      'QUERY_FAILED',
+      'ELEMENT_READ_FAILED',
+    ])
+    .nullable(),
+  elements: z.array(jsonValueSchema),
+});
+
+const snapshotDataSchema = z.object({
+  snapshotId: z.string(),
+  pageRevision: z.number().int().nonnegative(),
+  path: z.string(),
+  rootScopeId: z.string(),
+  complete: z.boolean(),
+  budget: z.object({
+    maxDepth: z.number().int().min(0).max(8),
+    maxExpandedScopes: z.number().int().min(1).max(256),
+    maxElements: z.number().int().min(1).max(5000),
+  }),
+  usage: z.object({
+    expandedScopes: z.number().int().nonnegative(),
+    elements: z.number().int().nonnegative(),
+  }),
+  scopes: z.array(snapshotScopeSchema),
+  edges: z.array(
+    z.object({
+      fromScopeId: z.string(),
+      boundaryRef: z.string(),
+      toScopeId: z.string(),
+    })
+  ),
+  format: z.enum(['compact', 'minimal', 'json']),
+  tokenEstimate: z.number().int().nonnegative(),
+  filePath: z.string().nullable(),
+});
+
 export const getPageSnapshotTool = defineTool({
   name: 'get_page_snapshot',
-  description: `获取当前页面的元素快照，包含所有元素的 opaque ref
-
-输出格式选项：
-- compact: 紧凑文本格式（推荐，token使用减少60-70%）
-- minimal: 最小化格式（只包含ref、tagName、text）
-- json: 完整结构化JSON格式
-
-示例：
-compact格式：
-  ref=ref_a1b2_0 view "Welcome" pos=[0,64] size=[375x667]
-  ref=ref_a1b2_1 button "Submit" pos=[100,400] size=[175x44]
-
-minimal格式：
-  ref_a1b2_0 view "Welcome"
-  ref_a1b2_1 button "Submit"`,
-  schema: z.object({
-    format: z.enum(['compact', 'minimal', 'json']).default('compact').describe('输出格式'),
-    includePosition: z
-      .boolean()
-      .default(true)
-      .describe('是否包含位置信息（compact和json格式有效）'),
-    includeAttributes: z
-      .boolean()
-      .default(false)
-      .describe('是否包含属性信息（compact和json格式有效）'),
-    maxElements: z.number().positive().optional().describe('限制返回的元素数量'),
-    filePath: z.string().optional().describe('保存快照到文件的路径（可选）'),
-  }),
-  outputSchema: z.object({
-    snapshotId: z.string(),
-    pageRevision: z.number().int().nonnegative(),
-    path: z.string(),
-    count: z.number().int().nonnegative(),
-    format: z.enum(['compact', 'minimal', 'json']),
-    tokenEstimate: z.number().int().nonnegative(),
-    filePath: z.string().nullable(),
-    elements: z.array(jsonValueSchema),
-  }),
+  description: '获取 Page 或自定义组件的 V2 scopes/edges 作用域图（默认预算 4/64/1000）',
+  schema: z
+    .object({
+      root: elementTargetSchema.optional().describe('可选；必须唯一定位到自定义组件'),
+      budget: snapshotBudgetSchema.optional().default({}),
+      format: z.enum(['compact', 'minimal', 'json']).optional().default('compact'),
+      includePosition: z.boolean().optional().default(true),
+      includeAttributes: z.boolean().optional().default(false),
+      filePath: z.string().min(1).optional().describe('可选的 UTF-8 快照输出路径'),
+    })
+    .strict(),
+  outputSchema: snapshotDataSchema,
   annotations: {
     category: ToolCategory.CORE,
     audience: ['developers'],
   },
   handler: async (request, response, context) => {
-    const { format, includePosition, includeAttributes, maxElements, filePath } = request.params;
+    const {
+      root,
+      budget = { maxDepth: 4, maxExpandedScopes: 64, maxElements: 1000 },
+      format = 'compact',
+      includePosition = true,
+      includeAttributes = false,
+      filePath,
+    } = request.params;
 
     try {
-      if (!context.synchronizePageState) {
-        await context.syncCurrentPage();
-        ensureCurrentPage(context);
+      let commit: PageStateCommit;
+      if (context.capturePageSnapshot) {
+        commit = await context.capturePageSnapshot({
+          root,
+          budget,
+          includePosition,
+          includeAttributes,
+        });
+      } else {
+        if (!context.synchronizePageState) {
+          await context.syncCurrentPage();
+          ensureCurrentPage(context);
+        }
+        const synchronized = context.synchronizePageState
+          ? await context.synchronizePageState({ mode: 'snapshot', forceRefresh: true })
+          : undefined;
+        if (synchronized) {
+          commit = synchronized;
+        } else {
+          const cached = await context.getPageSnapshotCached?.({ forceRefresh: true });
+          if (!cached) throw new Error('当前上下文不支持页面快照接口');
+          commit = {
+            snapshot: cached.snapshot,
+            elementMap: cached.elementMap,
+            pagePath: cached.snapshot.path,
+            pageRevision: cached.snapshot.pageRevision,
+            domChanged: false,
+            previousSnapshot: null,
+          };
+        }
       }
-      const commit = context.synchronizePageState
-        ? await context.synchronizePageState({ mode: 'snapshot', forceRefresh: true })
-        : undefined;
-      const getSnapshot = context.getPageSnapshotCached?.bind(context);
-      if (!commit && !getSnapshot) {
-        throw new Error('当前上下文不支持页面快照缓存接口');
-      }
 
-      // 生产上下文原子提交 snapshot/ref；旧式测试上下文保留缓存接口兼容。
-      const { snapshot } = commit ?? (await getSnapshot!({ forceRefresh: true }));
-      if (commit) response.setPageStateCommit?.(commit);
-
-      // 应用 maxElements 限制（用于显示和token估算）
-      const limitedElements = maxElements
-        ? snapshot.elements.slice(0, maxElements)
-        : snapshot.elements;
-      const limitedSnapshot = { ...snapshot, elements: limitedElements };
-
-      // 格式化快照（使用限制后的快照）
-      const formattedSnapshot = formatSnapshot(limitedSnapshot, {
+      response.setPageStateCommit?.(commit);
+      const sourceSnapshot = commit.snapshot;
+      const fallbackElements = sourceSnapshot.elements.slice(0, budget.maxElements);
+      const snapshot = sourceSnapshot.scopes
+        ? sourceSnapshot
+        : {
+            ...sourceSnapshot,
+            elements: fallbackElements,
+            rootScopeId: 'scope_0',
+            complete: fallbackElements.length === sourceSnapshot.elements.length,
+            budget,
+            usage: { expandedScopes: 1, elements: fallbackElements.length },
+            scopes: [
+              {
+                scopeId: 'scope_0',
+                kind: 'page' as const,
+                depth: 0,
+                status:
+                  fallbackElements.length === sourceSnapshot.elements.length
+                    ? ('complete' as const)
+                    : ('truncated' as const),
+                ...(fallbackElements.length === sourceSnapshot.elements.length
+                  ? {}
+                  : { reason: 'MAX_ELEMENTS' as const }),
+                elements: fallbackElements,
+              },
+            ],
+            edges: [],
+          };
+      const rootScopeId = snapshot.rootScopeId ?? 'scope_0';
+      const sourceScopes = snapshot.scopes ?? [
+        {
+          scopeId: rootScopeId,
+          kind: 'page' as const,
+          depth: 0,
+          status: 'complete' as const,
+          elements: snapshot.elements,
+        },
+      ];
+      const scopes = sourceScopes.map((scope) => ({
+        scopeId: scope.scopeId,
+        kind: scope.kind,
+        rootRef: scope.rootRef ?? null,
+        depth: scope.depth,
+        status: scope.status,
+        reason: scope.reason ?? null,
+        elements: toJsonValue(scope.elements),
+      }));
+      const edges = snapshot.edges ?? [];
+      const actualBudget = snapshot.budget ?? budget;
+      const usage = snapshot.usage ?? {
+        expandedScopes: sourceScopes.length,
+        elements: sourceScopes.reduce((sum, scope) => sum + scope.elements.length, 0),
+      };
+      const complete =
+        snapshot.complete ?? sourceScopes.every((scope) => scope.status === 'complete');
+      const formattedSnapshot = formatSnapshot(snapshot, {
         format: format as SnapshotFormat,
         includePosition,
         includeAttributes,
-        maxElements,
       });
+      const tokenEstimate = Math.ceil(formattedSnapshot.length / 4);
 
-      // 如果指定了文件路径，保存到文件
       if (filePath) {
-        await writeFile(filePath, formattedSnapshot, 'utf-8');
+        await writeFile(filePath, formattedSnapshot, 'utf8');
         response.appendResponseLine(ResponseFormatter.success(`页面快照已保存到: ${filePath}`));
-      }
-
-      // Token估算信息（仅在非文件输出模式下显示）
-      if (!filePath) {
-        const estimates = estimateTokens(limitedSnapshot);
-        response.appendResponseLine(`📊 页面快照获取成功`);
-        response.appendResponseLine(`   页面路径: ${snapshot.path}`);
-        response.appendResponseLine(`   元素数量: ${limitedElements.length}`);
-        response.appendResponseLine(`   输出格式: ${format}`);
-        response.appendResponseLine(`   Token估算: ~${estimates[format as SnapshotFormat]} tokens`);
-        response.appendResponseLine('');
-
-        // 输出格式化的快照
-        response.appendResponseLine(formattedSnapshot);
-        response.mergeStructuredContent({
-          snapshotId: snapshot.snapshotId,
-          pageRevision: snapshot.pageRevision,
-          path: snapshot.path,
-          count: limitedElements.length,
-          format,
-          tokenEstimate: estimates[format as SnapshotFormat],
-          filePath: null,
-          elements: toJsonValue(limitedElements),
-        });
       } else {
-        response.appendResponseLine(`   页面路径: ${snapshot.path}`);
-        response.appendResponseLine(`   元素数量: ${limitedElements.length}`);
-        response.appendResponseLine(`   输出格式: ${format}`);
-        const estimates = estimateTokens(limitedSnapshot);
-        response.mergeStructuredContent({
-          snapshotId: snapshot.snapshotId,
-          pageRevision: snapshot.pageRevision,
-          path: snapshot.path,
-          count: limitedElements.length,
-          format,
-          tokenEstimate: estimates[format as SnapshotFormat],
-          filePath,
-          elements: toJsonValue(limitedElements),
-        });
+        response.appendResponseLine('📊 页面快照获取成功（V2 作用域图）');
+        response.appendResponseLine(`页面: ${snapshot.path}`);
+        response.appendResponseLine(`作用域: ${sourceScopes.length}`);
+        response.appendResponseLine(`元素数量: ${usage.elements}`);
+        response.appendResponseLine(`输出格式: ${format}`);
+        response.appendResponseLine(`完整: ${complete ? '是' : '否'}`);
+        response.appendResponseLine(`Token估算: ~${tokenEstimate} tokens`);
+        response.appendResponseLine('');
+        response.appendResponseLine(formattedSnapshot);
       }
 
-      // 设置包含快照信息
+      response.mergeStructuredContent({
+        snapshotId: snapshot.snapshotId,
+        pageRevision: snapshot.pageRevision,
+        path: snapshot.path,
+        rootScopeId,
+        complete,
+        budget: toJsonValue(actualBudget),
+        usage: toJsonValue(usage),
+        scopes: toJsonValue(scopes),
+        edges: toJsonValue(edges),
+        format,
+        tokenEstimate,
+        filePath: filePath ?? null,
+      });
       response.setIncludeSnapshot(true);
     } catch (error) {
-      const errorMessage = extractErrorMessage(error);
-      response.appendResponseLine(ResponseFormatter.error(`获取页面快照失败: ${errorMessage}`));
-      response.appendResponseLine(ResponseFormatter.hint('使用 get_page_snapshot 刷新页面快照'));
+      const message = error instanceof Error ? error.message : String(error);
+      response.appendResponseLine(ResponseFormatter.error(`获取页面快照失败: ${message}`));
+      response.appendResponseLine(
+        ResponseFormatter.hint('检查连接状态、root target 和快照预算后重试')
+      );
       throw error;
     }
   },

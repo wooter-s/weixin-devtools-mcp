@@ -7,35 +7,46 @@ import {
 import type { EnhancedConnectOptions } from '../core/types.js';
 import { loadMiniProgramAutomator } from '../utils/automator-loader.js';
 
+import { waitForAutomation } from './automation-probe.js';
 import {
+  ConnectionError,
   EnvironmentConnectionError,
   ProtocolConnectionError,
   SessionConflictConnectionError,
 } from './errors.js';
+import type { ProjectStartup } from './project-startup.js';
 import type {
   AdapterConnectionResult,
-  ConnectionStrategy,
-  ResolvedConnectionRequest,
+  ConnectionAttemptMethod,
+  ConnectionAttemptSpec,
+  ProjectConnectionTarget,
 } from './types.js';
+
+export interface ConnectionStrategyExecutionOptions {
+  /** 仅允许由 MiniProgramContext 为已验证过的同一 project/port 会话提供。 */
+  trustedProjectEndpoint?: string;
+  projectStartup?: ProjectStartup;
+}
 
 function extractMessage(error: Error): string {
   return error.message.toLowerCase();
 }
 
 function buildEnhancedOptions(
-  request: ResolvedConnectionRequest,
-  mode: Extract<ConnectionStrategy, 'auto' | 'launch' | 'connect'>,
+  target: ProjectConnectionTarget,
+  mode: Extract<ConnectionAttemptMethod, 'launch' | 'connect'>,
+  timeoutMs: number,
 ): EnhancedConnectOptions {
   return {
-    projectPath: request.projectPath ?? '',
+    projectPath: target.projectPath,
     mode,
-    cliPath: request.cliPath,
-    autoPort: request.autoPort,
-    timeout: request.timeoutMs,
-    fallbackMode: request.fallback.length > 0,
+    cliPath: target.cliPath,
+    autoPort: target.autoPort,
+    timeout: timeoutMs,
+    fallbackMode: false,
     healthCheck: false,
-    verbose: request.verbose,
-    autoAudits: request.autoAudits,
+    verbose: false,
+    autoAudits: target.autoAudits,
   };
 }
 
@@ -48,52 +59,79 @@ function ensurePagePath(pagePath: string): string {
   return pagePath;
 }
 
-async function connectByEnhancedMode(
-  request: ResolvedConnectionRequest,
-  strategy: Extract<ConnectionStrategy, 'auto' | 'launch' | 'connect'>,
+async function connectProject(
+  attempt: Extract<ConnectionAttemptSpec, { method: 'launch' | 'connect' }>,
+  timeoutMs: number,
+  startup?: ProjectStartup,
 ): Promise<AdapterConnectionResult> {
   try {
-    const result = await connectDevtoolsEnhanced(buildEnhancedOptions(request, strategy));
-    const endpoint = result.processInfo?.port
-      ? `ws://127.0.0.1:${result.processInfo.port}`
-      : null;
+    const result = await connectDevtoolsEnhanced(
+      buildEnhancedOptions(attempt.target, attempt.method, timeoutMs),
+      startup,
+    );
+    const endpointPort = result.processInfo?.port ?? attempt.target.autoPort;
+    const endpoint = endpointPort ? `ws://127.0.0.1:${endpointPort}` : null;
     const pagePath = ensurePagePath(result.pagePath);
 
     return {
-      strategyUsed: strategy,
+      strategyUsed: attempt.method,
       endpoint,
       miniProgram: result.miniProgram,
       currentPage: result.currentPage,
       pagePath,
     };
   } catch (error) {
+    if (error instanceof ConnectionError) {
+      throw error;
+    }
     const baseError = error instanceof Error ? error : new Error(String(error));
     const message = extractMessage(baseError);
-    if (message.includes('session') || message.includes('already') || message.includes('conflict')) {
-      throw new SessionConflictConnectionError(baseError.message, undefined, baseError);
+    if (
+      message.includes('session') ||
+      message.includes('already') ||
+      message.includes('conflict') ||
+      message.includes('会话') ||
+      message.includes('冲突') ||
+      (message.includes('port') && message.includes('in use')) ||
+      (message.includes('端口') && message.includes('占用'))
+    ) {
+      throw new SessionConflictConnectionError(
+        baseError.message,
+        {
+          method: attempt.method,
+          projectPath: attempt.target.projectPath,
+          ...(attempt.target.autoPort ? { port: attempt.target.autoPort } : {}),
+        },
+        baseError,
+      );
     }
     throw new EnvironmentConnectionError(
       baseError.message,
-      'connect',
+      attempt.method === 'launch' ? 'startup' : 'connect',
       ['检查 projectPath、cliPath 与微信开发者工具启动状态'],
-      { strategy },
+      {
+        method: attempt.method,
+        projectPath: attempt.target.projectPath,
+      },
       baseError,
     );
   }
 }
 
 async function connectByWsEndpoint(
-  request: ResolvedConnectionRequest,
   wsEndpoint: string,
-  strategyUsed: ConnectionStrategy,
+  strategyUsed: Extract<ConnectionAttemptMethod, 'connect' | 'wsEndpoint' | 'browserUrl' | 'discover'>,
+  timeoutMs: number,
 ): Promise<AdapterConnectionResult> {
   let candidate: MiniProgram | null = null;
   try {
+    const startedAt = Date.now();
+    await waitForAutomation(wsEndpoint, Math.max(1, timeoutMs - 25));
     const automator = await loadMiniProgramAutomator();
-    candidate = await automator.connect({ wsEndpoint, timeout: request.timeoutMs });
+    candidate = await automator.connect({ wsEndpoint, timeout: Math.max(1, timeoutMs - (Date.now() - startedAt)) });
     const currentPage = await candidate.currentPage();
     if (!currentPage) {
-      throw new ProtocolConnectionError('wsEndpoint 已连接但 currentPage 不可用', [
+      throw new ProtocolConnectionError('端点已连接但 currentPage 不可用', [
         '确认目标 DevTools 实例已打开小程序项目',
       ]);
     }
@@ -114,11 +152,14 @@ async function connectByWsEndpoint(
         // 候选清理失败不覆盖原始协议错误。
       }
     }
+    if (error instanceof ConnectionError) {
+      throw error;
+    }
     const baseError = error instanceof Error ? error : new Error(String(error));
     throw new ProtocolConnectionError(
       baseError.message,
-      ['确认 wsEndpoint 可访问，且端点属于微信开发者工具自动化端口'],
-      { wsEndpoint, strategy: strategyUsed },
+      ['确认端点可访问，且端点属于微信开发者工具自动化端口'],
+      { wsEndpoint, method: strategyUsed },
       baseError,
     );
   }
@@ -175,58 +216,61 @@ async function resolveWsEndpointByBrowserUrl(
     webSocketDebuggerUrl?: string;
     websocketDebuggerUrl?: string;
   };
-
   return parseWebSocketDebuggerUrl(payload);
 }
 
 async function connectByBrowserUrl(
-  request: ResolvedConnectionRequest,
   browserUrl: string,
+  timeoutMs: number,
 ): Promise<AdapterConnectionResult> {
-  const endpoint = await resolveWsEndpointByBrowserUrl(browserUrl, request.timeoutMs);
-  return connectByWsEndpoint(request, endpoint, 'browserUrl');
+  const startedAt = Date.now();
+  const endpoint = await resolveWsEndpointByBrowserUrl(browserUrl, timeoutMs);
+  const remaining = timeoutMs - (Date.now() - startedAt);
+  if (remaining <= 0) {
+    throw new EnvironmentConnectionError('解析 browserUrl 后连接总预算已耗尽', 'connect');
+  }
+  return connectByWsEndpoint(endpoint, 'browserUrl', remaining);
 }
 
-async function connectByDiscover(
-  request: ResolvedConnectionRequest,
-): Promise<AdapterConnectionResult> {
-  const port = await detectIDEPort(request.verbose);
+async function connectByDiscover(timeoutMs: number): Promise<AdapterConnectionResult> {
+  const startedAt = Date.now();
+  const port = await detectIDEPort(false, timeoutMs);
   if (port === null) {
     throw new EnvironmentConnectionError(
       '自动发现失败：未检测到可用的微信开发者工具自动化端口',
       'startup',
       [
         '先在微信开发者工具中开启自动化能力',
-        '改用 strategy=launch 并传入 projectPath',
+        '需要指定项目时改用 project target',
       ],
     );
   }
 
-  const endpoint = `ws://127.0.0.1:${port}`;
-  return connectByWsEndpoint(request, endpoint, 'discover');
+  const remaining = timeoutMs - (Date.now() - startedAt);
+  if (remaining <= 0) {
+    throw new EnvironmentConnectionError('自动发现后连接总预算已耗尽', 'connect');
+  }
+  return connectByWsEndpoint(`ws://127.0.0.1:${port}`, 'discover', remaining);
 }
 
 export async function executeConnectionStrategy(
-  strategy: ConnectionStrategy,
-  request: ResolvedConnectionRequest,
+  attempt: ConnectionAttemptSpec,
+  timeoutMs: number,
+  options: ConnectionStrategyExecutionOptions = {},
 ): Promise<AdapterConnectionResult> {
-  if (strategy === 'auto' || strategy === 'launch' || strategy === 'connect') {
-    return connectByEnhancedMode(request, strategy);
+  switch (attempt.method) {
+    case 'launch':
+      return connectProject(attempt, timeoutMs, options.projectStartup);
+    case 'connect':
+      if (options.trustedProjectEndpoint) {
+        return connectByWsEndpoint(options.trustedProjectEndpoint, 'connect', timeoutMs);
+      }
+      return connectProject(attempt, timeoutMs, options.projectStartup);
+    case 'wsEndpoint':
+      return connectByWsEndpoint(attempt.target.endpoint, 'wsEndpoint', timeoutMs);
+    case 'browserUrl':
+      return connectByBrowserUrl(attempt.target.url, timeoutMs);
+    case 'discover':
+      return connectByDiscover(timeoutMs);
   }
-
-  if (strategy === 'wsEndpoint') {
-    if (!request.wsEndpoint) {
-      throw new EnvironmentConnectionError('wsEndpoint 策略缺少 wsEndpoint 参数', 'resolve');
-    }
-    return connectByWsEndpoint(request, request.wsEndpoint, strategy);
-  }
-
-  if (strategy === 'browserUrl') {
-    if (!request.browserUrl) {
-      throw new EnvironmentConnectionError('browserUrl 策略缺少 browserUrl 参数', 'resolve');
-    }
-    return connectByBrowserUrl(request, request.browserUrl);
-  }
-
-  return connectByDiscover(request);
 }

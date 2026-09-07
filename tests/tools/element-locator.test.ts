@@ -32,6 +32,15 @@ describe('resolveElementTarget', () => {
         pagePath: 'pages/index/index',
         element: element as any,
         fingerprint: { tagName: 'button', id: 'submit' },
+        address: {
+          segments: [{
+            locator: { kind: 'id', value: 'submit' },
+            selector: 'button[id="submit"]',
+            index: 0,
+            stability: 'stable',
+            fingerprint: { tagName: 'button', id: 'submit' },
+          }],
+        },
       },
     ]]);
     const page = { $$: vi.fn(), path: 'pages/index/index' };
@@ -155,14 +164,63 @@ describe('resolveElementTarget', () => {
     const resolved = await resolveElementTarget(
       page as any,
       new Map(),
-      { kind: 'text', value: '提交' }
+      { kind: 'path', path: [{ kind: 'text', value: '提交' }] }
     );
     expect(resolved.element).toBe(exact);
 
     await expect(resolveElementTarget(
       page as any,
       new Map(),
-      { kind: 'text', value: '提交', exact: false }
+      { kind: 'path', path: [{ kind: 'text', value: '提交', exact: false }] }
     )).rejects.toBeInstanceOf(ElementResolutionError);
+  });
+
+  it('path 逐级进入自定义组件并返回可重放地址链', async () => {
+    const submit = createElement({ attributes: { 'data-testid': 'submit' } });
+    const inner = {
+      ...createElement({ tagName: 'mcp-inner', attributes: { 'data-testid': 'inner' } }),
+      $: vi.fn(),
+      $$: vi.fn(async () => [submit]),
+      data: vi.fn(),
+      setData: vi.fn(),
+      callMethod: vi.fn(),
+    };
+    const outer = {
+      ...createElement({ tagName: 'mcp-outer', attributes: { 'data-testid': 'outer' } }),
+      $: vi.fn(),
+      $$: vi.fn(async () => [inner]),
+      data: vi.fn(),
+      setData: vi.fn(),
+      callMethod: vi.fn(),
+    };
+    const page = { $$: vi.fn(async () => [outer]) };
+
+    const result = await resolveElementTarget(page as any, new Map(), {
+      kind: 'path',
+      path: [
+        { kind: 'testId', value: 'outer' },
+        { kind: 'testId', value: 'inner' },
+        { kind: 'testId', value: 'submit' },
+      ],
+    });
+
+    expect(result.element).toBe(submit);
+    expect(result.address.segments).toHaveLength(3);
+    expect(page.$$).toHaveBeenCalledWith('[data-testid="outer"]');
+    expect(outer.$$).toHaveBeenCalledWith('[data-testid="inner"]');
+    expect(inner.$$).toHaveBeenCalledWith('[data-testid="submit"]');
+  });
+
+  it('path 的非叶子节点不是自定义组件时拒绝跨作用域查询', async () => {
+    const ordinary = createElement({ attributes: { id: 'ordinary' } });
+    const page = { $$: vi.fn(async () => [ordinary]) };
+
+    await expect(resolveElementTarget(page as any, new Map(), {
+      kind: 'path',
+      path: [
+        { kind: 'id', value: 'ordinary' },
+        { kind: 'selector', value: 'button' },
+      ],
+    })).rejects.toMatchObject({ code: 'INVALID_ELEMENT_TARGET' });
   });
 });

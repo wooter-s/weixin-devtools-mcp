@@ -3,6 +3,8 @@
  * 验证 evaluate_script 工具的功能
  */
 
+import vm from 'node:vm';
+
 import type { Element } from 'miniprogram-automator';
 import { describe, it, expect, vi } from 'vitest';
 
@@ -75,6 +77,55 @@ describe('Script Tool Unit Tests', () => {
 
   const createMockResponse = () => new SimpleToolResponse();
 
+  it('F3 executes named async declarations across the DevTools parser boundary', async () => {
+    const context = createMockContext();
+    const sandbox = vm.createContext({ calls: 0 });
+    context.miniProgram!.evaluate = vi.fn(async (fn, ...args) => {
+      // Observed DevTools limitation: a top-level named async declaration loses async.
+      const source = fn.toString().replace(/^async function\s+\w+/, 'function');
+      sandbox.args = args;
+      return vm.runInContext(`(${source})(...args)`, sandbox);
+    });
+    const response = createMockResponse();
+    await evaluateScript.handler({ params: {
+      function: 'async function test(value) { calls++; await Promise.resolve(); return value; }',
+      args: [42],
+    } }, response, context);
+    expect(response.getResponseText()).toContain('42');
+    expect(sandbox.calls).toBe(1);
+  });
+
+  it.each([
+    'function named(a, b) { calls++; return a + b; }',
+    'async function named(a, b) { calls++; await Promise.resolve(); return a + b; }; // trailing comment',
+    '(a, b) => { calls++; return a + b; }',
+    'async (a, b) => { calls++; return a + b; }',
+    'function (a, b) { calls++; return Promise.resolve(a + b); }',
+  ])('preserves remote execution and arguments: %s', async source => {
+    const context = createMockContext();
+    const sandbox = vm.createContext({ calls: 0 });
+    context.miniProgram!.evaluate = vi.fn(async (fn, ...args) => {
+      sandbox.args = args;
+      return vm.runInContext(`(${fn.toString()})(...args)`, sandbox);
+    });
+    const response = createMockResponse();
+    await evaluateScript.handler({ params: { function: source, args: [19, 23] } }, response, context);
+    expect(response.getResponseText()).toContain('42');
+    expect(sandbox.calls).toBe(1);
+  });
+
+  it.each([
+    ['() => { calls++; throw new Error("remote-error"); }', 1],
+    ['async function fail() { calls++; throw new Error("remote-error"); }', 1],
+    ['() => {', 0],
+  ])('propagates remote failures without repeating the script: %s', async (source, count) => {
+    const context = createMockContext();
+    const sandbox = vm.createContext({ calls: 0 });
+    context.miniProgram!.evaluate = vi.fn(async fn => vm.runInContext(`(${fn.toString()})()`, sandbox));
+    await expect(evaluateScript.handler({ params: { function: source as string } }, createMockResponse(), context)).rejects.toThrow('脚本执行失败');
+    expect(sandbox.calls).toBe(count);
+  });
+
   describe('工具定义', () => {
     it('应该有正确的工具名称', () => {
       expect(evaluateScript.name).toBe('evaluate_script');
@@ -101,7 +152,7 @@ describe('Script Tool Unit Tests', () => {
 
       await evaluateScript.handler({ params: { function: '() => 42' } }, response, context);
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => 42');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String));
       const responseText = response.getResponseText();
       expect(responseText).toContain('执行成功');
       expect(responseText).toContain('42');
@@ -136,7 +187,7 @@ describe('Script Tool Unit Tests', () => {
       );
 
       expect(pageStateOperationCalls).toBe(1);
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => 42');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String));
     });
 
     it('应该执行返回字符串的函数', async () => {
@@ -149,7 +200,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => "hello world"');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String));
       const responseText = response.getResponseText();
       expect(responseText).toContain('hello world');
     });
@@ -203,7 +254,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('(key) => key', 'test-key');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String), 'test-key');
       const responseText = response.getResponseText();
       expect(responseText).toContain('test-key');
     });
@@ -224,7 +275,7 @@ describe('Script Tool Unit Tests', () => {
       );
 
       expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(
-        '(key, value) => ({ key, value })',
+        expect.any(String),
         'test',
         123
       );
@@ -246,7 +297,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('(obj) => obj', complexArg);
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String), complexArg);
     });
 
     it('应该处理空参数数组', async () => {
@@ -264,7 +315,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => true');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String));
     });
 
     it('应该处理未提供参数的情况', async () => {
@@ -281,7 +332,7 @@ describe('Script Tool Unit Tests', () => {
         context
       );
 
-      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith('() => false');
+      expect(context.miniProgram!.evaluate).toHaveBeenCalledWith(expect.any(String));
     });
   });
 

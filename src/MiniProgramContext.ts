@@ -16,28 +16,47 @@ import {
   isExceptionMessage,
 } from './collectors/index.js';
 import type { ConsoleEntry, NetworkRequest } from './collectors/index.js';
+import { ToolCategory } from './config/tool-category.js';
+import type { ToolProfileSummary } from './config/tool-profile.js';
 import {
   ConnectionManager,
   ValidationConnectionError,
   createDisconnectedStatus,
   normalizeConnectionError,
+  resolveConnectionPlan,
   type ConnectionConnectResult,
+  type ConnectionHealth,
   type ConnectionRequest,
   type ConnectionStatusSnapshot,
+  type ResolvedConnectionPlan,
   type ResolvedConnectionRequest,
 } from './connection/index.js';
 import {
   createPageSnapshotDomSignature,
   getPageSnapshot,
   rebasePageSnapshotCapture,
+  type GetPageSnapshotOptions,
   type PageSnapshotCapture,
 } from './core/snapshot.js';
-import type { ElementMapInfo, PageSnapshot, PageStateCommit } from './core/types.js';
+import type {
+  ElementMapInfo,
+  PageSnapshot,
+  PageStateCommit,
+  SnapshotBudget,
+} from './core/types.js';
 import {
   ElementResolutionError,
+  isCustomComponentElement,
   resolveElementTarget,
   type ElementTarget,
+  type ResolvedElement,
 } from './elements/index.js';
+import {
+  cloneMonitoringStatus,
+  createMonitoringStatus,
+  type MonitoringStatus,
+  type RuntimeStatusMetadata,
+} from './runtime-status.js';
 import type {
   ToolContext,
   ConsoleStorage,
@@ -60,6 +79,15 @@ export interface MiniProgramContextOptions {
   verbose?: boolean;
   /** 快照缓存 TTL（毫秒），默认 5000ms */
   snapshotCacheTtl?: number;
+  /** 启动期最终工具 profile；Console/Network 监听策略只从这里派生。 */
+  toolProfile?: ToolProfileSummary;
+}
+
+interface ResolvedMiniProgramContextOptions {
+  maxNavigations: number;
+  verbose: boolean;
+  snapshotCacheTtl: number;
+  toolProfile: ToolProfileSummary;
 }
 
 /**
@@ -96,28 +124,80 @@ export interface ElementMapRegistrationExpectations {
   expectedPath?: string;
 }
 
+export interface CapturePageSnapshotOptions {
+  root?: ElementTarget;
+  budget?: Partial<SnapshotBudget>;
+  includePosition?: boolean;
+  includeAttributes?: boolean;
+}
+
 interface MiniProgramListenerState {
   consoleHandler: ((msg: { type?: string; args?: unknown[] }) => void) | null;
   exceptionHandler: ((err: { message?: string; stack?: string }) => void) | null;
 }
 
 export interface MonitoringStartResult {
-  consoleStarted: boolean;
-  networkStarted: boolean;
+  monitoring: MonitoringStatus;
   warnings: string[];
 }
 
 /**
  * 默认配置
  */
-const DEFAULT_OPTIONS: Required<MiniProgramContextOptions> = {
+const DEFAULT_TOOL_PROFILE: ToolProfileSummary = {
+  profile: 'core',
+  activeToolCount: 20,
+  disabledToolCount: 11,
+  activeCategories: [ToolCategory.CORE],
+  inactiveCategories: [ToolCategory.CONSOLE, ToolCategory.NETWORK, ToolCategory.DEBUG],
+};
+
+const DEFAULT_OPTIONS: ResolvedMiniProgramContextOptions = {
   maxNavigations: 3,
   verbose: false,
   snapshotCacheTtl: 5000,
+  toolProfile: DEFAULT_TOOL_PROFILE,
 };
 
-const RECONNECT_DELAY_MS = 300;
 const MAX_PAGE_STATE_COMMIT_ATTEMPTS = 3;
+const RUNTIME_TEARDOWN_TIMEOUT_MS = 5_000;
+
+interface TrustedProjectConnection {
+  projectPath: string;
+  autoPort: number;
+  endpoint: string;
+}
+
+async function settleWithinTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  if (timeoutMs <= 0) {
+    void operation.catch(() => undefined);
+    throw new Error(`${label}在 0ms 内未完成`);
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label}在 ${timeoutMs}ms 内未完成`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function remainingTime(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
 
 function cloneConnectionStatus(status: ConnectionStatusSnapshot): ConnectionStatusSnapshot {
   return {
@@ -132,32 +212,11 @@ function cloneConnectionStatus(status: ConnectionStatusSnapshot): ConnectionStat
   };
 }
 
-function mergeReconnectRequest(
-  previous: ResolvedConnectionRequest | null,
-  overrides: ConnectionRequest
-): ConnectionRequest {
-  if (!previous) {
-    return overrides;
-  }
-
+function cloneConnectionRequest(request: ResolvedConnectionRequest): ConnectionRequest {
   return {
-    strategy: overrides.strategy ?? previous.strategy,
-    projectPath: overrides.projectPath ?? previous.projectPath,
-    cliPath: overrides.cliPath ?? previous.cliPath,
-    autoPort: overrides.autoPort ?? previous.autoPort,
-    browserUrl: overrides.browserUrl ?? previous.browserUrl,
-    wsEndpoint: overrides.wsEndpoint ?? previous.wsEndpoint,
-    wsHeaders: overrides.wsHeaders
-      ? { ...overrides.wsHeaders }
-      : previous.wsHeaders
-        ? { ...previous.wsHeaders }
-        : undefined,
-    timeoutMs: overrides.timeoutMs ?? previous.timeoutMs,
-    fallback: overrides.fallback ? [...overrides.fallback] : [...previous.fallback],
-    healthCheck: overrides.healthCheck ?? previous.healthCheck,
-    verbose: overrides.verbose ?? previous.verbose,
-    autoAudits: overrides.autoAudits ?? previous.autoAudits,
-    autoDiscover: overrides.autoDiscover ?? previous.autoDiscover,
+    target: { ...request.target },
+    timeoutMs: request.timeoutMs,
+    healthCheck: request.healthCheck,
   };
 }
 
@@ -176,10 +235,23 @@ export class MiniProgramContext implements ToolContext {
   #miniProgram: MiniProgram | null = null;
   #currentPage: Page | null = null;
   #elementMap: Map<string, ElementMapInfo> = new Map();
-  #options: Required<MiniProgramContextOptions>;
+  #retiredRefs = new Set<string>();
+
+  #replaceElementMap(next: Map<string, ElementMapInfo>): void {
+    for (const ref of this.#elementMap.keys()) {
+      if (!next.has(ref)) this.#retiredRefs.add(ref);
+    }
+    for (const ref of next.keys()) this.#retiredRefs.delete(ref);
+    while (this.#retiredRefs.size > 10_000) {
+      this.#retiredRefs.delete(this.#retiredRefs.values().next().value!);
+    }
+    this.#elementMap = next;
+  }
+  #options: ResolvedMiniProgramContextOptions;
   #connectionManager: ConnectionManager;
   #connectionStatus: ConnectionStatusSnapshot = createDisconnectedStatus();
   #lastConnectionRequest: ResolvedConnectionRequest | null = null;
+  #trustedProjectConnection: TrustedProjectConnection | null = null;
   #lifecycleQueue: Promise<void> = Promise.resolve();
   #pageStateQueue: Promise<void> = Promise.resolve();
   #pageRevision = 0;
@@ -194,6 +266,7 @@ export class MiniProgramContext implements ToolContext {
   };
   #monitoringSession: MiniProgram | null = null;
   #monitoringStartResult: MonitoringStartResult | null = null;
+  #monitoringStatus: MonitoringStatus;
 
   // 使用 Collector 模式管理数据
   #consoleCollector: ConsoleCollector;
@@ -212,7 +285,21 @@ export class MiniProgramContext implements ToolContext {
    * 私有构造函数，使用工厂方法创建实例
    */
   private constructor(options: MiniProgramContextOptions = {}) {
-    this.#options = { ...DEFAULT_OPTIONS, ...options };
+    const toolProfile = options.toolProfile ?? DEFAULT_TOOL_PROFILE;
+    this.#options = {
+      maxNavigations: options.maxNavigations ?? DEFAULT_OPTIONS.maxNavigations,
+      verbose: options.verbose ?? DEFAULT_OPTIONS.verbose,
+      snapshotCacheTtl: options.snapshotCacheTtl ?? DEFAULT_OPTIONS.snapshotCacheTtl,
+      toolProfile: {
+        ...toolProfile,
+        activeCategories: [...toolProfile.activeCategories],
+        inactiveCategories: [...toolProfile.inactiveCategories],
+      },
+    };
+    this.#monitoringStatus = createMonitoringStatus({
+      console: toolProfile.activeCategories.includes(ToolCategory.CONSOLE),
+      network: toolProfile.activeCategories.includes(ToolCategory.NETWORK),
+    });
     this.#connectionManager = new ConnectionManager();
 
     // 初始化 Console 收集器
@@ -308,7 +395,7 @@ export class MiniProgramContext implements ToolContext {
   }
 
   bindConsoleAndExceptionListeners(handlers: {
-    consoleHandler: (msg: { type?: string; args?: unknown[] }) => void;
+    consoleHandler?: (msg: { type?: string; args?: unknown[] }) => void;
     exceptionHandler: (err: { message?: string; stack?: string }) => void;
   }): void {
     if (!this.#miniProgram) {
@@ -316,8 +403,6 @@ export class MiniProgramContext implements ToolContext {
     }
 
     this.#detachOwnedListeners();
-    this.#miniProgram.on('console', handlers.consoleHandler);
-    this.#listenerState.consoleHandler = handlers.consoleHandler;
     try {
       this.#miniProgram.on('exception', handlers.exceptionHandler);
       this.#listenerState.exceptionHandler = handlers.exceptionHandler;
@@ -337,18 +422,49 @@ export class MiniProgramContext implements ToolContext {
     }
   }
 
+  #deriveConnectedState(health: ConnectionHealth | null): Extract<ConnectionStatusSnapshot['state'], 'connected' | 'degraded'> {
+    const monitoringFailed = [
+      this.#monitoringStatus.console,
+      this.#monitoringStatus.network,
+    ].some(status => status.enabled && status.state === 'failed');
+    const healthDegraded = health !== null && health.level !== 'healthy';
+    return healthDegraded || monitoringFailed ? 'degraded' : 'connected';
+  }
+
+  #synchronizeConnectedState(): void {
+    if (!this.#connectionStatus.connected) {
+      return;
+    }
+    this.#connectionStatus = {
+      ...this.#connectionStatus,
+      state: this.#deriveConnectedState(this.#connectionStatus.health),
+    };
+  }
+
   /** 启动 Context 拥有的 Console/Network 监听；重复调用不会叠加 handler 或 wx mock。 */
   async startAutomaticMonitoring(): Promise<MonitoringStartResult> {
+    return this.#enqueueLifecycleOperation(() => this.#startAutomaticMonitoring());
+  }
+
+  async #startAutomaticMonitoring(deadline?: number): Promise<MonitoringStartResult> {
     const miniProgram = this.getMiniProgram();
+    const consoleReady = !this.#monitoringStatus.console.enabled || (
+      this.#monitoringStatus.console.state === 'running' &&
+      this.#consoleCollector.isMonitoring() &&
+      this.#listenerState.exceptionHandler !== null
+    );
+    const networkReady = !this.#monitoringStatus.network.enabled || (
+      this.#monitoringStatus.network.state === 'running' &&
+      this.#networkCollector.isMonitoring()
+    );
     if (
       this.#monitoringSession === miniProgram &&
-      this.#monitoringStartResult?.consoleStarted &&
-      this.#monitoringStartResult.networkStarted &&
-      this.#listenerState.consoleHandler &&
-      this.#listenerState.exceptionHandler
+      this.#monitoringStartResult !== null &&
+      consoleReady &&
+      networkReady
     ) {
       return {
-        ...this.#monitoringStartResult,
+        monitoring: cloneMonitoringStatus(this.#monitoringStatus),
         warnings: [...this.#monitoringStartResult.warnings],
       };
     }
@@ -356,21 +472,12 @@ export class MiniProgramContext implements ToolContext {
     this.#monitoringSession = miniProgram;
     const warnings: string[] = [];
 
-    if (
-      !this.#consoleCollector.isMonitoring() ||
-      !this.#listenerState.consoleHandler ||
-      !this.#listenerState.exceptionHandler
-    ) {
+    if (this.#monitoringStatus.console.enabled && !consoleReady) {
       try {
+        if (deadline !== undefined && remainingTime(deadline) <= 0) {
+          throw new Error('Console监听启动总预算已耗尽');
+        }
         this.bindConsoleAndExceptionListeners({
-          consoleHandler: (msg) => {
-            this.addConsoleMessage({
-              type: (msg.type as ConsoleMessageType | undefined) ?? 'log',
-              args: msg.args ?? [],
-              timestamp: new Date().toISOString(),
-              source: 'miniprogram',
-            });
-          },
           exceptionHandler: (err) => {
             this.addExceptionMessage({
               message: err.message ?? 'Unknown exception',
@@ -380,28 +487,77 @@ export class MiniProgramContext implements ToolContext {
             });
           },
         });
-        this.#consoleCollector.startMonitoring();
+        const abortController = new AbortController();
+        const operation = this.#consoleCollector.startRemoteMonitoring(miniProgram, abortController.signal);
+        try {
+          if (deadline === undefined) await operation;
+          else await settleWithinTimeout(operation, remainingTime(deadline), 'Console监听启动');
+        } catch (error) {
+          abortController.abort(error);
+          throw error;
+        }
+        this.#monitoringStatus.console = {
+          enabled: true,
+          state: 'running',
+          startedAt: this.#consoleCollector.getStartTime(),
+          lastError: null,
+        };
       } catch (error) {
         this.#consoleCollector.stopMonitoring();
-        warnings.push(
-          `Console监听启动失败 - ${error instanceof Error ? error.message : String(error)}`
-        );
+        const message = error instanceof Error ? error.message : String(error);
+        this.#monitoringStatus.console = {
+          enabled: true,
+          state: 'failed',
+          startedAt: null,
+          lastError: message,
+        };
+        warnings.push(`Console监听启动失败 - ${message}`);
       }
     }
 
-    try {
-      await this.#networkCollector.startRemoteMonitoring(miniProgram);
-    } catch (error) {
-      warnings.push(`网络监听启动失败 - ${error instanceof Error ? error.message : String(error)}`);
+    if (this.#monitoringStatus.network.enabled && !networkReady) {
+      const timeoutMs = deadline === undefined ? undefined : remainingTime(deadline);
+      const abortController = deadline === undefined ? undefined : new AbortController();
+      try {
+        if (timeoutMs !== undefined && timeoutMs <= 0) {
+          throw new Error('网络监听启动总预算已耗尽');
+        }
+        const startOperation = this.#networkCollector.startRemoteMonitoring(miniProgram, {
+          signal: abortController?.signal,
+        });
+        if (timeoutMs === undefined) {
+          await startOperation;
+        } else {
+          await settleWithinTimeout(startOperation, timeoutMs, '网络监听启动');
+        }
+        this.#monitoringStatus.network = {
+          enabled: true,
+          state: 'running',
+          startedAt: this.#networkCollector.getStartTime(),
+          lastError: null,
+        };
+      } catch (error) {
+        abortController?.abort(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        const message = error instanceof Error ? error.message : String(error);
+        this.#monitoringStatus.network = {
+          enabled: true,
+          state: 'failed',
+          startedAt: null,
+          lastError: message,
+        };
+        warnings.push(`网络监听启动失败 - ${message}`);
+      }
     }
 
+    this.#synchronizeConnectedState();
     this.#monitoringStartResult = {
-      consoleStarted: this.#consoleCollector.isMonitoring(),
-      networkStarted: this.#networkCollector.isMonitoring(),
+      monitoring: cloneMonitoringStatus(this.#monitoringStatus),
       warnings,
     };
     return {
-      ...this.#monitoringStartResult,
+      monitoring: cloneMonitoringStatus(this.#monitoringStatus),
       warnings: [...warnings],
     };
   }
@@ -418,6 +574,7 @@ export class MiniProgramContext implements ToolContext {
       // 真正断连时释放 Element 引用，避免把旧会话 baseline 带入新连接。
       if (page === null) this.#domEpochBaseline = null;
       this.clearElementMap();
+      if (page === null) this.#retiredRefs.clear();
       this.invalidateSnapshotCache();
     }
 
@@ -438,8 +595,18 @@ export class MiniProgramContext implements ToolContext {
     this.#networkCollector.reset();
   }
 
-  async #teardownRuntime(disconnectRemote: boolean): Promise<void> {
+  async #teardownRuntime(
+    disconnectRemote: boolean,
+    connectionDeadline?: number,
+  ): Promise<void> {
+    const cleanupDeadline = Date.now() + RUNTIME_TEARDOWN_TIMEOUT_MS;
+    const teardownDeadline = connectionDeadline === undefined
+      ? cleanupDeadline
+      : Math.min(connectionDeadline, cleanupDeadline);
     const activeMiniProgram = this.#miniProgram;
+    const hadRuntime = activeMiniProgram !== null || this.#monitoringSession !== null;
+    let networkTeardownError: string | null = null;
+    let consoleTeardownError: string | null = null;
 
     try {
       this.#detachOwnedListeners();
@@ -450,17 +617,37 @@ export class MiniProgramContext implements ToolContext {
     }
     this.#monitoringSession = null;
     this.#monitoringStartResult = null;
-    this.#consoleCollector.stopMonitoring();
     try {
-      await this.#networkCollector.stopRemoteMonitoring();
+      await settleWithinTimeout(this.#consoleCollector.stopRemoteMonitoring(),
+        remainingTime(teardownDeadline), '恢复 Console 包装');
     } catch (error) {
+      consoleTeardownError = error instanceof Error ? error.message : String(error);
+    }
+    try {
+      await settleWithinTimeout(
+        this.#networkCollector.stopRemoteMonitoring(),
+        remainingTime(teardownDeadline),
+        '恢复网络拦截器',
+      );
+    } catch (error) {
+      networkTeardownError = error instanceof Error ? error.message : String(error);
       if (this.#options.verbose) {
         console.warn('[MiniProgramContext] 恢复网络拦截器失败，继续收敛本地状态:', error);
       }
     }
 
     if (disconnectRemote && activeMiniProgram) {
-      await this.#connectionManager.disconnect(activeMiniProgram);
+      try {
+        await settleWithinTimeout(
+          this.#connectionManager.disconnect(activeMiniProgram),
+          remainingTime(teardownDeadline),
+          '断开 MiniProgram transport',
+        );
+      } catch (error) {
+        if (this.#options.verbose) {
+          console.warn('[MiniProgramContext] 断开远端会话超时，继续释放本地状态:', error);
+        }
+      }
     }
 
     // 远端断开后 listener 已不可再解绑，避免把旧会话 handler 带到下一实例。
@@ -468,11 +655,31 @@ export class MiniProgramContext implements ToolContext {
       consoleHandler: null,
       exceptionHandler: null,
     };
+    this.#consoleCollector.abandonRemoteMonitoring();
     this.#networkCollector.abandonRemoteMonitoring();
     this.#miniProgram = null;
+    this.#trustedProjectConnection = null;
     this.#networkCollector.setMiniProgram(null);
     this.#updateCurrentPage(null, null);
     this.#resetCollectors();
+    if (hadRuntime) {
+      if (this.#monitoringStatus.console.enabled) {
+        this.#monitoringStatus.console = {
+          enabled: true,
+          state: consoleTeardownError ? 'failed' : 'stopped',
+          startedAt: null,
+          lastError: consoleTeardownError,
+        };
+      }
+      if (this.#monitoringStatus.network.enabled) {
+        this.#monitoringStatus.network = {
+          enabled: true,
+          state: networkTeardownError ? 'failed' : 'stopped',
+          startedAt: null,
+          lastError: networkTeardownError,
+        };
+      }
+    }
   }
 
   #setDisconnectedStatus(lastError: ConnectionStatusSnapshot['lastError'] = null): void {
@@ -501,41 +708,84 @@ export class MiniProgramContext implements ToolContext {
     this.#updateCurrentPage(result.currentPage, result.pagePath);
   }
 
-  async #connectInternal(request: ConnectionRequest): Promise<ConnectionConnectResult> {
-    await this.#teardownRuntime(true);
+  #getTrustedProjectEndpoint(plan: ResolvedConnectionPlan): string | undefined {
+    const target = plan.request.target;
+    const trusted = this.#trustedProjectConnection;
+    if (
+      !this.#miniProgram ||
+      !this.#connectionStatus.connected ||
+      target.kind !== 'project' ||
+      target.autoPort === undefined ||
+      !trusted ||
+      trusted.projectPath !== target.projectPath ||
+      trusted.autoPort !== target.autoPort
+    ) {
+      return undefined;
+    }
+    return trusted.endpoint;
+  }
+
+  #rememberTrustedProjectConnection(
+    request: ResolvedConnectionRequest,
+    result: ConnectionConnectResult,
+  ): void {
+    const target = request.target;
+    if (target.kind !== 'project' || target.autoPort === undefined || !result.endpoint) {
+      this.#trustedProjectConnection = null;
+      return;
+    }
+    this.#trustedProjectConnection = {
+      projectPath: target.projectPath,
+      autoPort: target.autoPort,
+      endpoint: result.endpoint,
+    };
+  }
+
+  async #connectInternal(
+    request: ConnectionRequest,
+    options: { allowTrustedProjectEndpoint?: boolean } = {},
+  ): Promise<ConnectionConnectResult> {
+    // 解析包含 realpath、URL 协议与字段互斥校验；必须先于旧会话 teardown。
+    const plan = resolveConnectionPlan(request);
+    const timingStartedAt = Date.now();
+    const deadline = timingStartedAt + plan.request.timeoutMs;
+    const trustedProjectEndpoint = options.allowTrustedProjectEndpoint
+      ? this.#getTrustedProjectEndpoint(plan)
+      : undefined;
+    await this.#teardownRuntime(true, deadline);
     this.#connectionStatus = {
       ...createDisconnectedStatus(),
       state: 'connecting',
     };
 
     try {
-      const execution = await this.#connectionManager.connect(request);
+      const execution = await this.#connectionManager.connectResolved(plan, {
+        trustedProjectEndpoint,
+        remainingTimeoutMs: remainingTime(deadline),
+        timingStartedAt,
+      });
       const result = execution.result;
       this.#lastConnectionRequest = {
         ...execution.reconnectRequest,
-        fallback: [...execution.reconnectRequest.fallback],
-        wsHeaders: execution.reconnectRequest.wsHeaders
-          ? { ...execution.reconnectRequest.wsHeaders }
-          : undefined,
+        target: { ...execution.reconnectRequest.target },
       };
+      this.#rememberTrustedProjectConnection(execution.reconnectRequest, result);
       this.#commitConnectedSession(result);
 
-      const monitoring = await this.startAutomaticMonitoring();
+      const monitoring = await this.#startAutomaticMonitoring(deadline);
       if (monitoring.warnings.length > 0) {
         result.warnings.push(...monitoring.warnings);
-        result.status = 'degraded';
-        this.#connectionStatus = {
-          ...this.#connectionStatus,
-          state: 'degraded',
-        };
       }
+      result.status = this.#deriveConnectedState(result.health);
+      result.timing.totalMs = Date.now() - timingStartedAt;
+      this.#synchronizeConnectedState();
 
       return result;
     } catch (error) {
       const connectionError = normalizeConnectionError(
         error instanceof Error ? error : new Error(String(error))
       );
-      await this.#teardownRuntime(false);
+      await this.#teardownRuntime(false, deadline);
       this.#setDisconnectedStatus(connectionError.toSummary());
       throw connectionError;
     }
@@ -555,6 +805,7 @@ export class MiniProgramContext implements ToolContext {
     if (this.#miniProgram) {
       await this.#teardownRuntime(true);
     }
+    this.#trustedProjectConnection = null;
     this.#miniProgram = miniProgram;
     this.#networkCollector.setMiniProgram(miniProgram);
 
@@ -595,7 +846,9 @@ export class MiniProgramContext implements ToolContext {
     }
     this.#detachOwnedListeners();
     this.#miniProgram = null;
+    this.#consoleCollector.abandonRemoteMonitoring();
     this.#networkCollector.abandonRemoteMonitoring();
+    this.#trustedProjectConnection = null;
     this.#networkCollector.setMiniProgram(null);
     this.#updateCurrentPage(null, null);
     this.#resetCollectors();
@@ -608,17 +861,20 @@ export class MiniProgramContext implements ToolContext {
 
   async reconnectDevtools(request?: ConnectionRequest): Promise<ConnectionConnectResult> {
     return this.#enqueueLifecyclePageStateOperation(async () => {
-      const reconnectRequest = request
-        ? mergeReconnectRequest(this.#lastConnectionRequest, request)
-        : this.#lastConnectionRequest;
+      const reconnectRequest = request ?? (
+        this.#lastConnectionRequest
+          ? cloneConnectionRequest(this.#lastConnectionRequest)
+          : null
+      );
       if (!reconnectRequest) {
         throw new ValidationConnectionError('没有可用于重连的历史连接参数', [
           '调用 reconnect_devtools 时显式传入连接参数',
         ]);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
-      return this.#connectInternal(reconnectRequest);
+      return this.#connectInternal(reconnectRequest, {
+        allowTrustedProjectEndpoint: request === undefined,
+      });
     });
   }
 
@@ -644,7 +900,20 @@ export class MiniProgramContext implements ToolContext {
         return cloneConnectionStatus(this.#connectionStatus);
       }
 
-      const health = await this.#connectionManager.refreshHealth(miniProgram);
+      let health: ConnectionHealth;
+      try {
+        health = await this.#connectionManager.refreshHealth(miniProgram);
+      } catch (error) {
+        const healthError = normalizeConnectionError(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        this.#connectionStatus = {
+          ...this.#connectionStatus,
+          state: 'degraded',
+          lastError: healthError.toSummary(),
+        };
+        return cloneConnectionStatus(this.#connectionStatus);
+      }
       if (health.level === 'unhealthy') {
         await this.#teardownRuntime(true);
         this.#connectionStatus = {
@@ -664,11 +933,12 @@ export class MiniProgramContext implements ToolContext {
       const pagePath = await page.path;
       this.#connectionStatus = {
         ...this.#connectionStatus,
-        state: health.level === 'healthy' ? 'connected' : 'degraded',
+        state: this.#deriveConnectedState(health),
         connected: true,
         hasCurrentPage: Boolean(pagePath),
         pagePath,
         health,
+        lastError: null,
         lastHealthCheckAt: health.checkedAt,
       };
 
@@ -721,10 +991,10 @@ export class MiniProgramContext implements ToolContext {
 
   #advancePageRevision(): void {
     this.#pageRevision += 1;
-    this.#elementMap = this.#limitElementRegistry(
+    this.#replaceElementMap(this.#limitElementRegistry(
       this.#elementMap,
       this.#connectionStatus.pagePath
-    );
+    ));
     this.invalidateSnapshotCache();
   }
 
@@ -755,7 +1025,7 @@ export class MiniProgramContext implements ToolContext {
    * 批量设置元素映射
    */
   setElementMap(map: Map<string, ElementMapInfo>): void {
-    this.#elementMap = map;
+    this.#replaceElementMap(map);
   }
 
   /** 合并一次查询生成的 ref generation，并保持 registry 有界。 */
@@ -806,7 +1076,7 @@ export class MiniProgramContext implements ToolContext {
     if (!currentPath) {
       throw new Error('注册元素引用时缺少当前页面路径');
     }
-    this.#elementMap = this.#mergeElementRegistry(queryElementMap, currentPath);
+    this.#replaceElementMap(this.#mergeElementRegistry(queryElementMap, currentPath));
   }
 
   #mergeElementRegistry(
@@ -868,7 +1138,7 @@ export class MiniProgramContext implements ToolContext {
    * 清空元素映射
    */
   clearElementMap(): void {
-    this.#elementMap.clear();
+    this.#replaceElementMap(new Map());
   }
 
   /**
@@ -916,7 +1186,7 @@ export class MiniProgramContext implements ToolContext {
     return element;
   }
 
-  async #resolveElementTargetInPageStateOperation(target: ElementTarget): Promise<Element> {
+  async #resolveElementTargetInPageStateOperation(target: ElementTarget): Promise<ResolvedElement> {
     const previousRefInfo = target.kind === 'ref' ? this.#elementMap.get(target.ref) : undefined;
     let page: Page;
     let pagePath: string;
@@ -946,11 +1216,11 @@ export class MiniProgramContext implements ToolContext {
     ) {
       resolutionElementMap = new Map(this.#elementMap).set(target.ref, previousRefInfo);
     }
-    const resolved = await resolveElementTarget(page, resolutionElementMap, target, {
+    return resolveElementTarget(page, resolutionElementMap, target, {
       pageRevision: this.#pageRevision,
       pagePath,
+      isRetiredRef: ref => this.#retiredRefs.has(ref),
     });
-    return resolved.element;
   }
 
   async getElementByTarget(target: ElementTarget): Promise<Element> {
@@ -988,8 +1258,8 @@ export class MiniProgramContext implements ToolContext {
         registerElementMap: (elementMap, expectations) =>
           this.#registerElementMapInPageStateOperation(elementMap, expectations),
         withElementByTargetOperation: async (target, elementOperation) => {
-          const element = await this.#resolveElementTargetInPageStateOperation(target);
-          return elementOperation(element);
+          const resolved = await this.#resolveElementTargetInPageStateOperation(target);
+          return elementOperation(resolved.element);
         },
       })
     );
@@ -1027,7 +1297,7 @@ export class MiniProgramContext implements ToolContext {
   ): PageStateCommit {
     const mergedElementMap = this.#mergeElementRegistry(capture.elementMap, path);
     const timestamp = Date.now();
-    this.#elementMap = mergedElementMap;
+    this.#replaceElementMap(mergedElementMap);
     this.#snapshotCache = {
       snapshot: capture.snapshot,
       elementMap: mergedElementMap,
@@ -1054,7 +1324,13 @@ export class MiniProgramContext implements ToolContext {
   }
 
   #baselineRefsAreRegistered(baseline: DomEpochBaseline): boolean {
-    return baseline.snapshot.elements.every((element) => this.#elementMap.has(element.ref));
+    const scopes = baseline.snapshot.scopes;
+    if (!scopes) {
+      return baseline.snapshot.elements.every((element) => this.#elementMap.has(element.ref));
+    }
+    return scopes.every((scope) =>
+      scope.elements.every((element) => this.#elementMap.has(element.ref))
+    );
   }
 
   async #synchronizePageState(
@@ -1188,6 +1464,140 @@ export class MiniProgramContext implements ToolContext {
   }
 
   /**
+   * 按调用方预算捕获 V2 作用域图。默认参数复用 canonical page-state 提交；
+   * 自定义预算或根组件使用独立 draft，并在同一队列内做双扫描与页面身份校验。
+   */
+  capturePageSnapshot(options: CapturePageSnapshotOptions = {}): Promise<PageStateCommit> {
+    const usesDefaultBudget =
+      (options.budget?.maxDepth ?? 4) === 4 &&
+      (options.budget?.maxExpandedScopes ?? 64) === 64 &&
+      (options.budget?.maxElements ?? 1000) === 1000;
+    const usesCanonicalCapture =
+      options.root === undefined &&
+      usesDefaultBudget &&
+      options.includePosition !== false &&
+      options.includeAttributes !== true;
+    if (usesCanonicalCapture) {
+      return this.synchronizePageState({ mode: 'snapshot', forceRefresh: true });
+    }
+
+    return this.#enqueuePageStateOperation(async () => {
+      for (let attempt = 1; attempt <= MAX_PAGE_STATE_COMMIT_ATTEMPTS; attempt += 1) {
+        const page = await this.syncCurrentPage();
+        const pagePath = await page.path;
+        const pageRevision = this.#pageRevision;
+
+        const guardStillMatchesStart = async (): Promise<boolean> => {
+          const guard = await this.#synchronizePageState(
+            { mode: 'guard', forceRefresh: true },
+            this.#options.snapshotCacheTtl
+          );
+          return (
+            guard.pageRevision === pageRevision &&
+            guard.pagePath === pagePath &&
+            this.getCurrentPage() === page
+          );
+        };
+
+        const currentBaseline = this.#domEpochBaseline;
+        const hasComparableBaseline =
+          currentBaseline !== null &&
+          currentBaseline.page === page &&
+          currentBaseline.path === pagePath &&
+          currentBaseline.pageRevision === pageRevision;
+        // 首次 scoped capture 或 known mutation 后没有同 revision baseline。
+        // 先建立基线，避免末尾 guard 把 scoped 之后的新 DOM 当成本 revision 首态。
+        if (!hasComparableBaseline && !(await guardStillMatchesStart())) {
+          continue;
+        }
+
+        let root: GetPageSnapshotOptions['root'];
+        if (options.root) {
+          let resolved: ResolvedElement;
+          try {
+            resolved = await resolveElementTarget(page, this.#elementMap, options.root, {
+              pageRevision,
+              pagePath,
+              isRetiredRef: ref => this.#retiredRefs.has(ref),
+            });
+          } catch (error) {
+            const canRefreshStaleRef =
+              error instanceof ElementResolutionError &&
+              (error.code === 'STALE_ELEMENT' || error.code === 'ELEMENT_NOT_FOUND');
+            if (canRefreshStaleRef && !(await guardStillMatchesStart())) {
+              continue;
+            }
+            throw error;
+          }
+          if (!isCustomComponentElement(resolved.element)) {
+            throw new ElementResolutionError(
+              'INVALID_ELEMENT_TARGET',
+              'get_page_snapshot.root 必须唯一解析到可查询的自定义组件'
+            );
+          }
+          root = {
+            element: resolved.element,
+            ref: options.root.kind === 'ref' ? options.root.ref : undefined,
+            address: resolved.address.segments,
+          };
+        }
+
+        if (this.#pageRevision !== pageRevision || this.getCurrentPage() !== page) {
+          continue;
+        }
+
+        const captureOptions: GetPageSnapshotOptions = {
+          pageRevision,
+          budget: options.budget,
+          includePosition: options.includePosition,
+          includeAttributes: options.includeAttributes,
+          root,
+        };
+        const firstCapture = await getPageSnapshot(page, captureOptions);
+        const verifiedCapture = await getPageSnapshot(page, {
+          ...captureOptions,
+          preferredStrategy: firstCapture.collectionStrategy,
+        });
+        const identify = (element: Element): number => this.#elementIdentity(element);
+        if (
+          createPageSnapshotDomSignature(firstCapture, identify) !==
+          createPageSnapshotDomSignature(verifiedCapture, identify)
+        ) {
+          continue;
+        }
+
+        // scoped graph 自身只能证明扫描期间稳定；末尾 canonical guard 负责把
+        // baseline 之后、首轮 scoped 扫描之前发生的变化提交为新 DOM epoch。
+        if (!(await guardStillMatchesStart())) {
+          continue;
+        }
+
+        const queryElementMap = new Map<string, ElementMapInfo>();
+        for (const [ref, info] of verifiedCapture.elementMap) {
+          queryElementMap.set(ref, { ...info, generationKind: 'query' });
+        }
+        const mergedElementMap = this.#mergeElementRegistry(
+          queryElementMap,
+          pagePath
+        );
+        this.#replaceElementMap(mergedElementMap);
+        return {
+          snapshot: verifiedCapture.snapshot,
+          elementMap: mergedElementMap,
+          pagePath,
+          pageRevision,
+          domChanged: false,
+          previousSnapshot: null,
+        };
+      }
+
+      throw new Error(
+        `页面状态在 ${MAX_PAGE_STATE_COMMIT_ATTEMPTS} 次作用域图扫描期间持续变化，未提交快照`
+      );
+    });
+  }
+
+  /**
    * 获取页面快照（带缓存）
    *
    * 缓存策略：
@@ -1258,6 +1668,10 @@ export class MiniProgramContext implements ToolContext {
   /**
    * 获取 Console 收集器（新 API）
    */
+  syncConsoleFromRemote(): Promise<number> {
+    return this.#enqueuePageStateOperation(() => this.#consoleCollector.syncFromRemote());
+  }
+
   getConsoleCollector(): ConsoleCollector {
     return this.#consoleCollector;
   }
@@ -1265,16 +1679,37 @@ export class MiniProgramContext implements ToolContext {
   /**
    * 开始 Console 监听
    */
-  startConsoleMonitoring(): void {
-    this.#consoleCollector.startMonitoring();
+  async startConsoleMonitoring(): Promise<void> {
+    if (!this.#monitoringStatus.console.enabled) {
+      throw new Error('Console 工具类别未启用，不能启动监听');
+    }
+    await this.#enqueueLifecyclePageStateOperation(() => this.#consoleCollector.startRemoteMonitoring(this.getMiniProgram()));
+    this.#monitoringStatus.console = {
+      enabled: true,
+      state: 'running',
+      startedAt: this.#consoleCollector.getStartTime(),
+      lastError: null,
+    };
+    this.#synchronizeConnectedState();
   }
 
   /**
    * 停止 Console 监听
    */
-  stopConsoleMonitoring(): void {
-    this.#detachOwnedListeners();
-    this.#consoleCollector.stopMonitoring();
+  async stopConsoleMonitoring(): Promise<void> {
+    await this.#enqueueLifecyclePageStateOperation(async () => {
+      await this.#consoleCollector.stopRemoteMonitoring();
+      this.#detachOwnedListeners();
+    });
+    if (this.#monitoringStatus.console.enabled) {
+      this.#monitoringStatus.console = {
+        enabled: true,
+        state: 'stopped',
+        startedAt: null,
+        lastError: null,
+      };
+      this.#synchronizeConnectedState();
+    }
   }
 
   /**
@@ -1329,7 +1764,8 @@ export class MiniProgramContext implements ToolContext {
   /**
    * 在导航时分割存储（保留历史）
    */
-  splitConsoleAfterNavigation(): void {
+  async splitConsoleAfterNavigation(): Promise<void> {
+    await this.#consoleCollector.syncFromRemote();
     this.#consoleCollector.splitAfterNavigation();
   }
 
@@ -1353,14 +1789,66 @@ export class MiniProgramContext implements ToolContext {
    * 开始网络监听
    */
   async startNetworkMonitoring(): Promise<void> {
-    await this.#networkCollector.startRemoteMonitoring(this.getMiniProgram());
+    return this.#enqueueLifecycleOperation(() => this.#startNetworkMonitoring());
+  }
+
+  async #startNetworkMonitoring(): Promise<void> {
+    if (!this.#monitoringStatus.network.enabled) {
+      throw new Error('Network 工具类别未启用，不能启动监听');
+    }
+    try {
+      await this.#networkCollector.startRemoteMonitoring(this.getMiniProgram());
+      this.#monitoringStatus.network = {
+        enabled: true,
+        state: 'running',
+        startedAt: this.#networkCollector.getStartTime(),
+        lastError: null,
+      };
+      this.#synchronizeConnectedState();
+    } catch (error) {
+      this.#monitoringStatus.network = {
+        enabled: true,
+        state: 'failed',
+        startedAt: null,
+        lastError: error instanceof Error ? error.message : String(error),
+      };
+      this.#synchronizeConnectedState();
+      throw error;
+    }
   }
 
   /**
    * 停止网络监听
    */
   async stopNetworkMonitoring(options?: { clearLogs?: boolean }): Promise<number> {
-    return this.#networkCollector.stopRemoteMonitoring(options);
+    return this.#enqueueLifecycleOperation(() => this.#stopNetworkMonitoring(options));
+  }
+
+  async #stopNetworkMonitoring(options?: { clearLogs?: boolean }): Promise<number> {
+    try {
+      const clearedCount = await this.#networkCollector.stopRemoteMonitoring(options);
+      if (this.#monitoringStatus.network.enabled) {
+        this.#monitoringStatus.network = {
+          enabled: true,
+          state: 'stopped',
+          startedAt: null,
+          lastError: null,
+        };
+        this.#synchronizeConnectedState();
+      }
+      return clearedCount;
+    } catch (error) {
+      if (this.#monitoringStatus.network.enabled) {
+        this.#monitoringStatus.network = {
+          enabled: true,
+          state: 'failed',
+          startedAt: null,
+          lastError: error instanceof Error ? error.message : String(error),
+        };
+        this.#synchronizeConnectedState();
+      }
+      throw error;
+    }
   }
 
   /**
@@ -1493,7 +1981,7 @@ export class MiniProgramContext implements ToolContext {
    * ToolContext 接口：设置 elementMap
    */
   set elementMap(value: Map<string, ElementMapInfo>) {
-    this.#elementMap = value;
+    this.#replaceElementMap(value);
   }
 
   /**
@@ -1610,6 +2098,18 @@ export class MiniProgramContext implements ToolContext {
    */
   get connectionStatus(): ConnectionStatusSnapshot {
     return cloneConnectionStatus(this.#connectionStatus);
+  }
+
+  /** 返回 profile 与监听状态副本，供 status 工具和 MCP resource 统一暴露。 */
+  getRuntimeStatus(): RuntimeStatusMetadata {
+    return {
+      toolProfile: {
+        ...this.#options.toolProfile,
+        activeCategories: [...this.#options.toolProfile.activeCategories],
+        inactiveCategories: [...this.#options.toolProfile.inactiveCategories],
+      },
+      monitoring: cloneMonitoringStatus(this.#monitoringStatus),
+    };
   }
 
   /**

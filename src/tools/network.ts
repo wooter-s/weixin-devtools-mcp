@@ -316,7 +316,9 @@ export const stopNetworkMonitoringTool = defineTool({
     ensureMiniProgram(context);
 
     const { clearLogs } = request.params;
-    const clearedCount = await context.getNetworkCollector().stopRemoteMonitoring({ clearLogs });
+    const clearedCount = context.stopNetworkMonitoring
+      ? await context.stopNetworkMonitoring({ clearLogs })
+      : await context.getNetworkCollector().stopRemoteMonitoring({ clearLogs });
 
     response.appendResponseLine(ResponseFormatter.section('网络监听已停止'));
     response.appendResponseLine('监听状态: 已停止');
