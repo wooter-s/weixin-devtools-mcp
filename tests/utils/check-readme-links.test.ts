@@ -108,6 +108,25 @@ describe('check-readme-links script', () => {
     expect(result.stdout).toContain('一致性校验通过');
   });
 
+  it('checks translated README version, anchors and npm-relative links', async () => {
+    const tempRoot = createBaseFixture({
+      'README.zh-CN.md': [
+        '# 中文',
+        '[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/example/weixin-devtools-mcp)',
+        '[Issues](https://github.com/example/weixin-devtools-mcp/issues)',
+        '[Guide](docs/guide.md#missing)',
+      ].join('\n'),
+      'docs/guide.md': '# Guide\n',
+    });
+    tempRoots.push(tempRoot);
+    const result = await runLinkCheck(tempRoot);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('README.zh-CN.md');
+    expect(result.stderr).toContain('version badge');
+    expect(result.stderr).toContain('npm 发布视角');
+    expect(result.stderr).toContain('missing');
+  });
+
   it('阻止 README 中指向未发布文件的相对链接', async () => {
     const tempRoot = createBaseFixture({
       'README.md': ['# Demo', '', '[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/example/weixin-devtools-mcp)', '[Guide](docs/guide.md)'].join('\n'),

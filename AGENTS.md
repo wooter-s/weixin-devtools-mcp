@@ -147,6 +147,10 @@
 - 如果同时包含代码改动，必须执行 5.2 全流程。
 
 ## 6. 测试策略
+- 默认集成工程为公开 `tests/fixtures/monitoring-app`；不得依赖私有 playground 路由。
+- 本机验收使用 `npm run release:validate` 记录源码指纹和命令结果；真实场景阻塞时禁止发布。
+- README.md 为英文首页，README.zh-CN.md 为完整中文入口；版本、能力和前置条件须同步。
+- 覆盖率统计全部 src/**/*.ts；门槛 statements/functions/lines 75%、branches 70%，报告与真实集成分开。
 - 协议层：验证工具注册、schema 暴露、资源接口和错误语义。
 - 工具层：验证参数分支、异常路径、状态更新副作用。
 - 集成层：验证真实 DevTools 连接、页面行为与监听链路。

@@ -85,13 +85,13 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
       return;
     }
 
-    const targetUrl = '/subpackages/login/pages/login/login-wechat';
+    const targetUrl = '/subpackages/test/pages/detail/index';
     await app.navigateTo(targetUrl);
     await new Promise(resolve => setTimeout(resolve, 1200));
 
     const currentPage = await app.currentPage();
     const currentPath = await currentPage.path;
-    expect(currentPath).toContain('login-wechat');
+    expect(currentPath).toContain('subpackages/test/pages/detail/index');
   }, 45_000);
 
   it('应该能使用 navigateBack 返回上一页', async () => {
@@ -103,7 +103,7 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
     const originalPage = await app.currentPage();
     const originalPath = await originalPage.path;
 
-    await app.navigateTo('/subpackages/login/pages/login/login-wechat');
+    await app.navigateTo('/subpackages/test/pages/detail/index');
     await new Promise(resolve => setTimeout(resolve, 800));
 
     await app.navigateBack();
@@ -134,12 +134,12 @@ describe.skipIf(!shouldRunIntegration)('导航功能集成测试', () => {
       return;
     }
 
-    await app.navigateTo('/subpackages/login/pages/login/login-wechat?from=test&id=123');
+    await app.navigateTo('/subpackages/test/pages/detail/index?from=test&id=123');
     await new Promise(resolve => setTimeout(resolve, 1200));
 
     const currentPage = await app.currentPage();
     const currentPath = await currentPage.path;
-    expect(currentPath).toContain('login-wechat');
+    expect(currentPath).toContain('subpackages/test/pages/detail/index');
   }, 45_000);
 
   it('navigateTo 不应接受对象参数', async () => {

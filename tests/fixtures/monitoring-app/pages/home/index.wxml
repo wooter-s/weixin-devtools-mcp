@@ -1,5 +1,5 @@
 <view id="root">
-  <text id="title">MCP regression</text>
+  <text id="title" class="fixture-title">MCP regression</text>
   <text id="count">{{count}}</text>
   <button id="increment" bindtap="increment">Increment</button>
   <input id="input" value="{{input}}" bindinput="inputChange" />

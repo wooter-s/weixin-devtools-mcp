@@ -6,6 +6,8 @@
  */
 
 import { execFile } from 'node:child_process';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -87,7 +89,10 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
   }, 120_000);
 
   it('project 目标独立验证启动，不能由显式端点覆盖', async () => {
-    const projectPath = path.resolve('tests/fixtures/monitoring-app');
+    const scratch = await mkdtemp(path.join(os.tmpdir(), 'weixin-launch-test-'));
+    const projectPath = path.join(scratch, 'app');
+    await cp(harness.projectPath, projectPath, { recursive: true, filter: file => !file.endsWith('project.private.config.json') });
+    let launched = false;
     const isolated = createIntegrationContext();
     try {
       await runTool(isolated, connectDevtoolsTool.handler, {
@@ -95,11 +100,13 @@ describe.skipIf(!shouldRun)('连接架构集成测试', () => {
         timeoutMs: 15_000,
         healthCheck: false,
       });
+      launched = true;
       expect(isolated.connectionStatus.connected).toBe(true);
       expect(isolated.connectionStatus.strategyUsed).toMatch(/launch|connect/);
     } finally {
       await isolated.disconnectDevtools();
-      await promisify(execFile)(harness.cliPath, ['close', '--project', projectPath]);
+      if (launched) await promisify(execFile)(harness.cliPath, ['close', '--project', projectPath]);
+      await rm(scratch, { recursive: true, force: true });
     }
   }, 90_000);
 

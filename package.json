@@ -15,7 +15,8 @@
     "weixin",
     "devtools",
     "e2e",
-    "ui-testing"
+    "ui-testing",
+    "codex"
   ],
   "repository": {
     "type": "git",
@@ -31,6 +32,7 @@
   "files": [
     "build",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "engines": {
@@ -55,7 +57,7 @@
     "pretest": "npm run build",
     "test": "vitest --run tests/protocol/ tests/tools/ tests/utils/",
     "test:watch": "vitest tests/protocol/ tests/tools/ tests/utils/",
-    "test:coverage": "vitest --coverage tests/protocol/ tests/tools/ tests/utils/",
+    "test:coverage": "vitest --run --coverage tests/protocol/ tests/tools/ tests/utils/",
     "test:protocol": "vitest --run tests/protocol/",
     "test:tools": "vitest --run tests/tools/",
     "bench:test": "vitest --run tests/utils/benchmark-core.test.ts",
@@ -69,7 +71,7 @@
     "bench:runtime:synthetic": "node scripts/benchmarks/runtime-lifecycle-synthetic.mjs",
     "bench:fixture:smoke": "node scripts/benchmarks/fixture-smoke.mjs",
     "bench:serve": "node scripts/benchmarks/local-server.mjs",
-    "test:integration": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=true vitest --run tests/integration/",
+    "test:integration": "node scripts/run-integration.mjs",
     "test:integration:watch": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=true vitest tests/integration/",
     "test:integration:optional": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=false vitest --run tests/integration/",
     "test:integration:optional:watch": "RUN_INTEGRATION_TESTS=true INTEGRATION_STRICT=false vitest tests/integration/",
@@ -80,7 +82,12 @@
     "test:manual:mpx-runtime": "node tests/manual/mpx/verify-mpx-runtime.mjs",
     "test:manual:network-interception": "node tests/manual/network/verify-network-interception.mjs",
     "test:manual:screenshot": "TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm tests/manual/verify-screenshot-success.ts",
-    "test:manual:screenshot-diagnostic": "node tests/manual/diagnostics/verify-screenshot-diagnostic.mjs"
+    "test:manual:screenshot-diagnostic": "node tests/manual/diagnostics/verify-screenshot-diagnostic.mjs",
+    "test:package": "node scripts/release/package-smoke.mjs",
+    "release:check": "node scripts/release/check.mjs",
+    "release:validate": "node scripts/release/validate-local.mjs",
+    "test:integration:public": "node tests/manual/monitoring/public-regression.mjs",
+    "test:integration:mpx": "node tests/manual/monitoring/mpx-regression.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

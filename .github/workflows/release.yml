@@ -1,0 +1,44 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --global npm@11
+      - run: npm ci
+      - run: npm run release:check
+      - run: npm run typecheck
+      - run: npm run typecheck:test
+      - run: npm test
+      - run: npm run lint
+      - run: npm run lint:links
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm run test:package
+      - name: Publish with npm trusted publishing
+        run: npm publish --access public --provenance
+      - name: Verify registry and create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/publish-notes.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-coverage
+          path: coverage/

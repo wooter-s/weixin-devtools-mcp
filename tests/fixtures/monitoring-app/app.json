@@ -18,5 +18,13 @@
         "text": "Tab"
       }
     ]
-  }
+  },
+  "subPackages": [
+    {
+      "root": "subpackages/test",
+      "pages": [
+        "pages/detail/index"
+      ]
+    }
+  ]
 }

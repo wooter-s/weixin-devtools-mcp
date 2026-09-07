@@ -56,7 +56,7 @@ describe('owned project startup', () => {
       return child;
     });
   });
-  afterEach(async () => { for (const server of servers.splice(0)) await server.close(); });
+  afterEach(async () => { vi.restoreAllMocks(); for (const server of servers.splice(0)) await server.close(); });
 
   it('waits for runtime readiness before SDK connect; never installs collectors', async () => {
     const page = { path: 'pages/home/index' };
@@ -114,7 +114,11 @@ describe('owned project startup', () => {
 
   it('reports missing SDKVersion and closes only the owned project on timeout', async () => {
     ready = false;
-    await expect(connectDevtools({ projectPath: process.cwd(), cliPath: 'fixture-cli', port: await freePort(), timeout: 300 })).rejects.toThrow('SDKVersion');
+    const now = Date.now.bind(Date);
+    // Expire the budget only after a real protocol response, not during socket startup.
+    vi.spyOn(Date, 'now').mockImplementation(() => now() + (infos > 0 ? 5000 : 0));
+    await expect(connectDevtools({ projectPath: process.cwd(), cliPath: 'fixture-cli', port: await freePort(), timeout: 2000 })).rejects.toThrow('SDKVersion');
+    expect(infos).toBeGreaterThan(0);
     expect(automator.connect).not.toHaveBeenCalled(); expect(mocks.close).toHaveBeenCalledOnce();
   });
 });

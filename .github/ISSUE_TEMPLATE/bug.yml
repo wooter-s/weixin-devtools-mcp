@@ -1,0 +1,30 @@
+name: Bug report / 缺陷报告
+description: Report a reproducible failure using public or synthetic data.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: Package version, Node, OS, DevTools version/basic library, MCP client, profile/categories.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Prefer the public fixture. Include the tool name and sanitized arguments, expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / 证据
+      description: Sanitized error code, logs or screenshots. Do not include credentials, personal data, private code or production payloads.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks / 已检查
+      options:
+        - label: I checked the version-specific documentation and known limitations.
+        - label: I removed sensitive data from this report.
+          required: true

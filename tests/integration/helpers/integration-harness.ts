@@ -26,7 +26,7 @@ import {
   shouldRunIntegrationTests,
 } from './integration-mode.js';
 
-const DEFAULT_PROJECT_PATH = path.resolve(process.cwd(), 'playground/wx');
+const DEFAULT_PROJECT_PATH = path.resolve(process.env.INTEGRATION_PROJECT_PATH || 'tests/fixtures/monitoring-app');
 const DEFAULT_CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
 
 export interface IntegrationHarnessOptions {
@@ -141,7 +141,7 @@ export class IntegrationHarness {
   constructor(options: IntegrationHarnessOptions = {}) {
     this.#projectPath = options.projectPath ?? DEFAULT_PROJECT_PATH;
     this.#wsEndpoint = options.wsEndpoint === undefined ? process.env.INTEGRATION_WS_ENDPOINT || null : options.wsEndpoint;
-    this.#cliPath = options.cliPath ?? DEFAULT_CLI_PATH;
+    this.#cliPath = options.cliPath ?? process.env.INTEGRATION_CLI_PATH ?? DEFAULT_CLI_PATH;
     this.#startPort = options.startPort ?? 9420;
     this.#portCount = options.portCount ?? 8;
     this.#connectTimeoutMs = options.connectTimeoutMs ?? 60_000;

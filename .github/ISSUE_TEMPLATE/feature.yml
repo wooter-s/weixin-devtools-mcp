@@ -1,0 +1,17 @@
+name: Feature request / 功能建议
+description: Explain a concrete workflow and the capability it needs.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 使用场景
+      description: What are you trying to accomplish, and where does the current workflow stop?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome / 预期行为
+      description: Include alternatives considered and an example of successful behavior.
+    validations:
+      required: true

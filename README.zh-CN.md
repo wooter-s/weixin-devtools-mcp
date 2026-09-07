@@ -1,0 +1,614 @@
+# 微信开发者工具自动化 MCP 服务器
+
+[English](README.md) | 简体中文
+
+> 强大的微信小程序自动化测试解决方案，基于 Model Context Protocol 实现
+
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/wooter-s/weixin-devtools-mcp)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+
+## ✨ 核心特性
+
+- 🚀 **31个专业工具（full profile）** - 覆盖连接、查询、交互、断言、导航、调试等完整测试场景
+- 🤖 **可预期连接** - 通过 `project` / `wsEndpoint` / `browserUrl` / `discover` 判别式 target 明确指定连接对象
+- 🔍 **按需监控** - 仅在启用 `console` / `network` 类别时启动对应监听，避免默认连接引入额外开销
+- ✅ **完整断言体系** - 3类断言工具（`assert_text`/`assert_attribute`/`assert_state`），覆盖文本、属性与状态校验
+- 📸 **丰富调试能力** - 支持页面截图、Console 监听、网络请求追踪、诊断工具
+- 🏗️ **模块化架构** - 基于 chrome-devtools-mcp 架构模式，易于扩展和维护
+- 🧩 **可配置工具暴露** - 默认 core profile（20个工具），支持按类别开启 Console/Network/Debug
+- 🧭 **可靠元素定位** - action target 仅接受 opaque `ref` 或逐级进入自定义组件的 locator `path`
+- 📐 **结构化结果** - 全部工具统一返回 `schemaVersion: "2.0"` 的成功/失败 envelope，字段形状稳定
+- ⚡ **轻量协议启动** - `tools/list` 使用构建期静态 descriptor，工具实现和 automator 在首次有效调用时懒加载
+- 🧪 **公开质量证据** - [CI 与覆盖率](https://github.com/wooter-s/weixin-devtools-mcp/actions/workflows/presubmit.yml)，[真实验收与限制](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/validation.md)
+
+## 📦 安装
+
+### 方式一：使用 npx（推荐）
+
+当前源码版本为 **0.7.0（发布候选）**。npm `latest` 仍为 0.6.0；下文 0.7 的接口示例请先使用源码构建。发布状态以 npm registry 和 GitHub Release 为准。
+
+```bash
+# 无需执行任何安装命令
+# 直接在 Claude Desktop 配置中使用即可
+```
+
+### 方式二：全局安装
+
+如果需要频繁使用或离线使用，可以全局安装：
+
+```bash
+npm install -g weixin-devtools-mcp
+```
+
+### 方式三：开发者安装（从源码）
+
+如果需要修改源代码或参与开发：
+
+```bash
+# 克隆项目
+git clone https://github.com/wooter-s/weixin-devtools-mcp.git
+cd weixin-devtools-mcp
+
+# 安装依赖
+npm install
+
+# 构建项目
+npm run build
+```
+
+## ⚙️ 配置
+
+在 Claude Desktop 配置文件中添加 MCP 服务器：
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+
+### 配置方式一：使用 npx（推荐）
+
+**适用于已发布版本**：确认 npm registry 中的版本后使用。0.7 发布前请使用下方源码配置。
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "npx",
+      "args": ["-y", "weixin-devtools-mcp"]
+    }
+  }
+}
+```
+
+### 配置方式二：全局安装后使用
+
+如果已全局安装，可以直接使用命令名：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "weixin-devtools-mcp"
+    }
+  }
+}
+```
+
+### 配置方式三：开发者本地路径
+
+如果从源码安装，推荐通过 Node.js 启动构建产物（跨平台）：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "node",
+      "args": ["/path/to/weixin-devtools-mcp/build/server.js"]
+    }
+  }
+}
+```
+
+### 工具 Profile 配置（v0.4+）
+
+服务器支持按 profile 控制暴露工具，降低默认工具数量：
+
+- `core`（默认）：20 个核心自动化工具
+- `full`：31 个完整工具
+- `minimal`：10 个最小工具
+
+也支持按类别增减：
+
+- `--enable-categories=console,network,debug`
+- `--disable-categories=console,network,debug,core`
+
+Profile 也决定运行时监听策略：只有启用 `console` 类别才会启动 Console 监听，只有启用 `network` 类别才会启动 Network 监听。连接状态中会分别报告 `disabled` / `idle` / `running` / `stopped` / `failed`，方便区分“未启用”与“启动失败”。
+
+网络监听通过运行时包装透传 `request` / `uploadFile` / `downloadFile` 的任务对象和回调，同时覆盖当前应用 `$xfetch.requestAdapter` 缓存原始 request 的情况。日志监听使用独立有界队列，在列表、详情、诊断读取及导航分段、停止、断开前同步；相同文本的多次输出分别保留。停止或断开会恢复本次拥有的包装，不覆盖第三方后续修改。详见 [监听回归说明](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/monitoring-regression.md)。
+
+`npx` 配置示例（启用 full）：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "npx",
+      "args": ["-y", "weixin-devtools-mcp", "--tools-profile=full"]
+    }
+  }
+}
+```
+
+本地构建产物示例（在 core 基础上启用 network + debug）：
+
+```json
+{
+  "mcpServers": {
+    "weixin-devtools-mcp": {
+      "command": "node",
+      "args": [
+        "/path/to/weixin-devtools-mcp/build/server.js",
+        "--enable-categories=network,debug"
+      ]
+    }
+  }
+}
+```
+
+## 🔄 当前公开接口与版本说明
+
+软件版本由 `package.json.version` 管理，当前为 `0.7.0`；工具返回数据的格式版本由 `schemaVersion` 标识，当前为 `"2.0"`。两者独立演进，`schemaVersion` 也不是 MCP 标准协议的版本号。
+
+本次 0.7.0 接口变更不兼容旧的扁平连接参数、直接 `selector` / `id` target 和 `schemaVersion: "1.0"` 结果格式；不提供旧接口兼容模式。工具数量保持不变：`minimal` 10 个、`core` 20 个、`full` 31 个。
+
+### 统一结果 envelope
+
+每次调用的 `structuredContent` 都含有以下必填字段：
+
+```typescript
+// 成功：MCP isError === false
+{
+  schemaVersion: "2.0",
+  ok: true,
+  code: "OK",
+  data: { /* 工具数据 */ },
+  error: null,
+  partialData: null,
+  observation: null,
+  warnings: [],
+  nextActions: [],
+  meta: { /* 调用元数据 */ }
+}
+
+// 失败：MCP isError === true
+{
+  schemaVersion: "2.0",
+  ok: false,
+  code: "ELEMENT_NOT_FOUND",
+  data: null,
+  error: {
+    message: "未找到元素",
+    retryable: false,
+    diagnostic: null
+  },
+  partialData: null,
+  observation: null,
+  warnings: [],
+  nextActions: [],
+  meta: { /* 调用元数据 */ }
+}
+```
+
+失败时文本内容以 `[CODE] message` 开头；处理器在失败前已产生的结构化上下文会保留在 `partialData`，已提交的页面观察会保留在 `observation`。
+
+### 连接 target
+
+`connect_devtools` 使用判别式 `target`：
+
+```typescript
+// 指定项目：固定尝试 launch → connect，两次使用同一个规范化真实路径
+connect_devtools({
+  target: {
+    kind: "project",
+    projectPath: "/path/to/miniprogram",
+    cliPath: "/optional/path/to/cli",
+    autoPort: 9420,
+    autoAudits: false
+  },
+  timeoutMs: 45000,
+  healthCheck: true
+})
+
+connect_devtools({ target: { kind: "wsEndpoint", endpoint: "ws://127.0.0.1:9420" } })
+connect_devtools({ target: { kind: "browserUrl", url: "http://127.0.0.1:9222" } })
+connect_devtools({ target: { kind: "discover" } })
+```
+
+`project` target 不会回退到端口发现，因此不会误连其他已运行项目。`wsEndpoint`、`browserUrl` 和 `discover` 各只执行一个逻辑尝试。`timeoutMs` 是整个连接过程的总预算，默认 45 秒；返回值会列出完整 attempt history。无参数调用 `reconnect_devtools` 会复用上一次成功连接的完整规格；一旦传入新 target，它就是完整替换而非字段合并。
+
+启动会等待自动化协议、`SDKVersion` 与当前页面就绪；超时指出具体阶段。自动发现通过 WebSocket 协议识别端点，不依赖 HTTP 根路径响应。项目启动失败只清理本次拥有的项目与连接。
+
+`evaluate_script` 支持命名 async 函数。导航或注册表淘汰的 ref 在当前连接的最近 10,000 条失效记录内返回 `STALE_ELEMENT`；未知、超出记录上限或断开前的 ref 返回 `ELEMENT_NOT_FOUND`。同页稳定地址仍可重新定位。最新修复与环境限制见 [检测问题回归报告](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/detected-issues-regression.md)。
+
+
+### 元素 target 与作用域 path
+
+所有元素 action 的 `target` 只有两种形状：
+
+```typescript
+type ElementTarget =
+  | { kind: "ref"; ref: string }
+  | { kind: "path"; path: LocatorSegment[] }
+
+type LocatorSegment =
+  | { kind: "testId"; value: string }
+  | { kind: "id"; value: string }
+  | { kind: "dataId"; value: string }
+  | { kind: "selector"; value: string; index?: number }
+  | { kind: "text"; value: string; exact?: boolean; tagName?: string; index?: number }
+```
+
+`path` 从 Page 开始查询，非末段必须唯一命中可查询的自定义组件，下一段才在该组件作用域内查询。单层页面元素也使用只有一段的 `path`。
+
+### 页面快照作用域图
+
+`get_page_snapshot` 返回规范化作用域图：`scopes` 保存 Page 和自定义组件作用域，`edges` 保存跨作用域边界；不会伪造普通 DOM 的全局父子树。采集按广度优先执行，可通过 `budget` 限制工作量：
+
+```typescript
+get_page_snapshot({
+  format: "json",
+  budget: {
+    maxDepth: 4,
+    maxExpandedScopes: 64,
+    maxElements: 1000
+  }
+})
+```
+
+上述三项也是默认值。结果包含 `rootScopeId`、`complete`、`budget`、`usage`、`scopes`、`edges`、`format`、`tokenEstimate` 和 `filePath`；作用域状态会明确标记完整、部分、截断或不可用。
+
+## 🚀 快速开始
+
+### 第一个自动化测试
+
+```typescript
+// 1. 连接指定小程序项目
+connect_devtools({
+  target: {
+    kind: "project",
+    projectPath: "/path/to/your/miniprogram"
+  }
+})
+
+// 2. 查找登录按钮，得到当前快照内的 opaque ref
+const result = find_elements({
+  locator: { kind: "testId", value: "login-btn" }
+})
+
+// 3. 点击登录按钮
+click({ target: { kind: "ref", ref: result.data.elements[0].ref } })
+
+// 4. 等待登录成功
+wait_for({
+  target: {
+    kind: "path",
+    path: [{ kind: "selector", value: ".welcome-message" }]
+  },
+  timeout: 5000
+})
+
+// 5. 验证登录成功
+assert_text({
+  target: {
+    kind: "path",
+    path: [{ kind: "selector", value: ".welcome-message" }]
+  },
+  text: "欢迎回来"
+})
+
+// 6. 获取页面截图（需在服务启动参数中启用 --enable-categories=debug）
+screenshot({ path: "/tmp/login-success.png" })
+```
+
+## 🛠️ 功能概览
+
+当前工具暴露采用 profile 机制：
+
+- `core`（默认，20个）：
+  - 连接/页面：`connect_devtools`、`reconnect_devtools`、`disconnect_devtools`、`get_connection_status`、`get_current_page`、`get_page_snapshot`、`find_elements`、`wait_for`
+  - 交互：`click`、`input_text`、`get_value`、`set_form_control`
+  - 断言：`assert_text`、`assert_attribute`、`assert_state`
+  - 导航：`navigate_to`、`navigate_back`、`switch_tab`、`relaunch`
+  - 脚本：`evaluate_script`
+- 可选类别（默认关闭）：
+  - `console`：`list_console_messages`、`get_console_message`
+  - `network`：`list_network_requests`、`get_network_request`、`stop_network_monitoring`、`clear_network_requests`
+  - `debug`：`screenshot`、`diagnose_connection`、`check_environment`、`debug_page_elements`、`debug_connection_flow`
+- `full` profile：暴露全部 31 个工具。
+
+## 💡 使用示例
+
+### 示例 1：用户登录流程
+
+```typescript
+// 连接到开发者工具
+connect_devtools({
+  target: { kind: "project", projectPath: "/path/to/miniprogram" }
+})
+
+// 输入用户名
+input_text({
+  target: { kind: "path", path: [{ kind: "id", value: "username" }] },
+  mode: "replace",
+  text: "testuser"
+})
+
+// 输入密码
+input_text({
+  target: { kind: "path", path: [{ kind: "id", value: "password" }] },
+  mode: "replace",
+  text: "password123"
+})
+
+// 点击登录按钮
+click({ target: { kind: "path", path: [{ kind: "selector", value: "button.login" }] } })
+
+// 等待登录成功
+wait_for({
+  target: { kind: "path", path: [{ kind: "selector", value: ".welcome" }] },
+  timeout: 5000
+})
+
+// 验证欢迎消息
+assert_text({
+  target: { kind: "path", path: [{ kind: "selector", value: ".welcome" }] },
+  textContains: "欢迎"
+})
+
+// 检查网络请求（两阶段查询，需在服务启动参数中启用 --enable-categories=network）
+const requests = list_network_requests({ urlPattern: "/api/login", successOnly: true })
+get_network_request({ reqid: requests[0].reqid })
+```
+
+### 示例 2：表单填写和提交
+
+```typescript
+// 填写文本输入框
+input_text({
+  target: { kind: "path", path: [{ kind: "id", value: "name" }] },
+  mode: "replace",
+  text: "张三"
+})
+
+// 选择下拉框
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "city" }] },
+  value: "北京"
+})
+
+// 切换开关
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "agree" }] },
+  value: true
+})
+
+// 设置滑块
+set_form_control({
+  target: { kind: "path", path: [{ kind: "id", value: "age" }] },
+  value: 25
+})
+
+// 提交表单
+click({ target: { kind: "path", path: [{ kind: "selector", value: "button.submit" }] } })
+
+// 等待提交成功
+wait_for({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  timeout: 3000
+})
+
+// 验证提交结果
+assert_state({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  visible: true
+})
+assert_text({
+  target: { kind: "path", path: [{ kind: "selector", value: ".success-toast" }] },
+  text: "提交成功"
+})
+
+// 截图保存结果
+screenshot({ path: "/tmp/form-submit-success.png" })
+```
+
+## 📚 文档
+
+- [📖 完整集成指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/integration-guide.md) - 详细的安装和配置步骤
+- [🔧 页面工具 API](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/page-tools.md) - 页面查询和等待工具详细文档
+- [✨ 最佳实践](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/best-practices.md) - 编写高质量自动化测试的建议
+- [🧪 测试指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/testing-guide.md) - 单元测试和集成测试说明
+- [🏗️ 模块化架构](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/modular-architecture.md) - 项目架构设计文档
+- [📝 示例：登录自动化](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/examples/login-automation.md) - 登录流程自动化示例
+- [🛒 示例：电商购物自动化](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/examples/shopping-automation.md) - 购物流程自动化示例
+
+## 🔧 开发指南
+
+### 构建和测试
+
+项目采用分层测试架构，分为协议测试、工具测试和集成测试：
+
+```bash
+# 开发模式（监听文件变化）
+npm run watch
+
+# 运行单元测试（协议 + 工具 + 工具类）
+npm test
+
+# 分类运行单元测试
+npm run test:protocol      # 协议层测试
+npm run test:tools         # 工具逻辑测试
+
+# 运行严格集成测试（需要微信开发者工具；环境或连接失败即失败）
+npm run test:integration
+
+# 本地探测模式（明确允许环境不满足时跳过）
+npm run test:integration:optional
+
+# 推荐：复用现有 DevTools 会话，避免反复重启项目（默认）
+INTEGRATION_CLEANUP_MODE=reuse npm run test:integration
+
+# 如需强制隔离环境（CI 或排查端口脏状态）
+INTEGRATION_CLEANUP_MODE=force npm run test:integration
+
+# 禁用跨 suite 会话复用（仅调试时建议）
+INTEGRATION_REUSE_SESSION=false npm run test:integration
+
+# 如需每个 suite 结束后强制断开（默认不强制）
+INTEGRATION_FORCE_DISCONNECT_AFTER_EACH_SUITE=true npm run test:integration
+
+# 运行所有测试（单元 + 集成）
+npm run test:all
+
+# 生成测试覆盖率报告
+npm run test:coverage
+
+# 使用 MCP Inspector 调试
+npm run inspector
+```
+
+### 手工验证与诊断
+
+- 诊断类脚本统一放在 `scripts/diagnostics/`
+- 手工验证脚本主要放在 `tests/manual/` 的能力子目录下，另有少量根级脚本用于通用验证
+- 默认公开验收工程为 `tests/fixtures/monitoring-app/`；`playground/wx/` 为维护者可选的本地业务工程，不是运行公开测试的前置条件
+- 夹具关键文件白名单：`playground/wx/app.json`、`playground/wx/project.config.json`
+
+### 添加新工具
+
+1. 在 `src/tools/` 下创建或修改工具模块
+2. 使用 `ToolDefinition` 框架定义工具
+3. 在 `src/tools/tools.ts` 注册并由 `src/tools/index.ts` 转发
+4. 运行 `npm run build` 重新生成静态 descriptor manifest
+5. 编写单元测试（`tests/tools/*.test.ts` 或 `tests/protocol/*.test.ts`）
+6. 编写集成测试（`tests/integration/*.integration.test.ts`）
+7. 更新文档
+
+贡献者开发说明请参考 [贡献指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/CONTRIBUTING.md) 与 [AGENTS.md](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/AGENTS.md)
+
+### 测试架构
+
+项目采用三层测试架构（参考 chrome-devtools-mcp）：
+
+- **协议层测试** (`tests/protocol/`) - 测试 MCP 服务器协议实现
+- **工具逻辑测试** (`tests/tools/`) - 直接测试工具 handler，无需服务器
+- **集成测试** (`tests/integration/`) - 端到端测试，需要真实环境
+
+集成测试支持以下运行模式：
+- `INTEGRATION_CLEANUP_MODE=reuse`：复用已有 DevTools 实例（默认）
+- `INTEGRATION_CLEANUP_MODE=smart`：优雅关闭后重连
+- `INTEGRATION_CLEANUP_MODE=force`：强制清理全部实例
+- `INTEGRATION_REUSE_SESSION=true/false`：控制跨 suite 连接复用
+- `INTEGRATION_FORCE_DISCONNECT_AFTER_EACH_SUITE=true/false`：控制每个 suite 结束后是否强制断连（默认 `false`）
+
+### 性能与成功率基准
+
+仓库提供版本化 workload、JSONL 原始样本、nearest-rank p50/p95、Wilson 95% 成功率区间以及严格的 before/after 对比器。先运行基础设施测试：
+
+```bash
+npm run bench:test
+```
+
+无需连接微信开发者工具的协议静态对比，可以针对两个依赖已安装、能独立启动的工程构建执行：
+
+```bash
+npm run bench:protocol:compare -- \
+  --baseline-server /absolute/path/to/before/build/server.js \
+  --optimized-server /absolute/path/to/after/build/server.js \
+  --output-dir /absolute/path/to/new-empty-result-dir
+```
+
+该命令只启动并关闭自己创建的 MCP stdio 子进程，不检查、不连接、也不终止任何现有 DevTools 进程；参数错误场景会在 schema 校验阶段停止。两个构建内容相同或输出目录非空时，命令会拒绝执行。
+
+若只保留了完整历史 JSONL，可用 `--recorded-baseline-dir` 只重跑 optimized。恢复模式不会伪造证据：跨时段延迟只作 indicative 对比；旧结果缺 benchmark harness 指纹时整体结论为 `PARTIAL/INDICATIVE`，不能充当发布门禁。`coldListMs` 是服务器已启动后客户端重建 schema 校验器的耗时；真正的进程冷启动使用 `protocol_stdio_lifecycle.lifecycleMs`。
+
+历史 0.6.0 基准的观察结果：完整 `tools/list` 响应体从 126,879 B 降至 80,173 B，client-validator-cold p95 从 137.5788 ms 降至 16.6693 ms；stdio `lifecycleMs` p95 从 601.2568 ms 降至 103.2416 ms，五个协议切片成功率均为 100%。这些 before/after 数字来自 legacy recorded baseline recovery，证据等级是 indicative/non-authoritative，严格结论仍为 `PARTIAL`，详见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
+
+同页异步重建的错误动作和 revision/ref 一致性提供独立合成回归：
+
+```bash
+npm run bench:dom-epoch:synthetic -- \
+  --baseline-entry /absolute/path/to/before/build/MiniProgramContext.js \
+  --optimized-entry build/MiniProgramContext.js \
+  --output /absolute/path/to/new-result.json
+```
+
+只有历史结果时可改用 `--recorded-baseline-result`；未实际测过的 metadata baseline 会保持 `notMeasured`。该结果始终是 synthetic/non-authoritative，不能替代真实 DevTools churn 验证。
+
+当前合成结果中，历史 post-snapshot 场景从 200 次错误动作降为 0，安全结果与 revision/ref 一致率从 0% 提升到 100%；新增 metadata-read 场景的 100 个优化后样本均正确丢弃 torn draft，发布 torn draft 为 0。该数据只证明确定性回归，不代表真实 DevTools 成功率。
+
+Snapshot 实现还提供一个不接触 DevTools 的确定性 mock 微基准，输出原始 100 样本、nearest-rank p50/p95 与成功率：
+
+```bash
+npm run bench:snapshot:synthetic -- \
+  --baseline-entry /absolute/path/to/before/build/core/snapshot.js \
+  --optimized-entry build/core/snapshot.js
+```
+
+该结果明确标记为 `synthetic/non-authoritative`；默认 100 并发用于避开旧实现固定 1 秒等待造成的串行耗时，不能代替真实 DevTools 集成指标。
+
+运行时资源所有权也提供不接触 DevTools 的合成回归基准：
+
+```bash
+npm run bench:runtime:synthetic -- \
+  --baseline-entry /absolute/path/to/before/build/MiniProgramContext.js \
+  --optimized-entry build/MiniProgramContext.js
+```
+
+历史 0.6.0 基准的完整结果与权威边界见 [v0.6.0 对比摘要](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/results/v0.6.0/README.md)。
+
+涉及连接、页面、元素、Console 和 Network 的完整真实基准，需要先预检，再通过对应版本的 adapter 执行：
+
+```bash
+npm run bench:preflight -- \
+  --phase baseline \
+  --output benchmarks/results/v0.6.0/local/baseline-preflight.json
+
+npm run bench:run -- --help
+```
+
+完整指标、adapter 合约、安全边界和结果目录约定见[基准指南](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/benchmarks/README.md)。没有真实执行的指标不得填零或使用单元测试结果代替。
+
+## 📋 系统要求
+
+- **Node.js** >= 22.0.0
+- **微信开发者工具** 已安装并开启自动化功能
+- **操作系统** macOS / Windows
+- **MCP 客户端**：Codex 或 Claude Desktop 等支持本地 stdio 的客户端；Codex 使用方式见 [接入与演示](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/codex.md)
+
+## 🤝 贡献指南
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+
+## 🙏 致谢
+
+- [Model Context Protocol](https://github.com/modelcontextprotocol) - MCP SDK
+- [miniprogram-automator](https://www.npmjs.com/package/miniprogram-automator) - 微信小程序自动化 SDK
+- [chrome-devtools-mcp](https://github.com/tinybirdco/chrome-devtools-mcp) - 架构参考
+
+## 📞 联系方式
+
+- 问题反馈：[GitHub Issues](https://github.com/wooter-s/weixin-devtools-mcp/issues)
+- 文档入口：见上方“文档”与“使用示例”章节中的 GitHub 文档链接
+
+---
+
+⭐ 如果这个项目对你有帮助，欢迎给个 Star！

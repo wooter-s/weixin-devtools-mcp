@@ -17,7 +17,8 @@ const PACKAGE_JSON_PATH = path.join(REPO_ROOT, 'package.json');
 const CHANGELOG_PATH = path.join(REPO_ROOT, 'CHANGELOG.md');
 const PACKAGE_LOCK_PATH = path.join(REPO_ROOT, 'package-lock.json');
 
-const CHECK_ROOTS = [README_PATH, DOCS_DIR];
+const README_PATHS = [README_PATH, path.join(REPO_ROOT, 'README.zh-CN.md')];
+const CHECK_ROOTS = [...README_PATHS, DOCS_DIR, path.join(REPO_ROOT, 'CONTRIBUTING.md'), path.join(REPO_ROOT, 'SECURITY.md'), path.join(REPO_ROOT, 'tests/fixtures/monitoring-app/README.md')];
 const EXCLUDED_DOC_PREFIXES = ['docs/小程序开发工具/', 'docs/mpx/'];
 
 const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\(([^)]+)\)/g;
@@ -678,15 +679,15 @@ function main() {
   }
 
   const packageJson = readJson(PACKAGE_JSON_PATH);
-  const readmeContent = readText(README_PATH);
+  const readmeContents = README_PATHS.filter(file => fs.existsSync(file)).map(readText);
   const markdownFiles = collectCheckFiles();
 
   const relativeLinkFailures = validateRelativeLinks(markdownFiles);
   const placeholderFailures = validatePlaceholders(markdownFiles);
-  const repositoryFailures = validateReadmeRepositoryConsistency(readmeContent, packageJson);
-  const readmePublishedFailures = validateReadmePublishedRelativeLinks(readmeContent, packageJson);
-  const readmeDirectoryFailures = validateReadmeDirectoryLinks(readmeContent);
-  const readmeVersionFailures = validateReadmeVersionBadge(readmeContent, packageJson);
+  const repositoryFailures = readmeContents.flatMap(content => validateReadmeRepositoryConsistency(content, packageJson));
+  const readmePublishedFailures = readmeContents.flatMap(content => validateReadmePublishedRelativeLinks(content, packageJson));
+  const readmeDirectoryFailures = readmeContents.flatMap(content => validateReadmeDirectoryLinks(content));
+  const readmeVersionFailures = readmeContents.flatMap(content => validateReadmeVersionBadge(content, packageJson));
   const changelogFailures = validateChangelogVersion(packageJson);
   const packageLockFailures = validatePackageLockConsistency(packageJson);
   const anchorFailures = validateMarkdownAnchors(markdownFiles, packageJson);
