@@ -13,7 +13,7 @@
 
 ## 批次和验收
 
-- [ ] A：稳定 CI 与覆盖率，公开 Actions 通过。
+- [x] A：稳定 CI 与覆盖率，公开 Actions 通过。
 - [ ] B：公开夹具与真实 MCP stdio 必测场景通过，冷启动和再次运行验证清理。
 - [ ] C：双语文档、Codex 演示、贡献入口与 GitHub 展示完成。
 - [ ] D：相同候选源码通过验证后，创建 tag 并完成 npm/Release 发布。
@@ -34,4 +34,19 @@
 
 真实验收：游客 AppID 被正常 CLI open 拒绝；临时副本使用已有本地 AppID 后可正常渲染，但自动化 Tool.getInfo 仍缺 SDKVersion。严格集成的公开预检失败，后续 suites 未执行；独立 public 验收同样失败。未发布 npm，未制作虚假的成功录像。
 
-外部操作：SSH 分支推送成功；GitHub connector 创建 PR 返回 403；浏览器读取 PR 页面连续超时。npm 本地认证返回 401，Trusted Publisher、About/Topics、私密报告开关尚未确认。为不依赖 PR 权限，Tests/Quality 支持分支 push 触发。
+外部操作：SSH 分支推送成功；GitHub connector 创建 PR 返回 403；浏览器扩展控制连续超时；原生浏览器页面已确认 GitHub 未登录。npm 本地认证返回 401，Trusted Publisher、About/Topics、私密报告开关尚未确认。为不依赖 PR 权限，Tests/Quality 支持分支 push 触发。
+
+## 最终交付边界
+
+| 六项工作 | 已落地 | 尚未完成 |
+| --- | --- | --- |
+| 版本与发布 | 迁移说明、tarball 验证、OIDC 工作流、源码指纹发布门禁 | 必测真实验收通过后才能创建 tag、发布 npm/Release；Trusted Publisher 尚未核实 |
+| 公开 CI | 六组 OS/Node 矩阵、Quality、公开覆盖率产物；修复干净检出与跨平台问题 | 六组矩阵和 Quality 均已通过 |
+| 公开夹具 | monitoring-app 与 benchmark-app、默认公开预检、严格失败退出、独立 Mpx 入口 | 本机 DevTools 缺 SDKVersion，交互矩阵与再次启动的完整验收未通过 |
+| 双语与 Codex | 英文默认首页、完整中文入口、双语 Codex 接入、三分钟演示与修复步骤 | 成功的真实演示录像 |
+| 展示与贡献 | CONTRIBUTING、SECURITY、Bug/功能/PR 模板、真实 AI 署名规范 | About、Topics、私密漏洞报告开关需要 GitHub 登录与设置权限 |
+| 质量证据 | 源码全量覆盖率、公开报告下载入口、失败的真实环境报告、历史证据分类 | 成功的同版本真实验收报告 |
+
+最终代码检查对应 `d5389ab`：[Tests](https://github.com/wooter-s/weixin-devtools-mcp/actions/runs/34079997661)、[Quality](https://github.com/wooter-s/weixin-devtools-mcp/actions/runs/34079997804)。后续文档提交不把历史 native 报告改成成功。测试自有的 DevTools 工程已通过 CLI close 关闭并删除临时副本。
+
+恢复顺序：解决当前 DevTools/automator 的 SDKVersion 兼容问题 → 在相同候选源码运行完整 `npm run release:validate` → 验证 npm Trusted Publisher 与 GitHub 展示设置 → 录制真实演示 → 通过门禁后发布。已准备好的仓库设置文字和发布操作见 [发布指南](../releases/README.md)。

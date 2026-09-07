@@ -42,7 +42,7 @@ If npm succeeded but Release creation failed, inspect the published version and 
 
 - [ ] About: `MCP server for WeChat Mini Program automation, debugging, and testing with Codex and other AI coding agents.`
 - [ ] Topics: mcp, wechat, weixin, miniprogram, automation, testing, codex, typescript.
-- [ ] Public Tests/Quality runs are green.
+- [x] Public Tests/Quality runs for implementation `d5389ab` are green (see [validation evidence](../validation.md)).
 - [ ] Private vulnerability reporting is enabled under repository Settings/Security.
 - [ ] npm trusted publisher configured and verified by a successful release.
 - [ ] Real synthetic-fixture recording and validation evidence attached to Release.

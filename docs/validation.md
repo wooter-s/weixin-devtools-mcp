@@ -8,9 +8,15 @@ The project is not yet declared release-ready. Independent DevTools project star
 
 The local release validation for implementation commit `1ce1cf8` passed production/test typechecks, 495 tests, lint (0 errors / 76 existing warnings), build, bilingual link checks, coverage, and packed-package MCP validation. Coverage: statements/lines 76.98%, branches 75.77%, functions 78.69%.
 
-Both strict native startup attempts failed with missing SDKVersion; dependent interaction cases were explicitly not run. The full integration suites were not executed after their native preflight failed. See the [machine-readable release evidence](releases/v0.7.0.json). It intentionally has `status: failed` and cannot authorize publication. Later CI trigger-only changes do not turn this historical failed report into a current pass.
+Both strict native startup attempts failed with missing SDKVersion; dependent interaction cases were explicitly not run. The full integration suites were not executed after their native preflight failed. See the [machine-readable release evidence](releases/v0.7.0.json). It intentionally has `status: failed` and cannot authorize publication. Subsequent fixture and cross-platform verification fixes do not turn this historical failed native report into a current pass. A new complete local validation is required before release.
 
 Normal CLI open rejects the checked-in tourist AppID. A disposable copy using a registered local AppID renders the fixture, but automation Tool.getInfo still returns only the DevTools version without SDKVersion, while App.getCurrentPage can return a page. The installed automator itself requires SDKVersion; bypassing the MCP readiness check would not repair SDK compatibility. No DevTools installation or private business source was changed.
+
+## Public CI verification
+
+Commit `d5389ab` adds clean-checkout fixtures, portable benchmark CLI entry points, and deterministic timeout tests. Public [Quality verification](https://github.com/wooter-s/weixin-devtools-mcp/actions/runs/34079997804) passed lint, documentation checks, source coverage, build and tarball MCP checks. The corresponding [Node/OS matrix](https://github.com/wooter-s/weixin-devtools-mcp/actions/runs/34079997661) passed all six combinations of Ubuntu/Windows/macOS and Node 22/24, with 495 tests in each job.
+
+The first public runs exposed local-only fixture dependencies and Windows/Node 24 test issues. Those failures remain visible in Actions; checks were repaired without skipping assertions or reducing the matrix. The public benchmark fixture now lives under `tests/fixtures/benchmark-app`; historical benchmark fingerprints remain historical and must be regenerated for new comparisons.
 
 ## Separate evidence categories
 
