@@ -39,6 +39,7 @@ describe('core connectDevtools purity', () => {
       await expect(connectDevtoolsEnhanced({
         projectPath: process.cwd(),
         mode: 'connect',
+        cliPath: process.execPath,
         autoPort: address.port,
         timeout: 1_000,
       })).rejects.toThrow('无法验证其项目归属');

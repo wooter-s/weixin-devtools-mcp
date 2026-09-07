@@ -16,7 +16,7 @@ import {
 import { createMockContext, createMockResponse, createMockPage, createMockConnectResult } from '../utils/test-factories.js';
 
 describe('diagnose_connection tool', () => {
-  const projectPath = path.resolve(process.cwd(), 'playground/wx');
+  const projectPath = path.resolve(process.cwd(), 'tests/fixtures/monitoring-app');
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,7 +110,7 @@ describe('diagnose_connection tool', () => {
     const context = createMockContext();
 
     await diagnoseConnectionTool.handler(
-      { params: { projectPath: 'playground/wx', verbose: false } },
+      { params: { projectPath: 'tests/fixtures/monitoring-app', verbose: false } },
       response as any,
       context,
     );
@@ -238,7 +238,7 @@ describe('debug_page_elements tool', () => {
 });
 
 describe('debug_connection_flow tool', () => {
-  const projectPath = path.resolve(process.cwd(), 'playground/wx');
+  const projectPath = path.resolve(process.cwd(), 'tests/fixtures/monitoring-app');
 
   beforeEach(() => {
     vi.clearAllMocks();

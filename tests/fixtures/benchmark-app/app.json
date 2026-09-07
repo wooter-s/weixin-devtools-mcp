@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/secondary/index"
+  ],
+  "window": {
+    "backgroundColor": "#f5f7fa",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "MCP Benchmark"
+  },
+  "sitemapLocation": "sitemap.json"
+}

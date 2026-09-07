@@ -590,7 +590,7 @@ export async function runProtocolStaticPair(options) {
   };
   const environment = collectEnvironment();
   const currentHarness = fingerprintProtocolStaticHarness();
-  const fixture = fingerprintPaths(repoRoot, ['playground/benchmark-wx'], {
+  const fixture = fingerprintPaths(repoRoot, ['tests/fixtures/benchmark-app'], {
     exclude: FIXTURE_FINGERPRINT_EXCLUDES,
   });
   const baselineBuild = baselineServer ? fingerprintServerBuild(baselineServer) : null;

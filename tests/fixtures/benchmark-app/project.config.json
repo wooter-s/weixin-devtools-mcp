@@ -1,0 +1,15 @@
+{
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "description": "Deterministic fixture for weixin-devtools-mcp benchmarks",
+  "libVersion": "2.32.2",
+  "projectname": "weixin-devtools-mcp-benchmark",
+  "setting": {
+    "checkSiteMap": false,
+    "compileHotReLoad": false,
+    "es6": true,
+    "minified": false,
+    "postcss": true,
+    "urlCheck": false
+  }
+}

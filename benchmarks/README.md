@@ -4,7 +4,7 @@
 
 ## 安全边界
 
-完整真实基准只允许使用 `playground/benchmark-wx` 和绑定到 `127.0.0.1` 的 HTTP 服务。预检发现已有微信开发者工具进程时默认中止，脚本永远不会主动结束这些进程。只有操作者确认现存会话就是本次基准所有时，才可传入 `--allow-existing-devtools`。
+完整真实基准只允许使用 `tests/fixtures/benchmark-app` 和绑定到 `127.0.0.1` 的 HTTP 服务。预检发现已有微信开发者工具进程时默认中止，脚本永远不会主动结束这些进程。只有操作者确认现存会话就是本次基准所有时，才可传入 `--allow-existing-devtools`。
 
 `bench:protocol:compare` 是更安全的静态协议对比：它不检查、不连接、不终止 DevTools，只启动和关闭两个显式指定、由 runner 自己拥有的 MCP stdio 子进程。它使用当前安装的官方 MCP Client，并校验公共 success/failure envelope、稳定错误码、31 个对象根 outputSchema。参数错误使用 `strategy` 的非法枚举值，保证在 schema 校验阶段停止。
 

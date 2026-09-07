@@ -49,7 +49,7 @@ function assertPreflightCurrent(repoRoot, phase, preflight, workload) {
     throw new Error('preflight 无效或 phase 不匹配');
   }
   const currentWorkloadFingerprint = sha256(stableStringify(workload));
-  const currentFixture = fingerprintPaths(repoRoot, ['playground/benchmark-wx'], {
+  const currentFixture = fingerprintPaths(repoRoot, ['tests/fixtures/benchmark-app'], {
     exclude: FIXTURE_FINGERPRINT_EXCLUDES,
   });
   if (preflight.workload?.fingerprint !== currentWorkloadFingerprint) {

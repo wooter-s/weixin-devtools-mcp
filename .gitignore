@@ -13,3 +13,5 @@ coverage/
 artifacts/
 *.tgz
 tests/fixtures/**/project.private.config.json
+
+tests/fixtures/benchmark-app/project.private.config.json

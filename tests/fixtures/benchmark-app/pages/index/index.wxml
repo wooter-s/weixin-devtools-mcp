@@ -1,0 +1,53 @@
+<view class="page" data-testid="primary-page">
+  <view class="card status-card">
+    <text id="fixture-version">fixture {{fixtureVersion}}</text>
+    <text id="mutation-revision">revision {{mutationRevision}}</text>
+    <button id="go-secondary" data-testid="go-secondary" bindtap="goSecondary">前往第二页</button>
+  </view>
+
+  <view class="card">
+    <view class="section-title">重复元素（固定 20 项）</view>
+    <button id="reorder-items" data-testid="reorder-items" bindtap="reorderItems">反转顺序</button>
+    <button id="remove-target" data-testid="remove-target" bindtap="removeTarget">删除 item-07</button>
+    <button id="restore-items" data-testid="restore-items" bindtap="restoreItems">恢复列表</button>
+    <view id="duplicate-list">
+      <button
+        wx:for="{{items}}"
+        wx:key="id"
+        class="duplicate-item shared-target"
+        data-testid="{{item.testId}}"
+        data-item-id="{{item.id}}"
+        data-ordinal="{{item.ordinal}}"
+        bindtap="tapDuplicate"
+      >重复项</button>
+    </view>
+  </view>
+
+  <view class="card form-card">
+    <view class="section-title">输入控件</view>
+    <input id="benchmark-input" data-testid="benchmark-input" value="{{inputValue}}" bindinput="onInput" placeholder="input" />
+    <textarea id="benchmark-textarea" data-testid="benchmark-textarea" value="{{textareaValue}}" bindinput="onTextarea" placeholder="textarea" />
+    <text id="input-value">{{inputValue}}</text>
+    <text id="textarea-value">{{textareaValue}}</text>
+  </view>
+
+  <view class="card">
+    <view class="section-title">Console</view>
+    <input id="console-token" data-testid="console-token" value="{{consoleToken}}" bindinput="onConsoleToken" />
+    <button id="emit-console" data-testid="emit-console" bindtap="emitConsole">输出 Console token</button>
+  </view>
+
+  <view class="card">
+    <view class="section-title">仅本地网络请求</view>
+    <input id="request-token" data-testid="request-token" value="{{requestToken}}" bindinput="onRequestToken" />
+    <input id="request-endpoint" data-testid="request-endpoint" value="{{requestEndpoint}}" bindinput="onRequestEndpoint" />
+    <button id="send-request" data-testid="send-request" bindtap="sendLocalRequest">发送本地请求</button>
+    <text id="request-status">{{requestStatus}}</text>
+  </view>
+
+  <view class="card">
+    <view class="section-title">动作日志</view>
+    <button id="clear-action-log" data-testid="clear-action-log" bindtap="clearActionLog">清空日志</button>
+    <text id="action-log" selectable="true">{{actionLogText}}</text>
+  </view>
+</view>

@@ -1,0 +1,15 @@
+<view class="page" data-testid="secondary-page">
+  <view class="card">
+    <text id="secondary-title">第二页</text>
+    <button
+      id="secondary-shared-target"
+      class="duplicate-item shared-target"
+      data-testid="secondary-shared-target"
+      bindtap="tapCrossPageTarget"
+    >重复项</button>
+    <button id="go-back" data-testid="go-back" bindtap="goBack">返回第一页</button>
+  </view>
+  <view class="card">
+    <text id="secondary-action-log" selectable="true">{{actionLogText}}</text>
+  </view>
+</view>

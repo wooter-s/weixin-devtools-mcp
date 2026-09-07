@@ -46,14 +46,14 @@ function parseArgs(argv) {
 export function runPreflight(options) {
   const repoRoot = path.resolve(options.repoRoot);
   const workloadPath = path.join(repoRoot, 'benchmarks', 'workload.v1.json');
-  const fixturePath = path.join(repoRoot, 'playground', 'benchmark-wx');
+  const fixturePath = path.join(repoRoot, 'tests', 'fixtures', 'benchmark-app');
   const issues = [];
 
   if (!fs.existsSync(workloadPath)) {
     issues.push({ code: 'WORKLOAD_NOT_FOUND', message: 'benchmarks/workload.v1.json 不存在' });
   }
   if (!fs.existsSync(fixturePath)) {
-    issues.push({ code: 'FIXTURE_NOT_FOUND', message: 'playground/benchmark-wx 不存在' });
+    issues.push({ code: 'FIXTURE_NOT_FOUND', message: 'tests/fixtures/benchmark-app 不存在' });
   }
 
   const environment = collectEnvironment({ devtoolsAppPath: options.devtoolsAppPath });
@@ -84,7 +84,7 @@ export function runPreflight(options) {
     };
   }
   const fixture = fs.existsSync(fixturePath)
-    ? fingerprintPaths(repoRoot, ['playground/benchmark-wx'], {
+    ? fingerprintPaths(repoRoot, ['tests/fixtures/benchmark-app'], {
         exclude: FIXTURE_FINGERPRINT_EXCLUDES,
       })
     : null;

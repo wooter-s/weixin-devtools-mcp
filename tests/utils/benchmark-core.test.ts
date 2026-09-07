@@ -337,7 +337,7 @@ describe('benchmark identity and privacy', () => {
 
     expect(redacted.authorization).toBe('<REDACTED>');
     expect(redacted.nested.requestBody).toBe('<REDACTED>');
-    expect(redacted.nested.file).toBe('<REPO>/src/index.ts');
+    expect(redacted.nested.file).toBe(path.join('<REPO>', 'src/index.ts'));
     expect(redacted.imageData).toBe('<REDACTED>');
     expect(redacted.url).toContain('token=%3CREDACTED%3E');
     expect(redacted.errorMessage).toBe('Authorization: <REDACTED>');
@@ -812,7 +812,7 @@ describe('protocol-static recorded baseline recovery', () => {
     const optimizedBuild = path.join(optimizedProject, 'build');
     const outputDirectory = path.join(root, 'new-result');
     fs.mkdirSync(path.join(root, 'benchmarks'), { recursive: true });
-    fs.mkdirSync(path.join(root, 'playground/benchmark-wx'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'tests/fixtures/benchmark-app'), { recursive: true });
     fs.mkdirSync(recordedDirectory);
     fs.mkdirSync(optimizedBuild, { recursive: true });
 
@@ -845,7 +845,7 @@ describe('protocol-static recorded baseline recovery', () => {
       JSON.stringify(workload),
       'utf8'
     );
-    fs.writeFileSync(path.join(root, 'playground/benchmark-wx/fixture.txt'), 'fixture', 'utf8');
+    fs.writeFileSync(path.join(root, 'tests/fixtures/benchmark-app/fixture.txt'), 'fixture', 'utf8');
     fs.writeFileSync(
       path.join(optimizedProject, 'package.json'),
       JSON.stringify({ name: 'optimized-test-server', version: '2.0.0', dependencies: {} }),
@@ -875,7 +875,7 @@ describe('protocol-static recorded baseline recovery', () => {
       version: workload.version,
       fingerprint: sha256(stableStringify(workload)),
     };
-    const fixture = fingerprintPaths(root, ['playground/benchmark-wx']);
+    const fixture = fingerprintPaths(root, ['tests/fixtures/benchmark-app']);
     const baselineSourceFingerprint = 'b'.repeat(64);
     const baselinePackage = {
       packageVersion: '0.6.0',
@@ -1212,7 +1212,7 @@ describe('benchmark recorder and local server', () => {
       phase: 'baseline',
       environment: collectEnvironment(),
       workload: { version: workload.version, fingerprint: sha256(stableStringify(workload)) },
-      fixture: fingerprintPaths(repoRoot, ['playground/benchmark-wx'], {
+      fixture: fingerprintPaths(repoRoot, ['tests/fixtures/benchmark-app'], {
         exclude: FIXTURE_FINGERPRINT_EXCLUDES,
       }),
       source: sourceFingerprint(repoRoot),
@@ -1263,14 +1263,14 @@ describe('versioned workload and fixture', () => {
 
   it('fixture 包含两页以及所有确定性探针', () => {
     const app = JSON.parse(
-      fs.readFileSync(path.resolve('playground/benchmark-wx/app.json'), 'utf8')
+      fs.readFileSync(path.resolve('tests/fixtures/benchmark-app/app.json'), 'utf8')
     );
     const primaryWxml = fs.readFileSync(
-      path.resolve('playground/benchmark-wx/pages/index/index.wxml'),
+      path.resolve('tests/fixtures/benchmark-app/pages/index/index.wxml'),
       'utf8'
     );
     const primaryJs = fs.readFileSync(
-      path.resolve('playground/benchmark-wx/pages/index/index.js'),
+      path.resolve('tests/fixtures/benchmark-app/pages/index/index.js'),
       'utf8'
     );
 

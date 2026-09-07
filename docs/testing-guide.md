@@ -25,26 +25,22 @@ INTEGRATION_CLEANUP_MODE=reuse npm run test:integration
 
 - Repository development and test commands: [README.md](../README.md)
 - Manual verification scripts: [tests/manual/](../tests/manual/)
-- Integration fixture project: [playground/wx/](../playground/wx/)
+- Integration fixture project: [tests/fixtures/monitoring-app/](../tests/fixtures/monitoring-app/)
 
-## 监听回归与显式端点
+## 公开监听回归
 
 ```bash
-# 已有业务工程的自动化端点；不会把端点成功视为 project 启动成功
-INTEGRATION_WS_ENDPOINT=ws://127.0.0.1:9420 \
-INTEGRATION_CLEANUP_MODE=reuse \
-INTEGRATION_FORCE_DISCONNECT_AFTER_EACH_SUITE=true npm run test:integration
-
-# 单独运行官方 SDK stdio 能力矩阵（先 build）
-INTEGRATION_WS_ENDPOINT=ws://127.0.0.1:9420 \
-node tests/manual/monitoring/regression.mjs
+npm run build
+# 使用临时公开夹具；AppID 只注入临时副本
+INTEGRATION_APPID=<your-local-appid> npm run test:integration
+INTEGRATION_APPID=<your-local-appid> npm run test:integration:public
 ```
 
-Harness 的 `wsEndpoint: null` 可忽略环境变量，强制单独验证 project 启动。独立工程在 `tests/fixtures/monitoring-app`，包含 tabBar、表单控件和自定义组件；矩阵默认通过 project target 启动它，并在结束时关闭自有工程；显式设置 `INTEGRATION_FIXTURE_WS_ENDPOINT` 时只复用端点，该分支不验证启动。它不修改 `playground/wx`。业务工程磁盘上的 `pages/mcp-fixture/index` 也必须已编入运行中的包，未编译时其相关检查标记环境阻塞。
+默认夹具包含 tabBar、分包、表单控件和自定义组件。严格集成先运行公开 stdio 预检，预检失败时不会将后续未运行的 suites 算为通过。公开矩阵覆盖真实请求成功/连接失败/超时/abort/上传/下载在未监听、监听中、停止后的业务结果，以及 5 次重连日志去重。输出位于忽略的 `artifacts/`，发布证据通过 `npm run release:validate` 汇总。
 
-矩阵脚本验证真实请求成功/连接失败/超时/abort/上传/下载在未监听、监听中、停止后的业务结果，以及 Mpx Promise 成功/失败/取消、5 次重连日志去重和相同文本保留。输出 `tasks/monitoring-regression/capability-cases.json`；可通过 `MONITORING_REPORT_DIR` 更改目录。发现缺陷或环境阻塞时退出码非零，严格集成不会把这些结果算作成功。测试先校验前提条件，再执行依赖断言，缺少夹具不冒充断言失败分支通过。
+显式设置 `INTEGRATION_WS_ENDPOINT` 仅用于诊断已有端点，不能代替发布所需的 project 启动。Mpx 通过 `INTEGRATION_MPX_WS_ENDPOINT` 和 `npm run test:integration:mpx` 单独验收。环境要求、报告格式和清理说明见 [公开验收指南](validation.md)。
 
-本轮结果与最小复现见 [监听回归说明](monitoring-regression.md)。
+历史业务工程回归仍保留于 `tests/manual/monitoring/regression.mjs`，需要维护者自备工程；它不是公开 CI 或发布的默认入口。历史结果见 [监听回归说明](monitoring-regression.md)。
 
 ## 检测问题回归
 

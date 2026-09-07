@@ -1,0 +1,2 @@
+# Keep executable module shebangs and source fingerprints stable across platforms.
+*.mjs text eol=lf

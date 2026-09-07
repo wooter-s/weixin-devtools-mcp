@@ -1,0 +1,16 @@
+.page {
+  padding: 24rpx;
+}
+
+.card {
+  margin-bottom: 20rpx;
+  padding: 20rpx;
+  background: #ffffff;
+  border-radius: 12rpx;
+}
+
+#secondary-title,
+#secondary-action-log {
+  display: block;
+  margin-bottom: 16rpx;
+}

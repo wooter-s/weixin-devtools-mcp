@@ -1,0 +1,9 @@
+page {
+  background: #f5f7fa;
+  color: #172033;
+  font-family: sans-serif;
+}
+
+button {
+  margin: 8rpx 0;
+}

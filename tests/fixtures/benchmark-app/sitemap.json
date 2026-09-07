@@ -1,0 +1,4 @@
+{
+  "desc": "benchmark fixture",
+  "rules": [{ "action": "allow", "page": "*" }]
+}
