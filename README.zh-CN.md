@@ -24,7 +24,7 @@
 
 ## 📦 安装
 
-### 方式一：使用 npx（推荐）
+### 方式一：使用 npx（已发布版本）
 
 当前源码版本为 **0.7.0（发布候选）**。npm `latest` 仍为 0.6.0；下文 0.7 的接口示例请先使用源码构建。发布状态以 npm registry 和 GitHub Release 为准。
 
@@ -57,6 +57,21 @@ npm install
 npm run build
 ```
 
+## 使用 Codex
+
+当前 0.7 候选版请先按上面的源码步骤构建，然后将绝对路径替换为本机仓库路径：
+
+```bash
+codex mcp add weixin-devtools -- node /absolute/path/to/weixin-devtools-mcp/build/server.js --enable-categories=console,network,debug
+codex mcp list
+```
+
+在小程序工程中启动 Codex，用 `/mcp` 检查服务，再发送：
+
+> 连接 `/absolute/path/to/project` 中的小程序。读取页面快照，识别可见控件并报告当前页面。请显式连接这个工程。
+
+可以先使用仓库公开夹具 `tests/fixtures/monitoring-app`，按其 README 准备环境和本地测试 AppID。完整步骤见 [Codex 接入与演示](https://github.com/wooter-s/weixin-devtools-mcp/blob/main/docs/codex.md)。工具列表可用只说明 MCP 服务已启动；真实小程序连接还必须通过 DevTools 验收。
+
 ## ⚙️ 配置
 
 在 Claude Desktop 配置文件中添加 MCP 服务器：
@@ -64,7 +79,7 @@ npm run build
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
-### 配置方式一：使用 npx（推荐）
+### 配置方式一：使用 npx（已发布版本）
 
 **适用于已发布版本**：确认 npm registry 中的版本后使用。0.7 发布前请使用下方源码配置。
 
