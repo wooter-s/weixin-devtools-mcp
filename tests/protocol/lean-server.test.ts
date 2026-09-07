@@ -141,9 +141,12 @@ describe('LeanServer', () => {
         cwd: process.cwd(),
         encoding: 'utf8',
         env: { ...process.env, NODE_DEBUG: 'esm' },
+        // Node 24 prints complete module jobs; retain the full trace for absence assertions.
+        maxBuffer: 16 * 1024 * 1024,
       },
     );
 
+    expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stderr).toContain('/shared/protocol.js');
     expect(result.stderr).not.toMatch(/@modelcontextprotocol\/sdk\/dist\/(?:esm|cjs)\/server\/index\.js/);

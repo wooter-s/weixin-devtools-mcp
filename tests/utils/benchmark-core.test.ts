@@ -1184,7 +1184,11 @@ describe('benchmark recorder and local server', () => {
       stableStringify,
     } = await import(CORE_URL);
     const { runWorkload } = await import(RUNNER_URL);
-    const tempRoot = createTempRoot();
+    // Keep Vite's dynamic adapter import on the checkout drive on Windows.
+    const artifactRoot = path.resolve('artifacts');
+    fs.mkdirSync(artifactRoot, { recursive: true });
+    const tempRoot = fs.mkdtempSync(path.join(artifactRoot, 'benchmark-adapter-'));
+    tempRoots.push(tempRoot);
     const adapterPath = path.join(tempRoot, 'adapter.mjs');
     const outputPath = path.join(tempRoot, 'partial.jsonl');
     const preflightPath = path.join(tempRoot, 'preflight.json');

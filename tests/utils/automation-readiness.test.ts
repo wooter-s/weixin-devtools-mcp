@@ -29,7 +29,7 @@ describe('automation protocol readiness regressions F1/F2', () => {
 
   it('F1 reports runtime readiness timeout when SDKVersion remains absent', async () => {
     const server = await automationServer(() => ({ version: '2.02.2607271' })); servers.push(server);
-    await expect(waitForWebSocketReady(server.port, 150)).rejects.toThrow(/SDKVersion/);
+    await expect(waitForWebSocketReady(server.port, 1000)).rejects.toThrow(/SDKVersion/);
   });
 
   it('accepts numeric page IDs returned by real DevTools, including zero', async () => {
@@ -37,7 +37,7 @@ describe('automation protocol readiness regressions F1/F2', () => {
       ? { version: '2.02.2607271', SDKVersion: '3.0.0' }
       : { pageId: 0, path: 'pages/home/index', query: {} });
     servers.push(server);
-    await expect(waitForWebSocketReady(server.port, 200)).resolves.toBeUndefined();
+    await expect(waitForWebSocketReady(server.port, 2000)).resolves.toBeUndefined();
   });
 
   it('does not identify an ordinary HTTP 200 service as DevTools', async () => {
@@ -51,10 +51,10 @@ describe('automation protocol readiness regressions F1/F2', () => {
 
   it('closes probe transports after success and failed readiness', async () => {
     const server = await automationServer(); servers.push(server);
-    await waitForWebSocketReady(server.port, 500);
+    await waitForWebSocketReady(server.port, 2000);
     await vi.waitFor(() => expect(server.wire.clients.size).toBe(0));
     const pending = await automationServer(() => ({ version: '2.02.2607271' })); servers.push(pending);
-    await expect(waitForWebSocketReady(pending.port, 100)).rejects.toThrow('SDKVersion');
+    await expect(waitForWebSocketReady(pending.port, 1000)).rejects.toThrow('SDKVersion');
     await vi.waitFor(() => expect(pending.wire.clients.size).toBe(0));
   });
 

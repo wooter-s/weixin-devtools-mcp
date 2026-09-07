@@ -1,3 +1,5 @@
+/* global Page, wx, console */
+/* eslint-disable @typescript-eslint/no-this-alias -- Serialized Mini Program callbacks use their page instance. */
 function createItems() {
   return Array.from({ length: 20 }, function (_, index) {
     var paddedIndex = String(index).padStart(2, '0');

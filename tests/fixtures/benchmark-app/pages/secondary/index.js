@@ -1,3 +1,4 @@
+/* global Page, wx */
 Page({
   data: {
     requestEndpoint: 'http://127.0.0.1:19420/benchmark',
