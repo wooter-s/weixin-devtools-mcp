@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "0.7.0",
+  "sourceFingerprint": "9389f9b5cfeead3e9e0c9385be2fbf31296ada7c0916ea134a0b1be4bd79e35c",
+  "recordedAt": "2026-09-07T03:10:10.130Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v22.14.0"
+  },
+  "status": "failed",
+  "commands": [
+    {
+      "name": "typecheck",
+      "exitCode": 0
+    },
+    {
+      "name": "typecheck:test",
+      "exitCode": 0
+    },
+    {
+      "name": "test",
+      "exitCode": 0
+    },
+    {
+      "name": "lint",
+      "exitCode": 0
+    },
+    {
+      "name": "build",
+      "exitCode": 0
+    },
+    {
+      "name": "lint:links",
+      "exitCode": 0
+    },
+    {
+      "name": "test:coverage",
+      "exitCode": 0
+    },
+    {
+      "name": "test:package",
+      "exitCode": 0
+    },
+    {
+      "name": "test:integration",
+      "exitCode": 1
+    },
+    {
+      "name": "test:integration:public",
+      "exitCode": 1
+    }
+  ],
+  "native": {
+    "schemaVersion": 1,
+    "recordedAt": "2026-09-07T03:12:13.776Z",
+    "sourceFingerprint": "9389f9b5cfeead3e9e0c9385be2fbf31296ada7c0916ea134a0b1be4bd79e35c",
+    "projectLaunchValidated": false,
+    "environment": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "node": "v22.14.0",
+      "devtoolsVersion": null,
+      "sdkVersion": null
+    },
+    "status": "failed",
+    "checks": [
+      {
+        "name": "profiles",
+        "status": "passed",
+        "evidence": null
+      },
+      {
+        "name": "project-startup",
+        "status": "blocked",
+        "evidence": "connect_devtools: CONNECTION_FAILED 所有连接尝试均失败: 运行时就绪超时: SDKVersion 缺失，运行时未就绪\n\nfalse !== true\n"
+      },
+      {
+        "name": "cleanup",
+        "status": "passed",
+        "evidence": null
+      },
+      {
+        "name": "resources",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "snapshot-scopes",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "ref-path",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "click",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "input",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "controls",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "assertions",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "wait",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "navigation",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "stale-ref",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "script",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "screenshot",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "network",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "console-reconnect",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "diagnostics",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      },
+      {
+        "name": "endpoint-reconnect",
+        "status": "not-run",
+        "evidence": "Prerequisite failed"
+      }
+    ]
+  },
+  "reason": "Failed command: test:integration\n\n1 !== 0\n"
+}

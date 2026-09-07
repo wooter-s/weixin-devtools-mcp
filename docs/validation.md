@@ -4,6 +4,14 @@
 
 The project is not yet declared release-ready. Independent DevTools project startup is a required gate. The CLI rejects `touristappid` for the current account during normal project open; automation also reports missing SDKVersion. A registered local AppID was also tested in a disposable copy; automation still reported missing SDKVersion. No successful demo recording is claimed.
 
+## Implementation verification (2026-09-07)
+
+The local release validation for implementation commit `1ce1cf8` passed production/test typechecks, 495 tests, lint (0 errors / 76 existing warnings), build, bilingual link checks, coverage, and packed-package MCP validation. Coverage: statements/lines 76.98%, branches 75.77%, functions 78.69%.
+
+Both strict native startup attempts failed with missing SDKVersion; dependent interaction cases were explicitly not run. The full integration suites were not executed after their native preflight failed. See the [machine-readable release evidence](releases/v0.7.0.json). It intentionally has `status: failed` and cannot authorize publication. Later CI trigger-only changes do not turn this historical failed report into a current pass.
+
+Normal CLI open rejects the checked-in tourist AppID. A disposable copy using a registered local AppID renders the fixture, but automation Tool.getInfo still returns only the DevTools version without SDKVersion, while App.getCurrentPage can return a page. The installed automator itself requires SDKVersion; bypassing the MCP readiness check would not repair SDK compatibility. No DevTools installation or private business source was changed.
+
 ## Separate evidence categories
 
 | Evidence | What it proves | What it does not prove |

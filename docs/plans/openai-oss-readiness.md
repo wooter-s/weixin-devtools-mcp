@@ -30,4 +30,8 @@
 
 ## 实施记录
 
-执行中，最终结果见版本验收报告；未完成项不得提前勾选。
+实现已提交至 `chore/oss-readiness`。类型、495 项单元/协议测试、lint（0 errors/76 既有 warnings）、构建、双语链接、源码覆盖率和 tarball 三 profile MCP 检查通过。机器验收证据见 [版本报告](../releases/v0.7.0.json)。
+
+真实验收：游客 AppID 被正常 CLI open 拒绝；临时副本使用已有本地 AppID 后可正常渲染，但自动化 Tool.getInfo 仍缺 SDKVersion。严格集成的公开预检失败，后续 suites 未执行；独立 public 验收同样失败。未发布 npm，未制作虚假的成功录像。
+
+外部操作：SSH 分支推送成功；GitHub connector 创建 PR 返回 403；浏览器读取 PR 页面连续超时。npm 本地认证返回 401，Trusted Publisher、About/Topics、私密报告开关尚未确认。为不依赖 PR 权限，Tests/Quality 支持分支 push 触发。
